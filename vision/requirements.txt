@@ -1,0 +1,12 @@
+# Instalar torch APARTE y primero, con el índice que corresponda a la CUDA local:
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+
+ultralytics>=8.3        # YOLO11 + ByteTrack integrados
+opencv-python>=4.10     # homografía, color HSV, lectura RTSP
+numpy>=2.1
+websockets>=13.1        # emisor hacia el backend
+pyyaml>=6.0
+
+# Evaluación del modelo
+pycocotools>=2.0.8
+motmetrics>=1.4         # IDF1 del seguimiento

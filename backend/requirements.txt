@@ -1,0 +1,25 @@
+# ===== API =====
+fastapi>=0.115
+uvicorn[standard]>=0.32
+python-multipart>=0.0.12
+
+# ===== Base de datos =====
+sqlalchemy[asyncio]>=2.0
+alembic>=1.14
+aiosqlite>=0.20          # desarrollo local, sin Docker
+asyncpg>=0.30            # PostgreSQL (producción)
+
+# ===== Configuración y seguridad =====
+pydantic-settings>=2.6
+email-validator>=2.2
+pyjwt>=2.10
+bcrypt>=4.2
+
+# ===== Pruebas =====
+pytest>=8.3
+pytest-asyncio>=0.24
+httpx>=0.28
+
+# ===== Sprint 3 — descomentar cuando se implemente el procesamiento asíncrono =====
+# celery>=5.4
+# redis>=5.2
