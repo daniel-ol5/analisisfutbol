@@ -1,0 +1,377 @@
+@startuml modelo-datos
+' Área Técnica — Modelo de datos
+' Organizado por los seis paquetes del modelo de casos de uso.
+'
+' VERDE  = implementado
+' BLANCO = diseñado, pendiente de implementar
+
+!theme plain
+hide circle
+skinparam linetype ortho
+skinparam shadowing false
+skinparam packageStyle rectangle
+skinparam class {
+  BackgroundColor White
+  BorderColor #A4B2A6
+  ArrowColor #4C5C51
+}
+
+legend top left
+  <b>Área Técnica — Modelo de datos</b>
+  ====
+  <back:#DCEBE2>   </back> implementado    <back:#FFFFFF>   </back> pendiente
+  PK = clave primaria · FK = clave foránea
+endlegend
+
+package "P1 · seguridad" {
+  entity "club" as club #DCEBE2 {
+    * id : integer <<PK>>
+    --
+    * nombre : varchar(120)
+    ciudad : varchar(80)
+    activo : boolean
+    creado_en : timestamp
+  }
+
+  entity "usuario" as usuario #DCEBE2 {
+    * id : integer <<PK>>
+    --
+    * club_id : integer <<FK>>
+    * email : varchar(180) <<unique>>
+    * password_hash : varchar(120)
+    nombre : varchar(80)
+    apellido : varchar(80)
+    * rol : enum(ADMIN|DT|ANALISTA|ASISTENTE)
+    activo : boolean
+  }
+}
+
+package "P2 · deportivo" {
+  entity "equipo" as equipo {
+    * id : integer <<PK>>
+    --
+    * club_id : integer <<FK>>
+    * nombre : varchar(120)
+    categoria : varchar(40)
+    temporada : varchar(20)
+    color_local : varchar(7)
+    color_visitante : varchar(7)
+    color_arquero : varchar(7)
+    activo : boolean
+  }
+
+  entity "jugador" as jugador {
+    * id : integer <<PK>>
+    --
+    * equipo_id : integer <<FK>>
+    * nombre : varchar(80)
+    * apellido : varchar(80)
+    * dorsal : integer
+    posicion : enum(ARQ|DEF|MED|DEL)
+    pie_habil : enum(IZQ|DER|AMBOS)
+    * altura_cm : integer
+    peso_kg : integer
+    fecha_nacimiento : date
+    activo : boolean
+  }
+
+  entity "competicion" as competicion {
+    * id : integer <<PK>>
+    --
+    * club_id : integer <<FK>>
+    * nombre : varchar(120)
+    temporada : varchar(20)
+    fecha_inicio : date
+    fecha_fin : date
+  }
+
+  entity "partido" as partido {
+    * id : integer <<PK>>
+    --
+    * equipo_id : integer <<FK>>
+    competicion_id : integer <<FK>>
+    * rival : varchar(120)
+    es_local : boolean
+    * fecha_hora : timestamp
+    sede : varchar(160)
+    * estado : enum(PROGRAMADO|EN_CURSO|FINALIZADO|PROCESANDO|ANALIZADO|CANCELADO)
+    * ataca_hacia : enum(IZQ|DER)
+    goles_favor : integer
+    goles_contra : integer
+    parte : integer
+    minuto_actual : integer
+  }
+
+  entity "alineacion" as alineacion {
+    * id : integer <<PK>>
+    --
+    * partido_id : integer <<FK>> <<unique>>
+    * formacion : varchar(10)
+  }
+
+  entity "alineacion_jugador" as alin_jug {
+    * id : integer <<PK>>
+    --
+    * alineacion_id : integer <<FK>>
+    * jugador_id : integer <<FK>>
+    es_titular : boolean
+    es_capitan : boolean
+    pos_x : numeric(5,2)
+    pos_y : numeric(5,2)
+    minuto_entra : integer
+    minuto_sale : integer
+  }
+}
+
+package "P3 · vision" {
+  entity "calibracion" as calibracion {
+    * id : integer <<PK>>
+    --
+    * partido_id : integer <<FK>>
+    * puntos_imagen : json
+    * puntos_cancha : json
+    * matriz_h : json
+    * error_medio_m : numeric(5,2)
+    error_max_m : numeric(5,2)
+    * largo_m : numeric(5,2)
+    * ancho_m : numeric(5,2)
+    coef_distorsion : json
+    valida : boolean
+    creada_en : timestamp
+  }
+
+  entity "modelo_ml" as modelo {
+    * id : integer <<PK>>
+    --
+    * nombre : varchar(80)
+    * version : varchar(20)
+    tipo : enum(DETECCION|POSE)
+    archivo_url : varchar(400)
+    map50_jugador : numeric(4,3)
+    map50_balon : numeric(4,3)
+    idf1 : numeric(4,3)
+    activo : boolean
+    entrenado_en : timestamp
+    notas : text
+  }
+
+  entity "video" as video {
+    * id : integer <<PK>>
+    --
+    * partido_id : integer <<FK>>
+    modelo_id : integer <<FK>>
+    * archivo_url : varchar(400)
+    duracion_s : integer
+    fps : integer
+    resolucion : varchar(20)
+    * estado : enum(SUBIDO|PROCESANDO|PROCESADO|ERROR)
+    progreso_pct : integer
+    procesado_en : timestamp
+  }
+}
+
+package "P4 · partido" {
+  entity "posicion" as posicion {
+    * id : bigint <<PK>>
+    --
+    * partido_id : integer <<FK>>
+    * t : numeric(8,2)
+    * track_id : integer
+    * x_m : numeric(6,2)
+    * y_m : numeric(6,2)
+    confianza : numeric(4,3)
+  }
+
+  entity "asignacion_track" as asig_track {
+    * id : integer <<PK>>
+    --
+    * partido_id : integer <<FK>>
+    * track_id : integer
+    jugador_id : integer <<FK>>
+    * equipo_detectado : enum(LOCAL|VISITANTE|ARBITRO|DESCONOCIDO)
+    * desde_t : numeric(8,2)
+    hasta_t : numeric(8,2)
+    confianza : numeric(4,3)
+  }
+
+  entity "evento_manual" as ev_manual {
+    * id : integer <<PK>>
+    --
+    * partido_id : integer <<FK>>
+    jugador_id : integer <<FK>>
+    jugador_entra_id : integer <<FK>>
+    * tipo : enum(GOL|AMARILLA|ROJA|SUSTITUCION)
+    * minuto : integer
+    equipo : enum(LOCAL|VISITANTE)
+    origen : enum(MANUAL)
+  }
+}
+
+package "P5 · analisis" {
+  entity "metrica_intervalo" as m_intervalo {
+    * id : integer <<PK>>
+    --
+    * partido_id : integer <<FK>>
+    * equipo : enum(LOCAL|VISITANTE)
+    * min_desde : integer
+    * min_hasta : integer
+    posesion_pct : numeric(5,2)
+    pases_intentados : integer
+    pases_completados : integer
+    distancia_m : numeric(9,2)
+    tiros : integer
+    altura_linea_m : numeric(5,2)
+    amplitud_m : numeric(5,2)
+    compacidad_m : numeric(5,2)
+  }
+
+  entity "metrica_jugador_intervalo" as m_jugador {
+    * id : integer <<PK>>
+    --
+    * partido_id : integer <<FK>>
+    * jugador_id : integer <<FK>>
+    * min_desde : integer
+    * min_hasta : integer
+    distancia_m : numeric(8,2)
+    vel_max_kmh : numeric(5,2)
+    sprints : integer
+  }
+
+  entity "evento_derivado" as ev_derivado {
+    * id : bigint <<PK>>
+    --
+    * partido_id : integer <<FK>>
+    jugador_origen_id : integer <<FK>>
+    jugador_destino_id : integer <<FK>>
+    * tipo : enum(PASE|PERDIDA|RECUPERACION|TIRO|FUERA)
+    * t : numeric(8,2)
+    minuto : integer
+    equipo : enum(LOCAL|VISITANTE)
+    x_o : numeric(6,2)
+    y_o : numeric(6,2)
+    x_d : numeric(6,2)
+    y_d : numeric(6,2)
+    resultado : enum(EXITOSO|FALLIDO)
+    confianza : numeric(4,3)
+    * origen : enum(CAMARA|MANUAL)
+  }
+}
+
+package "P6 · asistencia" {
+  entity "regla_tactica" as regla {
+    * id : integer <<PK>>
+    --
+    club_id : integer <<FK>>
+    * nombre : varchar(120)
+    * condicion : json
+    * plantilla_mensaje : text
+    plantilla_justificacion : text
+    * prioridad : enum(CRITICA|ALTA|MEDIA|BAJA)
+    * cooldown_s : integer
+    activa : boolean
+  }
+
+  entity "recomendacion" as recomendacion {
+    * id : integer <<PK>>
+    --
+    * partido_id : integer <<FK>>
+    * regla_id : integer <<FK>>
+    * t : numeric(8,2)
+    minuto : integer
+    * mensaje : text
+    justificacion : text
+    * prioridad : enum(CRITICA|ALTA|MEDIA|BAJA)
+    datos_soporte : json
+    * estado : enum(PENDIENTE|VISTA|APLICADA|DESCARTADA)
+    util : boolean
+    comentario : text
+    vista_en : timestamp
+  }
+}
+
+' ===================== relaciones =====================
+
+club ||--o{ usuario
+club ||--o{ equipo
+club ||--o{ competicion
+club ||--o{ regla
+
+equipo ||--o{ jugador
+equipo ||--o{ partido
+competicion ||--o{ partido
+
+partido ||--|| alineacion
+alineacion ||--o{ alin_jug
+jugador ||--o{ alin_jug
+
+partido ||--o{ calibracion
+partido ||--o{ video
+modelo ||--o{ video
+
+partido ||--o{ posicion
+partido ||--o{ asig_track
+jugador ||--o{ asig_track
+partido ||--o{ ev_manual
+jugador ||--o{ ev_manual
+
+partido ||--o{ m_intervalo
+partido ||--o{ m_jugador
+jugador ||--o{ m_jugador
+partido ||--o{ ev_derivado
+jugador ||--o{ ev_derivado
+
+partido ||--o{ recomendacion
+regla ||--o{ recomendacion
+
+' ===================== notas de diseño =====================
+
+note right of posicion
+  **Tabla de alto volumen.**
+  A 5 Hz, con 22 jugadores más el balón,
+  un partido de 90 min genera unas
+  **620.000 filas** (~31 MB).
+
+  Índice compuesto por (partido_id, t).
+  Insertar siempre con bulk_create: de a
+  una fila serían horas.
+end note
+
+note right of partido
+  **ataca_hacia** no es un dato menor.
+  Los equipos cambian de arco al entretiempo.
+  Sin normalizar por esta columna, los mapas
+  de calor del 1er y 2do tiempo quedan
+  espejados y el promedio no significa nada.
+
+  Las coordenadas se guardan CRUDAS y la
+  normalización se aplica al leer, en una
+  única función compartida.
+end note
+
+note bottom of calibracion
+  **largo_m / ancho_m** son editables:
+  las canchas de clubes formativos casi
+  nunca miden 105 × 68. Asumir medidas
+  reglamentarias infla todas las métricas
+  físicas.
+
+  **error_medio_m > 2** bloquea el inicio
+  del partido (Pb-21).
+end note
+
+note bottom of ev_derivado
+  **origen** distingue lo que infirió la
+  cámara de lo que cargó el asistente.
+  Permite medir la precisión real del
+  pipeline y decirle al DT cuánto confiar
+  en cada dato.
+end note
+
+note bottom of regla
+  **club_id NULL** = regla global del sistema.
+  **cooldown_s** evita que una regla dispare
+  cientos de veces por minuto: el motor evalúa
+  5 veces por segundo.
+end note
+
+@enduml

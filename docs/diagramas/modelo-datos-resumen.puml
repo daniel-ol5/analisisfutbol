@@ -1,0 +1,112 @@
+@startuml modelo-datos-resumen
+' Área Técnica — Modelo de datos, vista resumida
+' Solo entidades y relaciones. Para los atributos, ver modelo-datos.puml
+
+!theme plain
+hide circle
+hide members
+skinparam shadowing false
+skinparam packageStyle rectangle
+skinparam nodesep 30
+skinparam ranksep 45
+skinparam class {
+  BackgroundColor White
+  BorderColor #A4B2A6
+  ArrowColor #4C5C51
+}
+
+legend top left
+  <b>Modelo de datos — vista resumida</b>
+  ====
+  <back:#DCEBE2>   </back> implementado    <back:#F7E9D5>   </back> alto volumen
+  19 tablas en 6 paquetes
+endlegend
+
+package "P1 · seguridad" {
+  entity "club" as club #DCEBE2
+  entity "usuario" as usuario #DCEBE2
+}
+
+package "P2 · deportivo" {
+  entity "equipo" as equipo
+  entity "jugador" as jugador
+  entity "competicion" as competicion
+  entity "partido" as partido
+  entity "alineacion" as alineacion
+  entity "alineacion_jugador" as alin_jug
+}
+
+package "P3 · vision" {
+  entity "calibracion" as calibracion
+  entity "modelo_ml" as modelo
+  entity "video" as video
+}
+
+package "P4 · partido" {
+  entity "posicion" as posicion #F7E9D5
+  entity "asignacion_track" as asig_track
+  entity "evento_manual" as ev_manual
+}
+
+package "P5 · analisis" {
+  entity "metrica_intervalo" as m_intervalo
+  entity "metrica_jugador_intervalo" as m_jugador
+  entity "evento_derivado" as ev_derivado
+}
+
+package "P6 · asistencia" {
+  entity "regla_tactica" as regla
+  entity "recomendacion" as recomendacion
+}
+
+club ||--o{ usuario
+club ||--o{ equipo
+club ||--o{ competicion
+club ||--o{ regla
+
+equipo ||--o{ jugador
+equipo ||--o{ partido
+competicion ||--o{ partido
+partido ||--|| alineacion
+alineacion ||--o{ alin_jug
+jugador ||--o{ alin_jug
+
+partido ||--o{ calibracion
+partido ||--o{ video
+modelo ||--o{ video
+
+partido ||--o{ posicion
+partido ||--o{ asig_track
+jugador ||--o{ asig_track
+partido ||--o{ ev_manual
+jugador ||--o{ ev_manual
+
+partido ||--o{ m_intervalo
+partido ||--o{ m_jugador
+jugador ||--o{ m_jugador
+partido ||--o{ ev_derivado
+jugador ||--o{ ev_derivado
+
+partido ||--o{ recomendacion
+regla ||--o{ recomendacion
+
+note right of club
+  **club** es la raíz del
+  aislamiento multi-club.
+  Todo cuelga de acá (Pb-03).
+end note
+
+note bottom of posicion
+  **620.000 filas por partido**
+  (5 Hz × 90 min × 23 objetos)
+  ~31 MB. Es la tabla que
+  condiciona el diseño.
+end note
+
+note right of partido
+  **partido** es la entidad
+  central: 8 de las 19 tablas
+  dependen de ella.
+end note
+
+@enduml
