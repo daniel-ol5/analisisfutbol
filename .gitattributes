@@ -1,0 +1,17 @@
+# Normaliza los finales de línea: evita que Windows y Linux generen
+# diferencias falsas en cada archivo cuando 6 personas trabajan en paralelo.
+* text=auto eol=lf
+
+# Binarios: git no debe tocarlos
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pt  binary
+*.onnx binary
+*.mp4 binary
+
+# Scripts de Windows sí llevan CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf

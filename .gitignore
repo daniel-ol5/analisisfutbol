@@ -1,0 +1,54 @@
+# ===== Python / Django =====
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+db.sqlite3
+.env
+.env.*
+!.env.example
+
+# ===== Node / React =====
+node_modules/
+dist/
+dist-ssr/
+.vite/
+*.local
+
+# ===== Flutter =====
+build/
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+*.iml
+
+# ===== Visión por computadora =====
+# Los pesos de los modelos van a almacenamiento de objetos, NUNCA al repo.
+# Un .pt de 150 MB en el historial lo vuelve inmanejable para 6 personas.
+*.pt
+*.pth
+*.onnx
+*.engine
+runs/
+wandb/
+
+# Video de partidos: un partido completo son varios GB
+*.mp4
+*.mkv
+*.avi
+*.mov
+datasets/images/
+datasets/labels/
+!datasets/*.yaml
+
+# ===== IDE y sistema operativo =====
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
