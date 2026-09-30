@@ -10,9 +10,9 @@ import os
 # importarse el módulo de configuración.
 os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///./test.db"
 
-import pytest  # noqa: E402
+import pytest
 
-from app.core.database import Base, engine  # noqa: E402
+from app.core.database import Base, engine
 
 
 @pytest.fixture(autouse=True)

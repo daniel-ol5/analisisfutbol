@@ -5,28 +5,20 @@ Monta los seis paquetes del modelo de casos de uso. Cada uno se registra con su
 forma automática, espejando el modelo sin que nadie la mantenga a mano.
 """
 
-from contextlib import asynccontextmanager
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.analisis.router import router as analisis
 from app.asistencia.router import router as asistencia
 from app.core.config import settings
-from app.core.database import crear_tablas
 from app.deportivo.router import router as deportivo
 from app.partido.router import router as partido
 from app.seguridad.router import router as seguridad
 from app.vision.router import router as vision
 
-
-@asynccontextmanager
-async def ciclo_de_vida(app: FastAPI):
-    # Atajo del Sprint 1: crea las tablas al arrancar.
-    # A partir del Sprint 2 el esquema lo gestiona Alembic y esto se elimina.
-    await crear_tablas()
-    yield
-
+# El esquema lo gestiona Alembic, no la aplicacion:
+#   alembic upgrade head
+# Docker lo corre solo al levantar el servicio api.
 
 app = FastAPI(
     title=settings.proyecto,
@@ -38,7 +30,6 @@ app = FastAPI(
     docs_url="/api/docs",
     redoc_url="/api/redoc",
     openapi_url="/api/openapi.json",
-    lifespan=ciclo_de_vida,
 )
 
 app.add_middleware(

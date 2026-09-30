@@ -10,6 +10,8 @@ hide circle
 skinparam linetype ortho
 skinparam shadowing false
 skinparam packageStyle rectangle
+skinparam ArrowFontSize 11
+skinparam ArrowFontColor #4C5C51
 skinparam class {
   BackgroundColor White
   BorderColor #A4B2A6
@@ -21,6 +23,12 @@ legend top left
   ====
   <back:#DCEBE2>   </back> implementado    <back:#FFFFFF>   </back> pendiente
   PK = clave primaria · FK = clave foránea
+  ----
+  <b>Cardinalidades</b>
+  1       exactamente uno
+  0..1    cero o uno (FK opcional)
+  0..*    cero o muchos
+  1..*    uno o muchos
 endlegend
 
 package "P1 · seguridad" {
@@ -291,37 +299,38 @@ package "P6 · asistencia" {
 
 ' ===================== relaciones =====================
 
-club ||--o{ usuario
-club ||--o{ equipo
-club ||--o{ competicion
-club ||--o{ regla
+club        "1"    ||--o{ "0..*" usuario       : tiene
+club        "1"    ||--o{ "0..*" equipo        : posee
+club        "1"    ||--o{ "0..*" competicion   : organiza
+club        "0..1" ||--o{ "0..*" regla         : define
 
-equipo ||--o{ jugador
-equipo ||--o{ partido
-competicion ||--o{ partido
+equipo      "1"    ||--o{ "0..*" jugador       : integra
+equipo      "1"    ||--o{ "0..*" partido       : disputa
+competicion "0..1" ||--o{ "0..*" partido       : agrupa
 
-partido ||--|| alineacion
-alineacion ||--o{ alin_jug
-jugador ||--o{ alin_jug
+partido     "1"    ||--|| "1"    alineacion    : tiene
+alineacion  "1"    ||--o{ "1..*" alin_jug      : incluye
+jugador     "1"    ||--o{ "0..*" alin_jug      : participa en
 
-partido ||--o{ calibracion
-partido ||--o{ video
-modelo ||--o{ video
+partido     "1"    ||--o{ "0..*" calibracion   : se calibra con
+partido     "1"    ||--o{ "0..*" video         : se graba en
+modelo      "0..1" ||--o{ "0..*" video         : procesa
 
-partido ||--o{ posicion
-partido ||--o{ asig_track
-jugador ||--o{ asig_track
-partido ||--o{ ev_manual
-jugador ||--o{ ev_manual
+partido     "1"    ||--o{ "0..*" posicion      : genera
+partido     "1"    ||--o{ "0..*" asig_track    : define
+jugador     "0..1" ||--o{ "0..*" asig_track    : se identifica en
+partido     "1"    ||--o{ "0..*" ev_manual     : registra
+jugador     "0..1" ||--o{ "0..*" ev_manual     : protagoniza
 
-partido ||--o{ m_intervalo
-partido ||--o{ m_jugador
-jugador ||--o{ m_jugador
-partido ||--o{ ev_derivado
-jugador ||--o{ ev_derivado
+partido     "1"    ||--o{ "0..*" m_intervalo   : acumula
+partido     "1"    ||--o{ "0..*" m_jugador     : mide
+jugador     "1"    ||--o{ "0..*" m_jugador     : rinde en
+partido     "1"    ||--o{ "0..*" ev_derivado   : produce
+jugador     "0..1" ||--o{ "0..*" ev_derivado   : origina
+jugador     "0..1" ||--o{ "0..*" ev_derivado   : recibe
 
-partido ||--o{ recomendacion
-regla ||--o{ recomendacion
+partido     "1"    ||--o{ "0..*" recomendacion : recibe
+regla       "1"    ||--o{ "0..*" recomendacion : origina
 
 ' ===================== notas de diseño =====================
 

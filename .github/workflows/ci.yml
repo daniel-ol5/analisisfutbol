@@ -1,0 +1,113 @@
+# Integracion continua  —  Pb-06
+#
+# Corre en cada Pull Request y en cada push a main. Un PR con esto en rojo
+# queda bloqueado para integrar.
+
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  backend:
+    name: Backend · lint y pruebas
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Instalar dependencias
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install ruff
+
+      - name: Lint
+        working-directory: backend
+        run: ruff check app tests
+
+      - name: Pruebas
+        working-directory: backend
+        run: python -m pytest
+
+      - name: El contrato OpenAPI esta al dia
+        working-directory: backend
+        run: |
+          python scripts/exportar_openapi.py
+          if ! git diff --quiet ../docs/api/openapi.json; then
+            echo "::error::docs/api/openapi.json quedo desactualizado."
+            echo "Corre 'python scripts/exportar_openapi.py' y commitea el resultado."
+            git diff --stat ../docs/api/openapi.json
+            exit 1
+          fi
+
+  web:
+    name: Web · tipos y build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Instalar dependencias
+        working-directory: web
+        run: npm ci
+
+      - name: Lint
+        working-directory: web
+        run: npm run lint
+
+      - name: Build y verificacion de tipos
+        working-directory: web
+        run: npm run build
+
+  movil:
+    name: Movil · analyze y build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.41.5"
+          channel: stable
+          cache: true
+
+      - name: Instalar dependencias
+        working-directory: movil
+        run: flutter pub get
+
+      - name: Analyze
+        working-directory: movil
+        run: flutter analyze
+
+      - name: Build
+        working-directory: movil
+        run: flutter build web --release
+
+  diagramas:
+    name: Diagramas PlantUML
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Verificar sintaxis
+        run: |
+          curl -sL -o plantuml.jar \
+            https://github.com/plantuml/plantuml/releases/latest/download/plantuml.jar
+          java -jar plantuml.jar -checkonly docs/diagramas/*.puml

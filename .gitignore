@@ -27,6 +27,11 @@ build/
 .flutter-plugins
 .flutter-plugins-dependencies
 *.iml
+movil/.flutter-plugins*
+movil/android/.gradle/
+movil/android/local.properties
+movil/ios/Pods/
+movil/ios/.symlinks/
 
 # ===== Visión por computadora =====
 # Los pesos de los modelos van a almacenamiento de objetos, NUNCA al repo.

@@ -1,0 +1,29 @@
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+exclude = ["venv", ".venv", "alembic"]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle
+    "F",    # pyflakes
+    "I",    # orden de imports
+    "UP",   # sintaxis moderna de Python
+    "B",    # bugbear: errores sutiles
+    "SIM",  # simplificaciones
+    "RUF",  # reglas propias de ruff
+]
+ignore = [
+    "E501",  # largo de linea: lo maneja el formateador
+    "B008",  # llamada en argumento por defecto: es el patron de Depends() de FastAPI
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Los routers declaran el contrato: los parametros de FastAPI parecen sin usar
+# hasta que el endpoint se implementa.
+"app/*/router.py" = ["ARG001"]
+# Las pruebas necesitan definir variables de entorno antes de importar la app.
+"tests/conftest.py" = ["E402"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]

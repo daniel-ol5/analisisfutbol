@@ -8,7 +8,6 @@ import jwt
 
 from app.core.config import settings
 
-
 # ---------- contraseñas ----------
 
 def hashear(password: str) -> str:

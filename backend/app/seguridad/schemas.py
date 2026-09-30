@@ -4,7 +4,6 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 from app.seguridad.models import Rol
 
-
 # ---------- CU-01 Registrar club ----------
 
 class RegistroClub(BaseModel):

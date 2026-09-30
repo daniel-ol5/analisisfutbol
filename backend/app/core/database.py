@@ -20,16 +20,3 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """Dependencia de FastAPI: entrega una sesión y la cierra al terminar."""
     async with SessionLocal() as session:
         yield session
-
-
-async def crear_tablas() -> None:
-    """Crea las tablas al arrancar.
-
-    Atajo para el Sprint 1. A partir del Sprint 2 el esquema se gestiona
-    con migraciones de Alembic y esta función se elimina.
-    """
-    # Importar los módulos de modelos registra las tablas en Base.metadata
-    from app import analisis, asistencia, deportivo, partido, seguridad, vision  # noqa: F401
-
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)

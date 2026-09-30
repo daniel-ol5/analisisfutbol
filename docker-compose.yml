@@ -1,0 +1,82 @@
+# Entorno de desarrollo completo  —  Pb-05
+#
+#   docker compose up
+#
+# Levanta cuatro servicios:
+#   db     PostgreSQL 17        localhost:5432
+#   redis  Redis 7              localhost:6379
+#   api    FastAPI con recarga  http://localhost:8000/api/docs
+#   mock   Prism                http://localhost:4010
+#
+# El mock sirve el contrato congelado de docs/api/openapi.json. Web y Movil
+# apuntan ahi mientras el backend no tenga implementado su caso de uso, y
+# cambian a la API real con una sola variable de entorno.
+#
+# El worker de vision NO esta aca: corre fuera de Docker, en la maquina con
+# GPU, por los controladores de NVIDIA. Ver vision/README.md
+
+name: areatecnica
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: areatecnica
+      POSTGRES_PASSWORD: areatecnica
+      POSTGRES_DB: areatecnica
+    ports:
+      - "5432:5432"
+    volumes:
+      - datos_db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U areatecnica"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: ./backend
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+asyncpg://areatecnica:areatecnica@db:5432/areatecnica
+      REDIS_URL: redis://redis:6379/0
+      SECRET_KEY: clave-solo-para-desarrollo-no-usar-en-produccion
+      CORS_ORIGINS: http://localhost:5173,http://localhost:4010
+    ports:
+      - "8000:8000"
+    volumes:
+      # Montar el codigo da recarga en caliente sin reconstruir la imagen
+      - ./backend/app:/app/app
+      - ./backend/scripts:/app/scripts
+      - ./backend/alembic:/app/alembic
+    # Aplica las migraciones pendientes y recien despues arranca la API
+    command: >
+      sh -c "alembic upgrade head &&
+             uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+
+  mock:
+    image: stoplight/prism:5
+    depends_on:
+      - api
+    volumes:
+      - ./docs/api:/contrato:ro
+    ports:
+      - "4010:4010"
+    command: mock -h 0.0.0.0 -p 4010 --dynamic /contrato/openapi.json
+
+volumes:
+  datos_db:

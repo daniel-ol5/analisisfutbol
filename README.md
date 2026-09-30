@@ -4,7 +4,102 @@ Sistema de análisis táctico de fútbol por visión computacional. Monitorea un
 partido desde una cámara fija y entrega recomendaciones tácticas justificadas al
 entrenador, en vivo y sobre partidos grabados.
 
-Proyecto de Ingeniería de Software · Marco de trabajo Scrum · Equipo de 6.
+Proyecto de Ingeniería de Software · Scrum · Equipo de 6.
+
+---
+
+## Arrancar en un comando
+
+```bash
+docker compose up
+```
+
+| Servicio | URL | Qué es |
+|---|---|---|
+| **API** | http://localhost:8000/api/docs | FastAPI con recarga en caliente |
+| **Mock** | http://localhost:4010 | El contrato congelado, responde todo |
+| PostgreSQL | localhost:5432 | usuario/clave/base: `areatecnica` |
+| Redis | localhost:6379 | |
+
+El **worker de visión no está en Docker**: corre fuera, en la máquina con GPU,
+por los controladores de NVIDIA. Ver [vision/README.md](vision/README.md).
+
+### Sin Docker
+
+```bash
+cd backend
+python -m venv venv && venv\Scripts\activate
+pip install -r requirements.txt
+copy .env.example .env
+uvicorn app.main:app --reload
+```
+
+```bash
+cd web
+npm install
+copy .env.example .env.local
+npm run dev            # http://localhost:5173
+```
+
+```bash
+cd movil
+flutter pub get
+flutter run --dart-define=API_URL=http://10.0.2.2:8000/api
+```
+
+`10.0.2.2` es el alias del emulador de Android hacia el localhost de tu máquina.
+Para un dispositivo físico, usá la IP de tu red local. Para trabajar contra el
+mock, cambiá el puerto a `4010`.
+
+---
+
+## El contrato de la API
+
+[`docs/api/openapi.json`](docs/api/openapi.json) es el **contrato congelado**:
+55 rutas, 71 operaciones y 84 esquemas cubriendo los 6 paquetes. De ahí sale el
+mock, y del mock sale que Web y Móvil **nunca esperen al backend**.
+
+Los endpoints que todavía no están implementados devuelven **501** con el caso
+de uso, el sprint y el responsable:
+
+```json
+{ "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel" }
+```
+
+**Mientras tu caso de uso devuelva 501**, apuntá al mock en `web/.env.local`:
+
+```
+VITE_API_URL=http://127.0.0.1:4010/api
+```
+
+Cuando el backend lo implemente, volvés a la API real cambiando esa línea. Nada
+más.
+
+### Migraciones
+
+El esquema lo gestiona Alembic, no la aplicación. Docker aplica las migraciones
+pendientes al levantar el servicio `api`; sin Docker:
+
+```bash
+cd backend
+alembic upgrade head                                   # aplicar
+alembic revision --autogenerate -m "descripcion"       # crear una nueva
+alembic downgrade -1                                   # revertir la ultima
+```
+
+Al agregar modelos a un paquete, importarlo en `alembic/env.py` para que
+autogenerate los detecte.
+
+### Si cambiás un router o un schema
+
+```bash
+cd backend
+python scripts/exportar_openapi.py
+```
+
+y commiteá `docs/api/openapi.json` junto al cambio. **La CI verifica que esté al
+día** y falla el PR si no lo está. Un cambio al contrato se avisa a las dos
+parejas antes de mergear.
 
 ---
 
@@ -13,14 +108,18 @@ Proyecto de Ingeniería de Software · Marco de trabajo Scrum · Equipo de 6.
 ```
 Deportivo/
 ├─ vision/     Worker de visión — YOLO, ByteTrack, homografía (necesita GPU)
-├─ backend/    FastAPI — API, WebSockets, motor de reglas
-├─ web/        React + TypeScript + Vite — panel del DT y calibración
-├─ movil/      Flutter — app del DT y del asistente (pendiente)
-└─ docs/       Actas, ADRs y diagramas
+├─ backend/    FastAPI — los 6 paquetes
+├─ web/        React + TypeScript + Vite — las 6 features
+├─ movil/      Flutter — las 6 features
+└─ docs/
+   ├─ api/openapi.json            contrato congelado
+   ├─ diagramas/                  modelo de datos en PlantUML
+   ├─ adr/                        decisiones de arquitectura
+   └─ Sprint-Planning-*.xlsx      108 tareas en 4 sprints
 ```
 
-El `backend` y la `web` están organizados en **seis paquetes** que espejan el
-modelo de casos de uso:
+Backend y Web están organizados en los **mismos 6 paquetes** del modelo de casos
+de uso:
 
 | Paquete | Casos de uso | Contenido |
 |---|---|---|
@@ -33,98 +132,53 @@ modelo de casos de uso:
 
 ---
 
-## Puesta en marcha
-
-### Backend
-
-```bash
-cd backend
-python -m venv venv
-venv\Scripts\activate              # Windows
-pip install -r requirements.txt
-copy .env.example .env             # y generar una SECRET_KEY propia
-uvicorn app.main:app --reload
-```
-
-API en `http://127.0.0.1:8000` · documentación en `http://127.0.0.1:8000/api/docs`
-
-Por defecto usa SQLite, así que **no hace falta Docker ni PostgreSQL** para
-levantarlo. Para Postgres, cambiar `DATABASE_URL` en `.env`.
-
-### Web
-
-```bash
-cd web
-npm install
-copy .env.example .env.local
-npm run dev
-```
-
-Aplicación en `http://localhost:5173`
-
-### Pruebas
-
-```bash
-cd backend && venv\Scripts\python -m pytest
-cd web && npm run build
-```
-
----
-
 ## Convenciones
 
-**Importaciones en la web.** Siempre con el alias `@/`, nunca rutas relativas
-largas:
+**Backend — las capas de cada paquete.** `router.py` traduce HTTP a llamadas de
+servicio y **no toca la base de datos**; `service.py` tiene la lógica y **no
+conoce FastAPI**. Así el motor de reglas se prueba sin levantar el servidor.
+
+**Toda consulta filtrada por club pasa por `core/tenancy.py`.** Repetir el filtro
+a mano en cada endpoint es exactamente como se filtran datos entre clubes sin
+querer (`Pb-03`).
+
+**Web — importaciones siempre con el alias `@/`**, nunca rutas relativas largas:
 
 ```ts
-import { api } from "@/shared/api/client";   // así
+import { api } from "@/shared/api/client";      // así
 import { api } from "../../shared/api/client";  // no
 ```
 
 **Una feature no importa de otra feature.** Si `analisis` necesita algo de
-`partido`, ese algo sube a `shared/`. Sin esa regla, para el Sprint 3 todo
-importa de todo.
-
-**En el backend, `router.py` no toca la base de datos y `service.py` no conoce
-FastAPI.** El router traduce HTTP a llamadas de servicio y nada más. Así el
-motor de reglas se prueba sin levantar el servidor.
-
-**Toda consulta filtrada por club pasa por `core/tenancy.py`.** Repetir el
-filtro a mano en cada endpoint es exactamente como se filtran datos entre clubes
-sin querer (`Pb-03`).
+`partido`, ese algo sube a `shared/`.
 
 ---
 
 ## Cómo trabajamos
 
-**Ramas.** `main` está protegida. Una rama por historia:
+**Ramas.** `main` protegida. Una por historia: `feat/Pb-21-calibracion-camara`.
 
+**Commits.** `feat(vision): proyectar detecciones al plano de cancha`
+
+**Pull Requests.** Obligatorios, con una aprobación de alguien distinto al autor
+y la CI en verde. Nadie mergea su propio PR. Un PR abierto se revisa en menos de
+24 h: uno estancado bloquea a otra persona.
+
+### Antes de abrir el PR
+
+```bash
+cd backend && python -m ruff check app tests && python -m pytest
+cd web && npm run lint && npm run build
+cd movil && flutter analyze
 ```
-feat/Pb-21-calibracion-camara
-fix/Pb-28-latencia-panel
-```
-
-**Commits.** Formato convencional:
-
-```
-feat(vision): proyectar detecciones al plano de cancha
-fix(seguridad): corregir filtro de aislamiento por club
-docs(adr): ADR-001 decisiones de montaje de cámara
-```
-
-**Pull Requests.** Obligatorios, con al menos una aprobación de alguien distinto
-al autor y la integración continua en verde. Nadie mergea su propio PR.
-
-**Regla de las 24 h.** Un PR abierto se revisa en menos de un día: uno estancado
-bloquea a otra persona.
 
 ---
 
 ## Nunca al repositorio
 
-- **Pesos de modelos** (`.pt`, `.onnx`) — van a almacenamiento de objetos versionados
+- **Pesos de modelos** (`.pt`, `.onnx`) — van a almacenamiento de objetos
 - **Video de partidos** — un partido completo son varios GB
-- **Secretos** (`.env`, claves, tokens) — se gestionan en el proveedor de despliegue
+- **Secretos** (`.env`, claves, tokens) — se gestionan en el proveedor
 
 Si alguno entra al historial, queda ahí para siempre aunque se borre después.
 
@@ -132,11 +186,21 @@ Si alguno entra al historial, queda ahí para siempre aunque se borre después.
 
 ## Estado
 
-Esqueleto del Sprint 1. Implementado:
+**Implementado**
 
-- Registro de club, login y control de acceso por rol (`CU-01`, `CU-02`, `CU-04`)
+- Registro de club, login, logout y control de acceso por rol (`CU-01`…`CU-04`)
 - Aislamiento entre clubes con prueba automatizada (`Pb-03`)
-- Los seis paquetes montados, con la documentación de la API agrupada por paquete
-- Web conectada al backend, con las seis secciones enrutadas
+- Contrato OpenAPI completo de los 6 paquetes + mock server
+- Docker Compose, CI con lint, pruebas, verificación del contrato y de diagramas
+- Web conectada al backend, con las 6 secciones enrutadas
 
-Pendiente: todo lo demás del backlog.
+- Migraciones con Alembic, con downgrade probado
+- App Flutter con las 6 features enrutadas y conexión al backend
+
+**Pendiente**
+
+- Modelos de datos de 5 de los 6 paquetes (`deportivo`, `vision`, `partido`,
+  `analisis`, `asistencia`) — están diseñados en
+  [docs/diagramas/modelo-datos.puml](docs/diagramas/modelo-datos.puml)
+- Worker de visión — ver [vision/README.md](vision/README.md)
+- Pasar el token a `flutter_secure_storage`: hoy usa SharedPreferences, que no cifra
