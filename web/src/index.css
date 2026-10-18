@@ -1,4 +1,44 @@
-:root {
+/*
+ * Tokens de diseño.
+ *
+ * El tema OSCURO es la base y el predeterminado, sin importar la preferencia
+ * del sistema. El claro se activa con data-theme="light" en <html> (botón de
+ * tema, ver shared/theme). El selector [data-theme="dark"] permite incrustar
+ * una muestra oscura dentro de una página clara (/componentes).
+ */
+:root,
+[data-theme="dark"] {
+  /* Colores base */
+  --ground: #0c1512;
+  --surface: #121d19;
+  --line: #26342d;
+  --text: #e2e9e4;
+  --text-2: #a5b4aa;
+  --text-3: #7c8d82;
+  --pitch: #4cc38a;
+  --risk: #e0705c;
+
+  /* Estado */
+  --ok: #4cc38a;
+  --ok-bg: #12281f;
+  --warn: #e0b04c;
+  --warn-bg: #2b2312;
+  --info: #6aa9e0;
+  --info-bg: #13222f;
+  --risk-bg: #2e1a16;
+
+  /* Interacción */
+  --pitch-hover: #6fd6a3;
+  --on-pitch: #0c1512;
+  --surface-2: #18261f;
+  --focus: var(--pitch);
+
+  --shadow-md: 0 1px 2px rgb(0 0 0 / 0.18);
+  --shadow-lg: 0 12px 32px rgb(0 0 0 / 0.35);
+  color-scheme: dark;
+}
+
+[data-theme="light"] {
   --ground: #f1f4f1;
   --surface: #fff;
   --line: #cdd6ce;
@@ -7,20 +47,58 @@
   --text-3: #74847a;
   --pitch: #0b6b45;
   --risk: #a2372a;
-  color-scheme: light dark;
+
+  --ok: #0b6b45;
+  --ok-bg: #e3f1e9;
+  --warn: #8a5a00;
+  --warn-bg: #f7edd4;
+  --info: #1f5f99;
+  --info-bg: #e0ecf6;
+  --risk-bg: #f6e1dd;
+
+  --pitch-hover: #095a3a;
+  --on-pitch: #fff;
+  --surface-2: #e8eee9;
+
+  --shadow-md: 0 1px 2px rgb(0 0 0 / 0.18);
+  --shadow-lg: 0 12px 32px rgb(0 0 0 / 0.35);
+  color-scheme: light;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --ground: #0c1512;
-    --surface: #121d19;
-    --line: #26342d;
-    --text: #e2e9e4;
-    --text-2: #a5b4aa;
-    --text-3: #7c8d82;
-    --pitch: #4cc38a;
-    --risk: #e0705c;
-  }
+/* Tokens que no dependen del tema */
+:root {
+  /* Tipografía */
+  --font-sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, monospace;
+  --fs-xs: 11px;
+  --fs-sm: 13px;
+  --fs-md: 14px;
+  --fs-base: 16px;
+  --fs-lg: 20px;
+  --fs-xl: 30px;
+  --fs-display: clamp(34px, 6vw, 54px);
+  --fw-normal: 400;
+  --fw-medium: 600;
+  --fw-bold: 700;
+  --fw-black: 800;
+  --tracking-label: 0.16em;
+
+  /* Espaciado (escala de 4px) */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 40px;
+  --sp-7: 56px;
+
+  /* Radios */
+  --radius-sm: 3px;
+  --radius: 4px;
+
+  /* Layout */
+  --sidebar-w: 232px;
+  --header-h: 56px;
 }
 
 * {
@@ -31,7 +109,7 @@ body {
   margin: 0;
   background: var(--ground);
   color: var(--text);
-  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-family: var(--font-sans);
   line-height: 1.6;
 }
 
@@ -44,24 +122,24 @@ a {
 .pendiente {
   max-width: 960px;
   margin: 0 auto;
-  padding: 56px 24px 80px;
+  padding: var(--sp-7) var(--sp-5) 80px;
 }
 
 .kicker {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.16em;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  letter-spacing: var(--tracking-label);
   text-transform: uppercase;
   color: var(--text-3);
   margin: 0;
 }
 
 .inicio h1 {
-  font-size: clamp(34px, 6vw, 54px);
-  font-weight: 800;
+  font-size: var(--fs-display);
+  font-weight: var(--fw-black);
   letter-spacing: -0.03em;
   line-height: 1;
-  margin: 12px 0 0;
+  margin: var(--sp-3) 0 0;
 }
 
 .inicio h1 em {
@@ -71,18 +149,18 @@ a {
 
 .dek {
   color: var(--text-2);
-  margin: 12px 0 0;
+  margin: var(--sp-3) 0 0;
 }
 
 .estado {
   display: inline-block;
   margin-top: 20px;
-  padding: 7px 14px;
+  padding: 7px var(--sp-4);
   border: 1px solid var(--line);
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   background: var(--surface);
-  font-size: 13px;
-  font-weight: 600;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
   color: var(--text-3);
 }
 
@@ -98,16 +176,16 @@ a {
 
 .paquetes {
   display: grid;
-  gap: 12px;
+  gap: var(--sp-3);
   grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
-  margin-top: 40px;
+  margin-top: var(--sp-6);
 }
 
 .paquete {
   display: block;
   padding: 20px;
   border: 1px solid var(--line);
-  border-radius: 4px;
+  border-radius: var(--radius);
   background: var(--surface);
   transition: border-color 0.15s;
 }
@@ -117,54 +195,54 @@ a {
 }
 
 .paquete .id {
-  font-family: ui-monospace, monospace;
-  font-size: 11px;
-  font-weight: 700;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
   color: var(--pitch);
 }
 
 .paquete h2 {
-  font-size: 16.5px;
-  font-weight: 700;
-  margin: 6px 0 4px;
+  font-size: var(--fs-base);
+  font-weight: var(--fw-bold);
+  margin: 6px 0 var(--sp-1);
 }
 
 .paquete .cus {
-  font-family: ui-monospace, monospace;
-  font-size: 11.5px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
   color: var(--text-3);
 }
 
 .volver {
-  font-size: 13px;
+  font-size: var(--fs-sm);
   color: var(--text-3);
 }
 
 .pendiente .paq {
-  font-family: ui-monospace, monospace;
-  font-size: 12px;
-  font-weight: 700;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
   color: var(--pitch);
   margin: 22px 0 0;
 }
 
 .pendiente h1 {
-  font-size: 30px;
-  font-weight: 800;
+  font-size: var(--fs-xl);
+  font-weight: var(--fw-black);
   letter-spacing: -0.02em;
   margin: 6px 0 0;
 }
 
 .pendiente .aviso {
   color: var(--text-2);
-  margin: 14px 0 6px;
+  margin: var(--sp-3) 0 6px;
 }
 
 .pendiente ul {
   padding: 0;
   list-style: none;
   border: 1px solid var(--line);
-  border-radius: 4px;
+  border-radius: var(--radius);
   background: var(--surface);
   overflow: hidden;
 }
@@ -172,7 +250,7 @@ a {
 .pendiente li {
   padding: 10px 18px;
   border-bottom: 1px solid var(--line);
-  font-size: 14px;
+  font-size: var(--fs-md);
   color: var(--text-2);
 }
 
