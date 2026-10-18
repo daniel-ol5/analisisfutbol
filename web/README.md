@@ -162,3 +162,30 @@ Representa un paquete del sistema de información según el modelo de casos de u
   - Funciones de formateo, helpers de fechas, validadores puros y utilidades matemáticas o de cadenas compartidas.
 - **Qué NO va:**
   - 🚫 Componentes visuales ni llamadas a APIs.
+
+---
+
+## Sesión, login y registro (feature `seguridad`)
+
+Rutas públicas: `/login` (CU-02) y `/registro` (CU-01). Tras iniciar sesión o registrarse con éxito se redirige a `/`.
+
+### Piezas
+
+| Archivo (en `src/features/seguridad/`) | Para qué sirve |
+| --- | --- |
+| `session.ts` | Único módulo que guarda y lee `{ access_token, usuario }`: `iniciarSesion`, `cerrarSesion`, `obtenerSesion` y el hook `useSesion`. |
+| `api.ts` | `login`, `registrar` y `logout` contra `/seguridad/*`. |
+| `errors.ts` | Convierte el error del backend (`detail` como texto o como lista 422) en un mensaje legible en español. |
+| `validation.ts` | Validaciones de formulario y normalización del email. |
+| `components/BotonCerrarSesion.tsx` | Llama a `POST /seguridad/logout` y limpia la sesión aunque la llamada falle. Está exportado, pero no se monta en ninguna pantalla todavía. |
+
+### Cómo funciona
+
+- **Token:** el cliente de `shared/api/client.ts` adjunta `Authorization: Bearer <access_token>` si hay sesión. `shared/` no importa de ninguna feature: `session.ts` le registra un adaptador (`registrarAdaptadorAuth`) al cargarse.
+- **401:** en una ruta protegida significa sesión caída; se limpia la sesión y se redirige a `/login` con `window.location.assign`. En `/seguridad/login` y `/seguridad/registro` el 401 NO redirige: se muestra en el formulario.
+- **No hay refresh:** el backend emite `refresh_token` pero no tiene endpoint que lo consuma, así que la web no intenta renovar el token (dura 15 min).
+- **Email:** en login y registro se recorta y se pasa a minúsculas antes de enviarlo, porque el backend no lo normaliza.
+- **Contraseña (registro):** de 8 a 72 caracteres y como máximo 72 bytes en UTF-8 (límite de bcrypt).
+- **Dónde se guarda:** `localStorage` (clave `areatecnica.sesion`). Hay un TODO en `session.ts` para revisarlo cuando exista refresh.
+- **Mock o API real:** cambiar solo `VITE_API_URL` en `.env.local` (`http://127.0.0.1:8000/api` o `http://127.0.0.1:4010/api`).
+- **Guardas de ruta:** todavía no existen; abrir `/` sin sesión no redirige. Solo un 401 de la API cierra la sesión.
