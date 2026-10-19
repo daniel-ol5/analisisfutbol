@@ -4,6 +4,7 @@ Incluye el contrato del mensaje que el worker de vision envia por WebSocket,
 que es la pieza que permite a Web y Movil construir en paralelo (Pb-26).
 """
 
+from datetime import datetime
 from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -136,6 +137,13 @@ class MensajeWorker(BaseModel):
     jugadores: list[PosicionDetectada]
     balon: PosicionDetectada | None = None
     calidad: IndicadorCalidad
+
+
+class TokenIngesta(BaseModel):
+    """T-033. Credencial del worker para publicar en /ingesta de un solo partido."""
+    token: str = Field(description="Enviarlo en el primer mensaje: {\"tipo\": \"auth\", \"token\": ...}")
+    partido_id: int
+    expira_en: datetime
 
 
 class RangoPosiciones(BaseModel):

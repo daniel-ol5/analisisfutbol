@@ -14,7 +14,7 @@ export function PerfilPage() {
 
   return (
     <main className="perfil">
-      <p className="kicker">P1 · CU-05</p>
+      
       <h1>Mi perfil</h1>
 
       {perfil.isPending && <p className="perfil-estado">Cargando tu perfil…</p>}
