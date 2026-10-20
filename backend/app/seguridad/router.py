@@ -11,9 +11,12 @@ from app.core.security import token_acceso, token_refresco
 from app.seguridad import service
 from app.seguridad.schemas import (
     Credenciales,
+    LogoutInput,
     NuevoUsuario,
+    RefreshTokenInput,
     RegistroClub,
     Sesion,
+    UsuarioEditar,
     UsuarioOut,
 )
 
@@ -42,11 +45,22 @@ async def login(datos: Credenciales, db: Db) -> Sesion:
     return _sesion(usuario)
 
 
+@router.post("/refresh", response_model=Sesion,
+             summary="CU-02 · Refrescar token con rotación")
+async def refresh(datos: RefreshTokenInput, db: Db) -> Sesion:
+    usuario = await service.refrescar_token(db, datos.refresh_token)
+    return _sesion(usuario)
+
+
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT,
              summary="CU-03 · Cerrar sesión")
-async def logout(usuario: Actual) -> None:
-    # TODO Pb-01: invalidar el refresh token en una lista negra persistida.
-    # Borrarlo solo del cliente no alcanza como criterio de aceptación.
+async def logout(usuario: Actual, db: Db, datos: LogoutInput | None = None) -> None:
+    await service.cerrar_sesion(
+        db,
+        usuario_id=usuario.id,
+        jti_acceso=usuario.jti,
+        refresh_token=datos.refresh_token if datos else None,
+    )
     return None
 
 
@@ -71,3 +85,33 @@ async def crear_usuario(datos: NuevoUsuario, usuario: Actual, db: Db) -> Usuario
 async def listar_usuarios(usuario: Actual, db: Db) -> list[UsuarioOut]:
     usuarios = await service.listar_usuarios(db, usuario.club_id)
     return [UsuarioOut.model_validate(u) for u in usuarios]
+
+
+@router.get("/usuarios/{usuario_id}", response_model=UsuarioOut,
+            dependencies=[Depends(requiere_rol("ADMIN"))],
+            summary="CU-04 · Consultar usuario del club")
+async def ver_usuario(usuario_id: int, usuario: Actual, db: Db) -> UsuarioOut:
+    u = await service.obtener_usuario(db, usuario.club_id, usuario_id)
+    return UsuarioOut.model_validate(u)
+
+
+@router.patch("/usuarios/{usuario_id}", response_model=UsuarioOut,
+              dependencies=[Depends(requiere_rol("ADMIN"))],
+              summary="CU-04 · Editar usuario del club")
+async def editar_usuario(
+    usuario_id: int, datos: UsuarioEditar, usuario: Actual, db: Db
+) -> UsuarioOut:
+    u = await service.editar_usuario(
+        db, usuario.club_id, usuario_id, datos, autor_id=usuario.id
+    )
+    return UsuarioOut.model_validate(u)
+
+
+@router.delete("/usuarios/{usuario_id}", status_code=status.HTTP_204_NO_CONTENT,
+               dependencies=[Depends(requiere_rol("ADMIN"))],
+               summary="CU-04 · Dar de baja usuario del club")
+async def eliminar_usuario(usuario_id: int, usuario: Actual, db: Db) -> None:
+    await service.eliminar_usuario(
+        db, usuario.club_id, usuario_id, autor_id=usuario.id
+    )
+    return None

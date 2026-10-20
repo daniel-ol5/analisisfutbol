@@ -50,3 +50,22 @@ class Usuario(Base):
     )
 
     club: Mapped[Club] = relationship(back_populates="usuarios")
+
+
+class TokenRevocado(Base):
+    """Lista negra persistida de tokens revocados (Pb-01).
+
+    Guarda identificadores únicos de tokens (jti) para invalidar tokens de acceso
+    o refresco tras logout o rotación.
+    """
+
+    __tablename__ = "token_revocado"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    jti: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    usuario_id: Mapped[int] = mapped_column(ForeignKey("usuario.id"), index=True)
+    revocado_en: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+
+    usuario: Mapped[Usuario] = relationship()
