@@ -216,7 +216,8 @@ import { api } from "../../shared/api/client";  // no
 
 ## Cómo trabajamos
 
-**Ramas.** `main` protegida. Una por historia: `feat/Pb-21-calibracion-camara`.
+**Ramas.** `main` debe estar protegida. Una por historia:
+`feat/Pb-21-calibracion-camara`.
 
 **Commits.** `feat(vision): proyectar detecciones al plano de cancha`
 
