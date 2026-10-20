@@ -5,8 +5,6 @@ import {
   crearEquipo,
   editarEquipo,
   desactivarEquipo,
-  conectarSesionDemo,
-  tieneSesion,
 } from "../api";
 import { EquipoCard } from "./EquipoCard";
 import { EquipoFormModal } from "./EquipoFormModal";
@@ -27,10 +25,7 @@ export function EquiposView() {
   const [modalRivalAbierto, setModalRivalAbierto] = useState(false);
   const [equipoParaRival, setEquipoParaRival] = useState<Equipo | null>(null);
 
-  const [sesionConectada, setSesionConectada] = useState(tieneSesion());
-  const [conectandoDemo, setConectandoDemo] = useState(false);
-
-  // Consulta de equipos
+  // Consulta de equipos del club
   const {
     data: equipos = [],
     isLoading,
@@ -40,7 +35,6 @@ export function EquiposView() {
   } = useQuery({
     queryKey: ["equipos", { activos: !mostrarInactivos }],
     queryFn: () => listarEquipos(!mostrarInactivos),
-    enabled: sesionConectada,
     retry: 1,
   });
 
@@ -71,20 +65,6 @@ export function EquiposView() {
       queryClient.invalidateQueries({ queryKey: ["equipos"] });
     },
   });
-
-  // Conectar sesión demo rápida si no hay token
-  const handleConectarDemo = async () => {
-    try {
-      setConectandoDemo(true);
-      await conectarSesionDemo();
-      setSesionConectada(true);
-      await refetch();
-    } catch (err) {
-      console.error("Error al iniciar sesión demo:", err);
-    } finally {
-      setConectandoDemo(false);
-    }
-  };
 
   // Detección de pares de equipos con colores demasiado similares en el club (Criterio T-041)
   const colisionesClub = useMemo(() => {
@@ -170,53 +150,46 @@ export function EquiposView() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
-      {/* Banner de autenticación / conexión demo si no hay sesión o si la API dio 401 */}
-      {(!sesionConectada || isError) && (
+      {/* Alerta si falla la carga */}
+      {isError && (
         <div
           style={{
             padding: "16px 20px",
-            background: "rgba(11, 107, 69, 0.08)",
-            border: "1.5px solid var(--pitch)",
+            background: "rgba(162, 55, 42, 0.08)",
+            border: "1.5px solid var(--risk)",
             borderRadius: 8,
             display: "flex",
-            flexDirection: "column",
-            gap: 10,
+            alignItems: "center",
+            justifyContent: "space-between",
+            flexWrap: "wrap",
+            gap: 12,
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
-            <div>
-              <strong style={{ fontSize: 14, color: "var(--pitch)" }}>
-                Conexión con el Club · Módulo de Gestión Deportiva
-              </strong>
-              <p style={{ margin: "2px 0 0", fontSize: 12.5, color: "var(--text-2)" }}>
-                Para consultar y administrar los equipos del club se requiere una sesión activa con token JWT.
-              </p>
-            </div>
-            <button
-              type="button"
-              disabled={conectandoDemo}
-              onClick={handleConectarDemo}
-              style={{
-                all: "unset",
-                cursor: conectandoDemo ? "wait" : "pointer",
-                padding: "8px 18px",
-                fontSize: 13,
-                fontWeight: 700,
-                color: "#ffffff",
-                background: "var(--pitch)",
-                borderRadius: 6,
-                boxShadow: "0 2px 6px rgba(11, 107, 69, 0.25)",
-              }}
-            >
-              {conectandoDemo ? "Conectando…" : "⚡ Conectar Sesión Demo (Club Bolívar)"}
-            </button>
-          </div>
-          {isError && (
-            <p style={{ margin: 0, fontSize: 11.5, color: "var(--risk)" }}>
+          <div>
+            <strong style={{ fontSize: 14, color: "var(--risk)" }}>
+              Error al consultar los equipos del club
+            </strong>
+            <p style={{ margin: "2px 0 0", fontSize: 12.5, color: "var(--text-2)" }}>
               {(error as any)?.response?.data?.detail ??
-                "Error de autorización: Haga clic en el botón superior para autenticarse automáticamente."}
+                "No se pudo conectar con el servicio de Gestión Deportiva."}
             </p>
-          )}
+          </div>
+          <button
+            type="button"
+            onClick={() => refetch()}
+            style={{
+              all: "unset",
+              cursor: "pointer",
+              padding: "7px 14px",
+              fontSize: 12.5,
+              fontWeight: 700,
+              color: "#ffffff",
+              background: "var(--risk)",
+              borderRadius: 6,
+            }}
+          >
+            Reintentar
+          </button>
         </div>
       )}
 

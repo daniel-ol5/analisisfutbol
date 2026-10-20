@@ -3,7 +3,7 @@
  *
  * Endpoints bajo /api/deportivo.
  */
-import { api, guardarToken, leerToken } from "@/shared/api/client";
+import { api } from "@/shared/api/client";
 import type { AvisoColores, Equipo, EquipoCrear, EquipoEditar } from "./types";
 
 export async function ping() {
@@ -57,41 +57,4 @@ export async function verificarColoresEquipo(
     }
   );
   return data;
-}
-
-/**
- * Conexión rápida para desarrollo/demo: asegura una sesión activa en el club de pruebas.
- */
-export async function conectarSesionDemo(): Promise<{ email: string; token: string }> {
-  const creds = {
-    email: "demo_admin@areatecnica.com",
-    password: "Password123!",
-  };
-
-  try {
-    const loginRes = await api.post("/seguridad/login", creds);
-    const token = loginRes.data.access_token;
-    guardarToken(token);
-    return { email: creds.email, token };
-  } catch (err: any) {
-    if (err?.response?.status === 401 || err?.response?.status === 404) {
-      // Si el usuario demo no existe aún, lo creamos
-      const regRes = await api.post("/seguridad/registro", {
-        nombre_club: "Club Bolívar Demo",
-        ciudad: "La Paz",
-        email: creds.email,
-        password: creds.password,
-        nombre: "Daniel",
-        apellido: "DT",
-      });
-      const token = regRes.data.access_token;
-      guardarToken(token);
-      return { email: creds.email, token };
-    }
-    throw err;
-  }
-}
-
-export function tieneSesion(): boolean {
-  return Boolean(leerToken());
 }
