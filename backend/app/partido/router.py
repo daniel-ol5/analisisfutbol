@@ -5,16 +5,25 @@ Responsables segun el Sprint Planning:
     CU-33, CU-36 a CU-39        eventos y calidad    · S3 · Susana
 
 El canal WebSocket no figura en el esquema OpenAPI porque el estandar no lo
-cubre. Su contrato es el esquema `MensajeWorker` de este paquete:
+cubre. Su contrato esta en docs/api/websockets.md:
 
     ws://<host>/api/partido/{partido_id}/vivo     el DT y el analista escuchan
     ws://<host>/api/partido/{partido_id}/ingesta  el worker de vision publica
 """
 
-from fastapi import APIRouter, Query, status
+import json
+from datetime import UTC, datetime
+from typing import Annotated
 
-from app.core.deps import Actual, Db
+from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect, status
+from pydantic import ValidationError
+
+from app.core import ws as ws_auth
+from app.core.deps import Actual, Db, UsuarioActual, requiere_rol, worker_desde_token
 from app.core.pendiente import RESPUESTA_501, pendiente
+from app.core.realtime import Hub, canal_partido, obtener_hub
+from app.core.security import decodificar, token_ingesta
+from app.core.ws import Cierre, cerrar
 from app.partido.schemas import (
     AsignarTrack,
     Descuento,
@@ -22,8 +31,16 @@ from app.partido.schemas import (
     EventoManual,
     EventoManualCrear,
     IniciarPartido,
+    MensajeWorker,
     RangoPosiciones,
+    TokenIngesta,
     TrackDetectado,
+)
+from app.partido.service import (
+    AlmacenPosiciones,
+    RepositorioPartidos,
+    obtener_almacen_posiciones,
+    obtener_repositorio_partidos,
 )
 
 router = APIRouter(responses=RESPUESTA_501)
@@ -118,3 +135,150 @@ async def posiciones(partido_id: int, usuario: Actual, db: Db,
                      desde_t: float = Query(0, ge=0),
                      hasta_t: float = Query(300, gt=0)) -> RangoPosiciones:
     pendiente("CU-41", "Sprint 3", "Daniel")
+
+
+# ---------------- T-032 · Canal en vivo (WebSocket) ----------------
+
+def _es_ping(texto: str | None) -> bool:
+    try:
+        datos = json.loads(texto or "")
+    except ValueError:
+        return False
+    return isinstance(datos, dict) and datos.get("tipo") == "ping"
+
+
+HubDep = Annotated[Hub, Depends(obtener_hub)]
+PartidosDep = Annotated[RepositorioPartidos, Depends(obtener_repositorio_partidos)]
+
+
+async def _partido_accesible(ws: WebSocket, partidos: RepositorioPartidos,
+                             partido_id: int, identidad: UsuarioActual) -> bool:
+    """Verifica el partido con `tenancy`; si no es accesible, cierra con 4404."""
+    try:
+        await partidos.verificar(partido_id, identidad)
+    except HTTPException as e:
+        if e.status_code != status.HTTP_404_NOT_FOUND:
+            raise
+        await cerrar(ws, Cierre.NO_ENCONTRADO, "Partido no encontrado")
+        return False
+    return True
+
+
+@router.websocket("/{partido_id}/vivo")
+async def vivo(ws: WebSocket, partido_id: int, hub: HubDep, partidos: PartidosDep) -> None:
+    """El panel del DT, el analista y el asistente escuchan el partido.
+
+    Primer mensaje: {"tipo": "auth", "token": "..."}. Después el servidor
+    responde {"tipo": "listo"} y difunde lo que llegue al canal del partido.
+    """
+    usuario = await ws_auth.autenticar(ws)
+    if usuario is None or not await _partido_accesible(ws, partidos, partido_id, usuario):
+        return
+
+    canal = canal_partido(usuario.club_id, partido_id)
+    await hub.suscribir(canal, ws)
+    try:
+        await ws.send_json({"tipo": "listo", "partido": partido_id})
+        while True:
+            # El cliente solo escucha; lo único que se atiende es el ping, útil
+            # para que el móvil detecte una red caída. Leer también es lo que
+            # permite enterarse de la desconexión. Lo demás se ignora.
+            mensaje = await ws.receive()
+            if mensaje["type"] == "websocket.disconnect":
+                break
+            if _es_ping(mensaje.get("text")):
+                await ws.send_json({"tipo": "pong"})
+    except (WebSocketDisconnect, RuntimeError):
+        pass
+    finally:
+        await hub.desuscribir(canal, ws)
+
+
+# ---------------- T-033 · Ingesta del worker (WebSocket) ----------------
+
+# Un fotograma corrupto no debe tumbar al worker en pleno partido, pero un
+# worker que solo manda basura (versión vieja del contrato, bug) se corta.
+MAX_INVALIDOS_SEGUIDOS = 50
+
+AlmacenDep = Annotated[AlmacenPosiciones, Depends(obtener_almacen_posiciones)]
+
+
+@router.post("/{partido_id}/token-ingesta", response_model=TokenIngesta,
+             status_code=status.HTTP_201_CREATED,
+             dependencies=[Depends(requiere_rol("ADMIN", "ANALISTA"))],
+             responses={
+                 401: {"description": "Falta el token de acceso, o es inválido o expirado"},
+                 403: {"description": "Requiere rol ADMIN o ANALISTA"},
+                 404: {"description": "Partido inexistente o de otro club"},
+             },
+             summary="T-033 · Emitir el token del worker de visión para un partido")
+async def emitir_token_ingesta(partido_id: int, usuario: Actual,
+                               partidos: PartidosDep) -> TokenIngesta:
+    await partidos.verificar(partido_id, usuario)
+    token = token_ingesta(usuario.club_id, partido_id)
+    expira = datetime.fromtimestamp(decodificar(token)["exp"], UTC)
+    return TokenIngesta(token=token, partido_id=partido_id, expira_en=expira)
+
+
+def _validar_mensaje(texto: str | None, partido_id: int) -> tuple[MensajeWorker | None, list]:
+    """Valida contra el contrato `MensajeWorker`. Devuelve el mensaje o los errores."""
+    if texto is None:
+        return None, [{"type": "binario", "loc": [],
+                       "msg": "Solo se aceptan mensajes de texto con JSON"}]
+    try:
+        mensaje = MensajeWorker.model_validate_json(texto)
+    except ValidationError as e:
+        return None, json.loads(e.json(include_url=False, include_input=False))
+    if mensaje.partido != partido_id:
+        return None, [{"type": "partido_distinto", "loc": ["partido"],
+                       "msg": f"El mensaje es del partido {mensaje.partido} y la "
+                              f"conexión, del partido {partido_id}"}]
+    return mensaje, []
+
+
+@router.websocket("/{partido_id}/ingesta")
+async def ingesta(ws: WebSocket, partido_id: int, hub: HubDep, partidos: PartidosDep,
+                  almacen: AlmacenDep) -> None:
+    """El worker de visión (o el emisor simulado) publica posiciones a 5 Hz.
+
+    Primer mensaje: {"tipo": "auth", "token": "<token de ingesta>"}. Cada
+    mensaje válido se difunde a /vivo y se guarda por lotes.
+    """
+    worker = await ws_auth.autenticar(ws, worker_desde_token)
+    if worker is None:
+        return
+    if worker.partido_id != partido_id:
+        # Token de otro partido: mismo cierre que un partido ajeno
+        await cerrar(ws, Cierre.NO_ENCONTRADO, "Partido no encontrado")
+        return
+    if not await _partido_accesible(ws, partidos, partido_id, worker):
+        return
+
+    canal = canal_partido(worker.club_id, partido_id)
+    invalidos = 0
+    try:
+        await ws.send_json({"tipo": "listo", "partido": partido_id})
+        while True:
+            entrada = await ws.receive()
+            if entrada["type"] == "websocket.disconnect":
+                break
+
+            mensaje, errores = _validar_mensaje(entrada.get("text"), partido_id)
+            if mensaje is None:
+                invalidos += 1
+                if invalidos >= MAX_INVALIDOS_SEGUIDOS:
+                    await cerrar(ws, Cierre.MENSAJE_INVALIDO,
+                                 f"{MAX_INVALIDOS_SEGUIDOS} mensajes inválidos seguidos")
+                    break
+                await ws.send_json({"tipo": "error", "detalle": errores,
+                                    "invalidos_seguidos": invalidos})
+                continue
+
+            invalidos = 0
+            await hub.difundir(canal, {"tipo": "posiciones",
+                                       "datos": mensaje.model_dump(mode="json")})
+            await almacen.agregar(mensaje)
+    except (WebSocketDisconnect, RuntimeError):
+        pass
+    finally:
+        await almacen.vaciar()

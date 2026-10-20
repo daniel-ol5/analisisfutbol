@@ -47,6 +47,18 @@ def token_refresco(usuario_id: int) -> str:
     )
 
 
+def token_ingesta(club_id: int, partido_id: int) -> str:
+    """T-033: token del worker de visión, válido para un solo partido.
+
+    Si se filtra, solo sirve para publicar en ese partido y por pocas horas.
+    """
+    return _crear_token(
+        {"sub": "worker", "club": club_id, "partido": partido_id},
+        timedelta(hours=settings.ingesta_token_hours),
+        "ingesta",
+    )
+
+
 def decodificar(token: str) -> dict[str, Any] | None:
     """Devuelve el payload, o None si el token es inválido o expiró."""
     try:

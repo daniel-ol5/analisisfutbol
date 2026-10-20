@@ -54,6 +54,49 @@ async def usuario_actual(
 Actual = Annotated[UsuarioActual, Depends(usuario_actual)]
 
 
+def usuario_desde_token(token: str) -> UsuarioActual | None:
+    """Identidad a partir de un token de acceso, o None si no es válido.
+
+    Misma regla que `usuario_actual`, pero sin HTTP: la usan los WebSockets,
+    que no pueden responder un 401 y cierran la conexión con su propio código.
+    """
+    payload = decodificar(token)
+    if payload is None or payload.get("tipo") != "acceso":
+        return None
+    try:
+        return UsuarioActual(
+            id=int(payload["sub"]),
+            club_id=int(payload["club"]),
+            rol=str(payload["rol"]),
+        )
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+class WorkerActual(UsuarioActual):
+    """Identidad del worker de visión, extraída de un token de ingesta.
+
+    Es un `UsuarioActual` para que `tenancy` lo trate igual (solo mira
+    `club_id`). Su rol `WORKER` no coincide con ningún rol humano, así que
+    `requiere_rol` nunca lo deja pasar.
+    """
+
+    def __init__(self, club_id: int, partido_id: int):
+        super().__init__(id=0, club_id=club_id, rol="WORKER")
+        self.partido_id = partido_id
+
+
+def worker_desde_token(token: str) -> WorkerActual | None:
+    """Identidad del worker, o None si el token no es de ingesta o no es válido."""
+    payload = decodificar(token)
+    if payload is None or payload.get("tipo") != "ingesta":
+        return None
+    try:
+        return WorkerActual(club_id=int(payload["club"]), partido_id=int(payload["partido"]))
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
 def requiere_rol(*roles: str):
     """Restringe un endpoint a ciertos roles.
 

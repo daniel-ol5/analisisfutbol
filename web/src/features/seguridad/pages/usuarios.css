@@ -1,0 +1,24 @@
+.usuarios {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: var(--sp-6) var(--sp-5) 80px;
+}
+
+.usuarios-cabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  margin: var(--sp-1) 0 var(--sp-5);
+}
+
+.usuarios h1 {
+  margin: 0;
+  font-size: var(--fs-xl);
+  font-weight: var(--fw-black);
+  letter-spacing: -0.02em;
+}
+
+.usuarios-estado {
+  color: var(--text-2);
+}

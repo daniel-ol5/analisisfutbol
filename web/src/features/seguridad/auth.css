@@ -1,0 +1,89 @@
+/* Estilos mínimos de login y registro. Usan las variables de index.css. */
+
+.auth {
+  max-width: 420px;
+  margin: 0 auto;
+  padding: 56px 24px 80px;
+}
+
+.auth h1 {
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin: 6px 0 24px;
+}
+
+.auth-campo {
+  margin-bottom: 16px;
+}
+
+.auth-campo label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+  margin-bottom: 4px;
+}
+
+.auth-campo input {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+
+.auth-campo input:focus-visible {
+  outline: 2px solid var(--pitch);
+  outline-offset: 1px;
+}
+
+.auth-campo input[aria-invalid="true"] {
+  border-color: var(--risk);
+}
+
+.auth-error-campo {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--risk);
+}
+
+.auth-error {
+  margin: 0 0 16px;
+  padding: 9px 12px;
+  border: 1px solid var(--risk);
+  border-radius: 3px;
+  font-size: 14px;
+  color: var(--risk);
+}
+
+.auth-boton {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid var(--pitch);
+  border-radius: 3px;
+  background: var(--pitch);
+  color: var(--surface);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.auth-boton:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.auth-alterna {
+  margin-top: 20px;
+  font-size: 14px;
+  color: var(--text-2);
+}
+
+.auth-alterna a {
+  color: var(--pitch);
+  font-weight: 600;
+  text-decoration: underline;
+}
