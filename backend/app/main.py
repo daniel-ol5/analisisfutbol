@@ -5,6 +5,9 @@ Monta los seis paquetes del modelo de casos de uso. Cada uno se registra con su
 forma automática, espejando el modelo sin que nadie la mantenga a mano.
 """
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -13,12 +16,20 @@ from app.asistencia.router import router as asistencia
 from app.core.config import settings
 from app.deportivo.router import router as deportivo
 from app.partido.router import router as partido
+from app.partido.service import avisar_provisorios
 from app.seguridad.router import router as seguridad
 from app.vision.router import router as vision
 
 # El esquema lo gestiona Alembic, no la aplicacion:
 #   alembic upgrade head
 # Docker lo corre solo al levantar el servicio api.
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    avisar_provisorios()   # T-032/T-033: modos provisorios hasta T-047
+    yield
+
 
 app = FastAPI(
     title=settings.proyecto,
@@ -30,6 +41,7 @@ app = FastAPI(
     docs_url="/api/docs",
     redoc_url="/api/redoc",
     openapi_url="/api/openapi.json",
+    lifespan=lifespan,
 )
 
 app.add_middleware(

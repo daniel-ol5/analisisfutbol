@@ -1,0 +1,274 @@
+/* Componentes base. Solo usan los tokens de index.css. */
+
+.ui-solo-lectores {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+:where(.ui-btn, .ui-control, .ui-tabla-wrap, .ui-modal):focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* Botón */
+.ui-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  padding: 8px var(--sp-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-md);
+  font-weight: var(--fw-bold);
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
+}
+
+.ui-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.ui-btn--primario {
+  background: var(--pitch);
+  border-color: var(--pitch);
+  color: var(--on-pitch);
+}
+
+.ui-btn--primario:hover:not(:disabled) {
+  background: var(--pitch-hover);
+  border-color: var(--pitch-hover);
+}
+
+.ui-btn--secundario:hover:not(:disabled) {
+  border-color: var(--pitch);
+}
+
+.ui-btn--peligro {
+  background: var(--risk-bg);
+  border-color: var(--risk);
+  color: var(--risk);
+}
+
+.ui-btn--peligro:hover:not(:disabled) {
+  background: var(--risk);
+  color: var(--on-pitch);
+}
+
+.ui-btn--fantasma {
+  border-color: transparent;
+  background: transparent;
+  color: var(--text-2);
+}
+
+.ui-btn--fantasma:hover:not(:disabled) {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+/* Campos */
+.ui-campo {
+  margin-bottom: var(--sp-4);
+}
+
+.ui-etiqueta {
+  display: block;
+  margin-bottom: var(--sp-1);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  color: var(--text-2);
+}
+
+.ui-control {
+  width: 100%;
+  padding: 9px var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+
+.ui-control::placeholder {
+  color: var(--text-3);
+}
+
+.ui-control[aria-invalid="true"] {
+  border-color: var(--risk);
+}
+
+.ui-control:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.ui-ayuda,
+.ui-error {
+  margin: var(--sp-1) 0 0;
+  font-size: var(--fs-sm);
+}
+
+.ui-ayuda {
+  color: var(--text-3);
+}
+
+.ui-error {
+  color: var(--risk);
+}
+
+/* Tabla */
+.ui-tabla-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.ui-tabla {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-md);
+}
+
+.ui-tabla th {
+  padding: 10px var(--sp-4);
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-2);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  letter-spacing: var(--tracking-label);
+  text-align: left;
+  text-transform: uppercase;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
+.ui-tabla td {
+  padding: 10px var(--sp-4);
+  border-bottom: 1px solid var(--line);
+  color: var(--text-2);
+}
+
+.ui-tabla tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.ui-tabla tbody tr:hover td {
+  background: var(--surface-2);
+}
+
+/* Modal */
+.ui-modal {
+  width: min(480px, calc(100vw - 2 * var(--sp-4)));
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-lg);
+}
+
+.ui-modal::backdrop {
+  background: rgb(0 0 0 / 0.55);
+}
+
+.ui-modal-cuerpo {
+  padding: var(--sp-5);
+}
+
+.ui-modal-titulo {
+  margin: 0 0 var(--sp-3);
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-black);
+  letter-spacing: -0.01em;
+}
+
+.ui-modal-acciones {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-2);
+  margin-top: var(--sp-5);
+}
+
+/* Badge */
+.ui-badge {
+  display: inline-block;
+  padding: 1px var(--sp-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+
+.ui-badge--ok {
+  border-color: var(--ok);
+  background: var(--ok-bg);
+  color: var(--ok);
+}
+
+.ui-badge--aviso {
+  border-color: var(--warn);
+  background: var(--warn-bg);
+  color: var(--warn);
+}
+
+.ui-badge--info {
+  border-color: var(--info);
+  background: var(--info-bg);
+  color: var(--info);
+}
+
+.ui-badge--error {
+  border-color: var(--risk);
+  background: var(--risk-bg);
+  color: var(--risk);
+}
+
+/* Alerta */
+.ui-alerta {
+  margin-bottom: var(--sp-4);
+  padding: 10px var(--sp-4);
+  border: 1px solid var(--info);
+  border-radius: var(--radius);
+  background: var(--info-bg);
+  font-size: var(--fs-md);
+  color: var(--info);
+}
+
+.ui-alerta-titulo {
+  display: block;
+  margin-bottom: 2px;
+}
+
+.ui-alerta--ok {
+  border-color: var(--ok);
+  background: var(--ok-bg);
+  color: var(--ok);
+}
+
+.ui-alerta--aviso {
+  border-color: var(--warn);
+  background: var(--warn-bg);
+  color: var(--warn);
+}
+
+.ui-alerta--error {
+  border-color: var(--risk);
+  background: var(--risk-bg);
+  color: var(--risk);
+}

@@ -3016,6 +3016,72 @@
         }
       }
     },
+    "/api/partido/{partido_id}/token-ingesta": {
+      "post": {
+        "tags": [
+          "P4 · Operación del Partido"
+        ],
+        "summary": "T-033 · Emitir el token del worker de visión para un partido",
+        "operationId": "emitir_token_ingesta_api_partido__partido_id__token_ingesta_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "partido_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Partido Id"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenIngesta"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "Declarado en el contrato, pendiente de implementacion",
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Falta el token de acceso, o es inválido o expirado"
+          },
+          "403": {
+            "description": "Requiere rol ADMIN o ANALISTA"
+          },
+          "404": {
+            "description": "Partido inexistente o de otro club"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/analisis/partidos/{partido_id}/metricas": {
       "get": {
         "tags": [
@@ -7589,6 +7655,32 @@
           "POSE"
         ],
         "title": "TipoModelo"
+      },
+      "TokenIngesta": {
+        "properties": {
+          "token": {
+            "type": "string",
+            "title": "Token",
+            "description": "Enviarlo en el primer mensaje: {\"tipo\": \"auth\", \"token\": ...}"
+          },
+          "partido_id": {
+            "type": "integer",
+            "title": "Partido Id"
+          },
+          "expira_en": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expira En"
+          }
+        },
+        "type": "object",
+        "required": [
+          "token",
+          "partido_id",
+          "expira_en"
+        ],
+        "title": "TokenIngesta",
+        "description": "T-033. Credencial del worker para publicar en /ingesta de un solo partido."
       },
       "TrackDetectado": {
         "properties": {

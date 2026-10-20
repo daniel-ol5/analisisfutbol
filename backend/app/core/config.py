@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     algoritmo: str = "HS256"
     access_token_minutes: int = 15
     refresh_token_days: int = 30
+    ingesta_token_hours: int = 4   # T-033: alcanza para un partido con entretiempo y demoras
 
     cors_origins: str = "http://localhost:5173"
 

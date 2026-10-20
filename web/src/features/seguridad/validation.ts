@@ -60,3 +60,26 @@ export function validarOpcional(valor: string, maximo: number, etiqueta: string)
     ? `${etiqueta} no puede superar los ${maximo} caracteres.`
     : null;
 }
+
+/** Cambio de contraseña: la actual es obligatoria. */
+export function validarPasswordActual(password: string): string | null {
+  return password === "" ? "Ingresa tu contraseña actual." : null;
+}
+
+/** Cambio de contraseña: mismas reglas que el registro y distinta de la actual. */
+export function validarPasswordNueva(actual: string, nueva: string): string | null {
+  const error = validarPasswordRegistro(nueva);
+  if (error) return error;
+  return nueva === actual ? "La nueva contraseña debe ser distinta de la actual." : null;
+}
+
+/** Cambio de contraseña: la confirmación debe coincidir con la nueva. */
+export function validarConfirmacion(nueva: string, confirmacion: string): string | null {
+  if (confirmacion === "") return "Confirma la nueva contraseña.";
+  return confirmacion === nueva ? null : "Las contraseñas no coinciden.";
+}
+
+/** Alta de usuario: el rol es obligatorio. */
+export function validarRol(rol: string): string | null {
+  return rol === "" ? "Selecciona un rol." : null;
+}

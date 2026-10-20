@@ -2,6 +2,7 @@
 fastapi>=0.115
 uvicorn[standard]>=0.32
 python-multipart>=0.0.12
+websockets>=13.0         # cliente del emisor simulado (scripts/emisor_simulado.py)
 
 # ===== Base de datos =====
 sqlalchemy[asyncio]>=2.0
@@ -14,6 +15,10 @@ pydantic-settings>=2.6
 email-validator>=2.2
 pyjwt>=2.10
 bcrypt>=4.2
+
+# ===== Visión: corrección de distorsión del lente (T-036) =====
+opencv-python-headless>=4.10   # sin GUI: el servidor no abre ventanas
+numpy>=2.1
 
 # ===== Pruebas =====
 pytest>=8.3

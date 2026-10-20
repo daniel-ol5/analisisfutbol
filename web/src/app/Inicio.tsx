@@ -7,7 +7,10 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 
+import { useSesion } from "@/features/seguridad";
 import { api } from "@/shared/api/client";
+
+import { puedeAcceder, type RutaProtegida } from "./permisos";
 
 const PAQUETES = [
   { id: "P1", ruta: "seguridad", nombre: "Seguridad y Administración", cus: "CU-01 … CU-08" },
@@ -19,6 +22,8 @@ const PAQUETES = [
 ];
 
 export function Inicio() {
+  const rol = useSesion()?.usuario.rol;
+  const paquetes = PAQUETES.filter((p) => puedeAcceder(rol, `/${p.ruta}` as RutaProtegida));
   const salud = useQuery({
     queryKey: ["salud"],
     queryFn: async () => {
@@ -46,7 +51,7 @@ export function Inicio() {
       </header>
 
       <section className="paquetes">
-        {PAQUETES.map((p) => (
+        {paquetes.map((p) => (
           <Link key={p.id} to={`/${p.ruta}`} className="paquete">
             <span className="id">{p.id}</span>
             <h2>{p.nombre}</h2>
