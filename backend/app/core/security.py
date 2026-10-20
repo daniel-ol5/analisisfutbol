@@ -1,5 +1,6 @@
 """Hashing de contraseñas y emisión/verificación de JWT."""
 
+import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -25,6 +26,7 @@ def verificar(password: str, hash_guardado: str) -> bool:
 
 def _crear_token(datos: dict[str, Any], expira: timedelta, tipo: str) -> str:
     payload = datos.copy()
+    payload.setdefault("jti", uuid.uuid4().hex)
     payload.update({"exp": datetime.now(UTC) + expira, "tipo": tipo})
     return jwt.encode(payload, settings.secret_key, algorithm=settings.algoritmo)
 
