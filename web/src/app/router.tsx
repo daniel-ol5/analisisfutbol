@@ -11,13 +11,15 @@ import { AnalisisPage } from "@/features/analisis";
 import { AsistenciaPage } from "@/features/asistencia";
 import { DeportivoPage } from "@/features/deportivo";
 import { PartidoPage } from "@/features/partido";
-import { SeguridadPage } from "@/features/seguridad";
+import { LoginPage, RegistroPage, SeguridadPage } from "@/features/seguridad";
 import { VisionPage } from "@/features/vision";
 
 export function Router() {
   return (
     <Routes>
       <Route path="/" element={<Inicio />} />
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/registro" element={<RegistroPage />} />
       <Route path="/seguridad/*" element={<SeguridadPage />} />
       <Route path="/deportivo/*" element={<DeportivoPage />} />
       <Route path="/vision/*" element={<VisionPage />} />
