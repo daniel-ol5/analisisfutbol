@@ -12,7 +12,7 @@ import { AsistenciaPage } from "@/features/asistencia";
 import { DeportivoPage } from "@/features/deportivo";
 import { PartidoPage } from "@/features/partido";
 import { LoginPage, RegistroPage, SeguridadPage } from "@/features/seguridad";
-import { VisionPage } from "@/features/vision";
+import { GuiaMontajePage, VisionPage } from "@/features/vision";
 
 export function Router() {
   return (
@@ -22,6 +22,7 @@ export function Router() {
       <Route path="/registro" element={<RegistroPage />} />
       <Route path="/seguridad/*" element={<SeguridadPage />} />
       <Route path="/deportivo/*" element={<DeportivoPage />} />
+      <Route path="/vision/guia-montaje" element={<GuiaMontajePage />} />
       <Route path="/vision/*" element={<VisionPage />} />
       <Route path="/partido/*" element={<PartidoPage />} />
       <Route path="/analisis/*" element={<AnalisisPage />} />
