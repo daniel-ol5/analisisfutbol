@@ -1,10 +1,13 @@
 """Pruebas de calibración de cámara  —  CU-19, CU-20 (T-028).
 
-Solo se prueba lo que T-028 guarda y devuelve: puntos y medidas de la cancha.
-La homografía y los errores son de T-029 y deben quedar en None.
+Guardado, lectura, edición, aislamiento por club y roles. Desde T-029 el guardado
+también calcula la homografía, así que los datos de prueba deben ser una calibración
+VÁLIDA (una homografía conocida sobre puntos repartidos): ver datos_calibracion.py.
+El cálculo en sí y el endpoint /validar se prueban en test_vision_calibracion_homografia.py.
 """
 
 import pytest
+from datos_calibracion import a_json, a_pixeles, cuerpo_valido, marcas_cancha
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
 
@@ -53,20 +56,18 @@ async def _token_con_rol(cliente, token_admin: str, rol: str) -> str:
 
 
 def _imagen(n: int = 8) -> list[dict[str, float]]:
-    return [{"x": 100.0 + i * 50, "y": 200.0 + i * 20} for i in range(n)]
+    # Antes eran puntos colineales; T-029 los rechazaría. Ahora: homografía conocida.
+    return a_json(a_pixeles(marcas_cancha()[:n]))
 
 
 def _cancha(n: int = 8) -> list[dict[str, float]]:
-    return [{"x": i * 10.0, "y": i * 5.0} for i in range(n)]
+    return a_json(marcas_cancha()[:n])
 
 
 def _cuerpo(**cambios) -> dict:
-    cuerpo = {
-        "puntos_imagen": _imagen(),
-        "puntos_cancha": _cancha(),
-        "largo_m": 105,
-        "ancho_m": 68,
-    }
+    cuerpo = cuerpo_valido()
+    cuerpo["puntos_imagen"] = _imagen()
+    cuerpo["puntos_cancha"] = _cancha()
     cuerpo.update(cambios)
     return cuerpo
 
@@ -93,15 +94,15 @@ async def test_crear_devuelve_201_con_los_datos_guardados(cliente):
     assert data["creada_en"]
 
 
-async def test_crear_no_calcula_homografia(cliente):
-    """T-028 solo guarda: la homografía y los errores son de T-029."""
+async def test_crear_calcula_homografia(cliente):
+    """T-029: antes (T-028) matriz_h y errores quedaban en None y valida en False."""
     token = await _registrar(cliente, "a")
     r = await cliente.post(_url(), headers=_auth(token), json=_cuerpo())
     data = r.json()
-    assert data["matriz_h"] is None
-    assert data["error_medio_m"] is None
-    assert data["error_max_m"] is None
-    assert data["valida"] is False
+    assert len(data["matriz_h"]) == 3 and all(len(f) == 3 for f in data["matriz_h"])
+    assert data["error_medio_m"] == pytest.approx(0.0, abs=1e-6)
+    assert data["error_max_m"] == pytest.approx(0.0, abs=1e-6)
+    assert data["valida"] is True
     assert data["coef_distorsion"] is None
 
 
@@ -143,26 +144,27 @@ async def test_editar_actualiza_la_calibracion_existente(cliente):
     assert len(filas) == 1
 
 
-async def test_editar_reinicia_los_resultados_de_calculo(cliente):
+async def test_editar_recalcula_los_resultados(cliente):
     """Una matriz calculada con los puntos anteriores no sirve para los nuevos."""
     token = await _registrar(cliente, "a")
     await cliente.post(_url(), headers=_auth(token), json=_cuerpo())
 
+    identidad = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
     async with SessionLocal() as db:
         fila = (await db.execute(select(Calibracion))).scalar_one()
-        fila.matriz_h = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
-        fila.error_medio_m = 0.4
-        fila.error_max_m = 0.9
-        fila.valida = True
+        fila.matriz_h = identidad
+        fila.error_medio_m = 9.9
+        fila.error_max_m = 20.0
+        fila.valida = False
         await db.commit()
 
     r = await cliente.post(_url(), headers=_auth(token), json=_cuerpo(largo_m=100))
     assert r.status_code == 200
     data = r.json()
-    assert data["matriz_h"] is None
-    assert data["error_medio_m"] is None
-    assert data["error_max_m"] is None
-    assert data["valida"] is False
+    assert data["matriz_h"] != identidad
+    assert data["error_medio_m"] == pytest.approx(0.0, abs=1e-6)
+    assert data["error_max_m"] == pytest.approx(0.0, abs=1e-6)
+    assert data["valida"] is True
 
 
 # ---------- aislamiento entre clubes ----------
@@ -263,11 +265,11 @@ async def test_otros_roles_no_pueden_calibrar_pero_si_leer(cliente, rol):
 
 # ---------- fuera de alcance de T-028 ----------
 
-async def test_validar_y_calibracion_previa_siguen_en_501(cliente):
-    """T-029 (validar) y T-035 (calibracion previa) no se implementan acá."""
+async def test_calibracion_previa_sigue_en_501_y_validar_ya_no(cliente):
+    """T-035 (calibracion previa) no se implementa acá; /validar pasó a T-029 (antes era 501)."""
     token = await _registrar(cliente, "a")
     validar = await cliente.post(f"{_url()}/validar", headers=_auth(token), json=_cuerpo())
-    assert validar.status_code == 501
+    assert validar.status_code == 200
     previa = await cliente.get("/api/vision/sedes/Estadio/calibracion-previa",
                                headers=_auth(token))
     assert previa.status_code == 501

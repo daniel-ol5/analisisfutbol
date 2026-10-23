@@ -66,7 +66,8 @@ class ErrorCalibracion(BaseModel):
     """CU-21: un error medio mayor a 2 m bloquea el inicio del partido."""
     error_medio_m: float
     error_max_m: float
-    punto_peor: int = Field(description="Indice del punto con mayor residual")
+    punto_peor: int = Field(
+        description="Indice (base 0) sobre la lista de puntos enviada del punto con mayor residual")
     valida: bool
     mensaje: str
 
@@ -79,13 +80,13 @@ class Calibracion(BaseModel):
     ancho_m: float
     puntos_imagen: list[Punto]
     puntos_cancha: list[Punto]
-    # T-029 calcula la homografia y los errores. Hasta entonces son None y valida es False.
+    # T-029 las calcula al guardar. Siguen siendo opcionales por si hay filas anteriores a T-029.
     matriz_h: list[list[float]] | None = Field(default=None,
-        description="Matriz de homografia 3x3. None hasta que T-029 la calcule")
+        description="Matriz de homografia 3x3 (pixeles a metros), calculada al guardar")
     error_medio_m: float | None = Field(default=None,
-        description="None hasta que T-029 calcule el error de reproyeccion")
+        description="Error medio de reproyeccion en metros, calculado al guardar")
     error_max_m: float | None = Field(default=None,
-        description="None hasta que T-029 calcule el error de reproyeccion")
+        description="Error maximo de reproyeccion en metros, calculado al guardar")
     valida: bool
     coef_distorsion: list[float] | None = None
     creada_en: datetime

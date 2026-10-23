@@ -17,9 +17,10 @@ from app.core.database import Base
 class Calibracion(Base):
     """Calibración de la cámara de un partido (CU-19, CU-20).
 
-    Una calibración por partido y club. T-028 solo guarda los puntos marcados y
-    las medidas reales de la cancha; `matriz_h`, los errores y `valida` los
-    calcula T-029 y quedan sin valor (None / False) hasta entonces.
+    Una calibración por partido y club. T-028 guarda los puntos marcados y
+    las medidas reales de la cancha; T-029 calcula `matriz_h`, los errores y
+    `valida` al guardar (ver `app/vision/homografia.py`). Son nulos solo en filas
+    anteriores a T-029.
     """
 
     __tablename__ = "calibracion"

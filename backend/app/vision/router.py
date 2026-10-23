@@ -23,6 +23,25 @@ from app.vision.schemas import (
 
 router = APIRouter(responses=RESPUESTA_501)
 
+# 422 de los dos POST de calibracion. Declarar `responses={422: ...}` REEMPLAZA el 422 que
+# FastAPI genera solo, asi que el esquema estandar se vuelve a referenciar a mano
+# (HTTPValidationError ya existe en components porque lo usan los demas endpoints).
+RESPUESTA_422_CALIBRACION = {
+    422: {
+        "description": (
+            "Datos invalidos. La validacion de Pydantic (formas, rangos, minimo de 8 puntos, "
+            "misma cantidad de puntos) devuelve `detail` como LISTA de errores. Una homografia "
+            "degenerada (puntos colineales, repetidos, matriz singular) devuelve `detail` como "
+            "TEXTO con el motivo, y en POST /calibracion no se guarda nada"
+        ),
+        "content": {
+            "application/json": {
+                "schema": {"$ref": "#/components/schemas/HTTPValidationError"}
+            }
+        },
+    }
+}
+
 
 # ---------------- CU-19, CU-20, CU-21, CU-22 · Calibracion ----------------
 
@@ -37,7 +56,8 @@ async def ver_calibracion(partido_id: int, usuario: Actual, db: Db) -> Calibraci
              status_code=status.HTTP_201_CREATED,
              dependencies=[Depends(requiere_rol("ADMIN", "ANALISTA"))],
              responses={200: {"model": Calibracion,
-                              "description": "El partido ya tenia calibracion: se actualizo"}},
+                              "description": "El partido ya tenia calibracion: se actualizo"},
+                        **RESPUESTA_422_CALIBRACION},
              summary="CU-19, CU-20 · Calibrar camara y registrar medidas de cancha")
 async def calibrar(partido_id: int, datos: CalibracionGuardar, usuario: Actual, db: Db,
                    response: Response) -> Calibracion:
@@ -49,10 +69,12 @@ async def calibrar(partido_id: int, datos: CalibracionGuardar, usuario: Actual, 
 
 
 @router.post("/partidos/{partido_id}/calibracion/validar", response_model=ErrorCalibracion,
+             responses=RESPUESTA_422_CALIBRACION,
              summary="CU-21 · Calcular el error de reproyeccion sin guardar")
 async def validar_calibracion(partido_id: int, datos: CalibracionGuardar,
-                              usuario: Actual, db: Db) -> ErrorCalibracion:
-    pendiente("CU-21", "Sprint 2", "Jhon")
+                              usuario: Actual) -> ErrorCalibracion:
+    # Calculo puro: no consulta ni escribe la base, por eso no pide sesion ni rol.
+    return service.validar_calibracion(datos)
 
 
 @router.get("/sedes/{sede}/calibracion-previa", response_model=Calibracion,

@@ -1659,7 +1659,7 @@
             }
           },
           "422": {
-            "description": "Validation Error",
+            "description": "Datos invalidos. La validacion de Pydantic (formas, rangos, minimo de 8 puntos, misma cantidad de puntos) devuelve `detail` como LISTA de errores. Una homografia degenerada (puntos colineales, repetidos, matriz singular) devuelve `detail` como TEXTO con el motivo, y en POST /calibracion no se guarda nada",
             "content": {
               "application/json": {
                 "schema": {
@@ -1726,7 +1726,7 @@
             }
           },
           "422": {
-            "description": "Validation Error",
+            "description": "Datos invalidos. La validacion de Pydantic (formas, rangos, minimo de 8 puntos, misma cantidad de puntos) devuelve `detail` como LISTA de errores. Una homografia degenerada (puntos colineales, repetidos, matriz singular) devuelve `detail` como TEXTO con el motivo, y en POST /calibracion no se guarda nada",
             "content": {
               "application/json": {
                 "schema": {
@@ -4631,7 +4631,7 @@
               }
             ],
             "title": "Matriz H",
-            "description": "Matriz de homografia 3x3. None hasta que T-029 la calcule"
+            "description": "Matriz de homografia 3x3 (pixeles a metros), calculada al guardar"
           },
           "error_medio_m": {
             "anyOf": [
@@ -4643,7 +4643,7 @@
               }
             ],
             "title": "Error Medio M",
-            "description": "None hasta que T-029 calcule el error de reproyeccion"
+            "description": "Error medio de reproyeccion en metros, calculado al guardar"
           },
           "error_max_m": {
             "anyOf": [
@@ -4655,7 +4655,7 @@
               }
             ],
             "title": "Error Max M",
-            "description": "None hasta que T-029 calcule el error de reproyeccion"
+            "description": "Error maximo de reproyeccion en metros, calculado al guardar"
           },
           "valida": {
             "type": "boolean",
@@ -5234,7 +5234,7 @@
           "punto_peor": {
             "type": "integer",
             "title": "Punto Peor",
-            "description": "Indice del punto con mayor residual"
+            "description": "Indice (base 0) sobre la lista de puntos enviada del punto con mayor residual"
           },
           "valida": {
             "type": "boolean",
