@@ -101,3 +101,15 @@ registrarAdaptadorAuth({
     irAlLogin();
   },
 });
+
+/**
+ * Reemplaza solo el usuario de la sesión (p. ej. tras editar el perfil),
+ * conserva el token y avisa a useSesion(). Sin sesión, no hace nada.
+ */
+export function actualizarUsuario(usuario: SesionGuardada["usuario"]): void {
+  const actual = obtenerSesion();
+  if (actual === null) return;
+  const guardada: SesionGuardada = { access_token: actual.access_token, usuario };
+  localStorage.setItem(CLAVE_SESION, JSON.stringify(guardada));
+  notificar();
+}

@@ -1,10 +1,18 @@
 <!doctype html>
-<html lang="en">
+<html lang="es" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>web</title>
+    <title>Área Técnica</title>
+    <script>
+      // Aplica el tema recordado antes de pintar (evita el parpadeo). Oscuro por defecto.
+      try {
+        if (localStorage.getItem("areatecnica.tema") === "light") {
+          document.documentElement.setAttribute("data-theme", "light");
+        }
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

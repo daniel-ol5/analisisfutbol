@@ -1,0 +1,52 @@
+.perfil {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: var(--sp-6) var(--sp-5) 80px;
+}
+
+.perfil h1 {
+  margin: var(--sp-1) 0 var(--sp-5);
+  font-size: var(--fs-xl);
+  font-weight: var(--fw-black);
+  letter-spacing: -0.02em;
+}
+
+.perfil-estado {
+  color: var(--text-2);
+}
+
+.perfil-tarjeta {
+  margin-bottom: var(--sp-5);
+  padding: var(--sp-5);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.perfil-tarjeta h2 {
+  margin: 0 0 var(--sp-4);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.perfil-datos {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--sp-2) var(--sp-5);
+  margin: 0 0 var(--sp-4);
+}
+
+.perfil-datos dt {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  color: var(--text-3);
+}
+
+.perfil-datos dd {
+  margin: 0;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
