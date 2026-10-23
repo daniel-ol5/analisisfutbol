@@ -24,15 +24,15 @@ abierto, con artículos dedicados solo a eso.
 
 ### 2. Altura y encuadre
 
-- Altura acordada: ____ m (recomendado entre 5 y 8)
-- Ubicación: ____________________
-- Toda la cancha en cuadro: sí / no
+- Altura acordada: 7m (recomendado entre 5 y 8)
+- Ubicación: Tribuna principal, alineada con la línea de mediocampo
+- Toda la cancha en cuadro: sí
 
 ### 3. Resolución y cantidad de cámaras
 
 - Modelo: ____________________
-- Resolución: ____________________
-- Cantidad: 1 / 2 (una por mitad de cancha)
+- Resolución: 1080p (1920 x 1080) a 30 FPS
+- Cantidad: 1
 
 A 1080p en plano abierto un jugador ocupa 25–40 píxeles de alto y el balón
 entre 5 y 12. Es el límite de lo detectable.

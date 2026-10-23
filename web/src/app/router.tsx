@@ -20,7 +20,7 @@ import { AsistenciaPage } from "@/features/asistencia";
 import { DeportivoPage } from "@/features/deportivo";
 import { PartidoPage } from "@/features/partido";
 import { LoginPage, PerfilPage, RegistroPage, UsuariosPage } from "@/features/seguridad";
-import { VisionPage } from "@/features/vision";
+import { GuiaMontajePage, VisionPage } from "@/features/vision";
 
 export function Router() {
   return (
@@ -69,6 +69,14 @@ export function Router() {
             element={
               <RequiereRol ruta="/deportivo">
                 <DeportivoPage />
+              </RequiereRol>
+            }
+          />
+          <Route
+            path="/vision/guia-montaje"
+            element={
+              <RequiereRol ruta="/vision">
+                <GuiaMontajePage />
               </RequiereRol>
             }
           />

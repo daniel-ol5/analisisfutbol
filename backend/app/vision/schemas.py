@@ -7,8 +7,9 @@ se reciben sus resultados.
 
 from datetime import datetime
 from enum import StrEnum
+from typing import Annotated, Self
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class TipoModelo(StrEnum):
@@ -26,8 +27,9 @@ class EstadoVideo(StrEnum):
 # ---------- CU-19, CU-20, CU-21 Calibracion ----------
 
 class Punto(BaseModel):
-    x: float
-    y: float
+    # NaN e infinito no son JSON valido y PostgreSQL los rechaza al guardar.
+    x: float = Field(allow_inf_nan=False)
+    y: float = Field(allow_inf_nan=False)
 
 
 class CalibracionGuardar(BaseModel):
@@ -43,15 +45,29 @@ class CalibracionGuardar(BaseModel):
     largo_m: float = Field(default=105.0, gt=40, lt=130,
         description="Medida real: las canchas formativas casi nunca miden 105 x 68")
     ancho_m: float = Field(default=68.0, gt=25, lt=90)
-    coef_distorsion: list[float] | None = Field(default=None,
+    coef_distorsion: list[Annotated[float, Field(allow_inf_nan=False)]] | None = Field(
+        default=None,
         description="CU-23, opcional. Obligatorio con gran angular o action cam")
+
+    @model_validator(mode="after")
+    def _misma_cantidad_de_puntos(self) -> Self:
+        # Cada punto de la imagen se aparea con el punto de la cancha de igual indice.
+        # No se valida que los puntos de cancha caigan dentro de largo_m x ancho_m:
+        # el sistema de coordenadas de la cancha todavia no esta definido.
+        if len(self.puntos_imagen) != len(self.puntos_cancha):
+            raise ValueError(
+                "puntos_imagen y puntos_cancha deben tener la misma cantidad de puntos "
+                f"(recibidos {len(self.puntos_imagen)} y {len(self.puntos_cancha)})"
+            )
+        return self
 
 
 class ErrorCalibracion(BaseModel):
     """CU-21: un error medio mayor a 2 m bloquea el inicio del partido."""
     error_medio_m: float
     error_max_m: float
-    punto_peor: int = Field(description="Indice del punto con mayor residual")
+    punto_peor: int = Field(
+        description="Indice (base 0) sobre la lista de puntos enviada del punto con mayor residual")
     valida: bool
     mensaje: str
 
@@ -62,10 +78,17 @@ class Calibracion(BaseModel):
     partido_id: int
     largo_m: float
     ancho_m: float
-    matriz_h: list[list[float]] = Field(description="Matriz de homografia 3x3")
-    error_medio_m: float
-    error_max_m: float
+    puntos_imagen: list[Punto]
+    puntos_cancha: list[Punto]
+    # T-029 las calcula al guardar. Siguen siendo opcionales por si hay filas anteriores a T-029.
+    matriz_h: list[list[float]] | None = Field(default=None,
+        description="Matriz de homografia 3x3 (pixeles a metros), calculada al guardar")
+    error_medio_m: float | None = Field(default=None,
+        description="Error medio de reproyeccion en metros, calculado al guardar")
+    error_max_m: float | None = Field(default=None,
+        description="Error maximo de reproyeccion en metros, calculado al guardar")
     valida: bool
+    coef_distorsion: list[float] | None = None
     creada_en: datetime
 
 
