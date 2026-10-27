@@ -3,7 +3,6 @@
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from app.core.security import token_acceso
 from app.main import app
 
 BASE = "http://test"

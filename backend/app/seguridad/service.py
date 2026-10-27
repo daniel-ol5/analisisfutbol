@@ -9,10 +9,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import UsuarioActual
-from app.core.security import hashear, verificar
+from app.core.security import decodificar, hashear, verificar
 from app.core.tenancy import del_club, verificar_pertenencia
-from app.seguridad.models import Club, Rol, Usuario
-from app.seguridad.schemas import NuevoUsuario, RegistroClub
+from app.seguridad.models import Club, Rol, TokenRevocado, Usuario
+from app.seguridad.schemas import NuevoUsuario, RegistroClub, UsuarioEditar
 
 
 async def _email_existe(db: AsyncSession, email: str) -> bool:
