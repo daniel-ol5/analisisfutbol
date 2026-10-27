@@ -11,7 +11,7 @@ Proyecto de Ingeniería de Software · Scrum · Equipo de 6.
 ## Arrancar en un comando
 
 ```bash
-docker compose up
+docker compose up --build
 ```
 
 | Servicio | URL | Qué es |
@@ -20,6 +20,23 @@ docker compose up
 | **Mock** | http://localhost:4010 | El contrato congelado, responde todo |
 | PostgreSQL | localhost:5432 | usuario/clave/base: `areatecnica` |
 | Redis | localhost:6379 | |
+
+En el primer arranque se aplican las migraciones y se crea un club ficticio de
+desarrollo. Se puede iniciar sesión con `admin@club-demo.example.com` y la clave
+`Demo-Area-Tecnica-2026`. Para cambiarla sin editar archivos, define
+`DEMO_ADMIN_PASSWORD` antes de levantar Compose. El seed solo funciona con
+`APP_ENV=development` y no duplica registros en arranques posteriores.
+
+Para comprobar y detener el entorno sin borrar los datos:
+
+```bash
+docker compose ps
+docker compose logs --tail=100
+docker compose down
+```
+
+`docker compose down` conserva el volumen de PostgreSQL; no uses `-v` si
+quieres mantener los datos.
 
 El **worker de visión no está en Docker**: corre fuera, en la máquina con GPU,
 por los controladores de NVIDIA. Ver [vision/README.md](vision/README.md).
@@ -199,7 +216,8 @@ import { api } from "../../shared/api/client";  // no
 
 ## Cómo trabajamos
 
-**Ramas.** `main` protegida. Una por historia: `feat/Pb-21-calibracion-camara`.
+**Ramas.** `main` debe estar protegida. Una por historia:
+`feat/Pb-21-calibracion-camara`.
 
 **Commits.** `feat(vision): proyectar detecciones al plano de cancha`
 

@@ -8,9 +8,11 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.security import decodificar, hashear, verificar
-from app.seguridad.models import Club, Rol, TokenRevocado, Usuario
-from app.seguridad.schemas import NuevoUsuario, RegistroClub, UsuarioEditar
+from app.core.deps import UsuarioActual
+from app.core.security import hashear, verificar
+from app.core.tenancy import del_club, verificar_pertenencia
+from app.seguridad.models import Club, Rol, Usuario
+from app.seguridad.schemas import NuevoUsuario, RegistroClub
 
 
 async def _email_existe(db: AsyncSession, email: str) -> bool:
@@ -58,13 +60,17 @@ async def autenticar(db: AsyncSession, email: str, password: str) -> Usuario:
     return usuario
 
 
-async def crear_usuario(db: AsyncSession, club_id: int, datos: NuevoUsuario) -> Usuario:
+async def crear_usuario(
+    db: AsyncSession, actor: UsuarioActual, datos: NuevoUsuario
+) -> Usuario:
     """CU-04: alta de usuario dentro del club de quien lo crea."""
     if await _email_existe(db, datos.email):
         raise HTTPException(status.HTTP_409_CONFLICT, "Ese email ya tiene una cuenta")
 
     usuario = Usuario(
-        club_id=club_id,
+        # El club nunca viene del cuerpo ni de un parametro libre: se deriva
+        # exclusivamente de la identidad autenticada.
+        club_id=actor.club_id,
         email=datos.email,
         password_hash=hashear(datos.password),
         nombre=datos.nombre,
@@ -77,10 +83,15 @@ async def crear_usuario(db: AsyncSession, club_id: int, datos: NuevoUsuario) -> 
     return usuario
 
 
-async def listar_usuarios(db: AsyncSession, club_id: int) -> list[Usuario]:
-    q = await db.execute(
-        select(Usuario).where(Usuario.club_id == club_id).order_by(Usuario.id)
-    )
+async def obtener_usuario_actual(db: AsyncSession, actor: UsuarioActual) -> Usuario:
+    """Obtiene al usuario del token sin permitir consultar otro club."""
+    q = await db.execute(del_club(Usuario, actor).where(Usuario.id == actor.id))
+    return verificar_pertenencia(q.scalar_one_or_none(), actor)
+
+
+async def listar_usuarios(db: AsyncSession, actor: UsuarioActual) -> list[Usuario]:
+    """Lista usuarios usando el filtro multi-club centralizado."""
+    q = await db.execute(del_club(Usuario, actor).order_by(Usuario.id))
     return list(q.scalars().all())
 
 

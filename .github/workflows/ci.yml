@@ -10,6 +10,9 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
   backend:
     name: Backend · lint y pruebas
@@ -32,7 +35,7 @@ jobs:
 
       - name: Lint
         working-directory: backend
-        run: ruff check app tests
+        run: ruff check app scripts tests
 
       - name: Pruebas
         working-directory: backend
@@ -64,6 +67,10 @@ jobs:
       - name: Instalar dependencias
         working-directory: web
         run: npm ci
+
+      - name: Auditar dependencias
+        working-directory: web
+        run: npm audit --audit-level=high
 
       - name: Lint
         working-directory: web

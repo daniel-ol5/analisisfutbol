@@ -52,10 +52,14 @@ services:
       redis:
         condition: service_healthy
     environment:
+      APP_ENV: development
       DATABASE_URL: postgresql+asyncpg://areatecnica:areatecnica@db:5432/areatecnica
       REDIS_URL: redis://redis:6379/0
       SECRET_KEY: clave-solo-para-desarrollo-no-usar-en-produccion
       CORS_ORIGINS: http://localhost:5173,http://localhost:4010
+      SEED_DEMO_DATA: "true"
+      DEMO_ADMIN_EMAIL: admin@club-demo.example.com
+      DEMO_ADMIN_PASSWORD: ${DEMO_ADMIN_PASSWORD:-Demo-Area-Tecnica-2026}
     ports:
       - "8000:8000"
     volumes:
@@ -66,17 +70,49 @@ services:
     # Aplica las migraciones pendientes y recien despues arranca la API
     command: >
       sh -c "alembic upgrade head &&
-             uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+             python -m scripts.seed_dev &&
+             exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/salud', timeout=2)"
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
 
   mock:
     image: stoplight/prism:5
     depends_on:
-      - api
+      api:
+        condition: service_healthy
     volumes:
       - ./docs/api:/contrato:ro
     ports:
       - "4010:4010"
-    command: mock -h 0.0.0.0 -p 4010 --dynamic /contrato/openapi.json
+    # Prism 5.15.10 falla con Node 24 en su modo multiproceso (isPrimary).
+    # La imagen ya incluye el ENTRYPOINT; solo se pasan el subcomando y opciones.
+    command:
+      - mock
+      - /contrato/openapi.json
+      - --host
+      - 0.0.0.0
+      - --port
+      - "4010"
+      - --dynamic
+      - --multiprocess=false
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:4010/api/salud').then(r => { if (!r.ok) process.exit(1) }).catch(() => process.exit(1))"
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
 
 volumes:
   datos_db:

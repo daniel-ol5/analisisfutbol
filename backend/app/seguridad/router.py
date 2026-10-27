@@ -67,15 +67,15 @@ async def logout(usuario: Actual, db: Db, datos: LogoutInput | None = None) -> N
 @router.get("/yo", response_model=UsuarioOut,
             summary="Datos del usuario autenticado")
 async def yo(usuario: Actual, db: Db) -> UsuarioOut:
-    usuarios = await service.listar_usuarios(db, usuario.club_id)
-    return UsuarioOut.model_validate(next(u for u in usuarios if u.id == usuario.id))
+    actual = await service.obtener_usuario_actual(db, usuario)
+    return UsuarioOut.model_validate(actual)
 
 
 @router.post("/usuarios", response_model=UsuarioOut, status_code=status.HTTP_201_CREATED,
              dependencies=[Depends(requiere_rol("ADMIN"))],
              summary="CU-04 · Crear usuario del club")
 async def crear_usuario(datos: NuevoUsuario, usuario: Actual, db: Db) -> UsuarioOut:
-    nuevo = await service.crear_usuario(db, usuario.club_id, datos)
+    nuevo = await service.crear_usuario(db, usuario, datos)
     return UsuarioOut.model_validate(nuevo)
 
 
@@ -83,7 +83,7 @@ async def crear_usuario(datos: NuevoUsuario, usuario: Actual, db: Db) -> Usuario
             dependencies=[Depends(requiere_rol("ADMIN"))],
             summary="CU-04 · Listar usuarios del club")
 async def listar_usuarios(usuario: Actual, db: Db) -> list[UsuarioOut]:
-    usuarios = await service.listar_usuarios(db, usuario.club_id)
+    usuarios = await service.listar_usuarios(db, usuario)
     return [UsuarioOut.model_validate(u) for u in usuarios]
 
 
