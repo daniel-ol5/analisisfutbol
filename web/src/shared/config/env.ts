@@ -12,8 +12,8 @@
  *   3. El error de arranque muestra exactamente qué falta.
  */
 
-function requireEnv(name: string): string {
-  const value = import.meta.env[name] as string | undefined;
+function requireEnv(name: string, fallback?: string): string {
+  const value = (import.meta.env[name] as string | undefined) ?? fallback;
   if (!value) {
     throw new Error(
       `[env] Variable de entorno requerida no definida: ${name}\n` +
@@ -25,7 +25,7 @@ function requireEnv(name: string): string {
 
 export const env = {
   /** URL base de la API. Ej: http://127.0.0.1:8000/api */
-  apiUrl: requireEnv("VITE_API_URL"),
+  apiUrl: requireEnv("VITE_API_URL", "http://127.0.0.1:8000/api"),
 
   /**
    * Cuando es "true", el cliente HTTP apunta al mock de Prism en vez de
