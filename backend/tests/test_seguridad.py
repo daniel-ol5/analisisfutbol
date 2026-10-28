@@ -1,4 +1,4 @@
-"""Pruebas de Seguridad — CU-01, CU-02, CU-04 y acceso multi-club."""
+"""Pruebas de Seguridad — CU-01, CU-02, CU-04, CU-05 y acceso multi-club."""
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -105,6 +105,12 @@ async def test_login_con_credenciales_invalidas(cliente):
     ("metodo", "ruta", "json"),
     [
         ("GET", "/api/seguridad/yo", None),
+        ("PATCH", "/api/seguridad/yo", {"nombre": "Sin auth"}),
+        (
+            "POST",
+            "/api/seguridad/yo/password",
+            {"password_actual": "password123", "password_nueva": "nuevaClave456"},
+        ),
         ("GET", "/api/seguridad/usuarios", None),
         (
             "POST",
@@ -355,3 +361,132 @@ async def test_aislamiento_entre_clubes_en_abm(cliente):
 
     r_delete = await cliente.delete(f"/api/seguridad/usuarios/{id_y}", headers=auth_x)
     assert r_delete.status_code == 404
+
+
+# ---------- CU-05 Administrar perfil propio ----------
+
+async def test_perfil_muestra_datos_y_club(cliente):
+    """CU-05 · Criterio 1: el perfil incluye nombre, apellido, email, rol y club."""
+    sesion = await _registrar(cliente, "perfil")
+    r = await cliente.get("/api/seguridad/yo", headers=_auth(sesion["access_token"]))
+    assert r.status_code == 200, r.text
+    perfil = r.json()
+    assert perfil["nombre"] == "Admin"
+    assert perfil["apellido"] == "perfil"
+    assert perfil["email"] == "adminperfil@test.com"
+    assert perfil["rol"] == "ADMIN"
+    assert perfil["club_nombre"] == "Club perfil"
+
+
+@pytest.mark.parametrize("rol", ["DT", "ANALISTA", "ASISTENTE"])
+async def test_cualquier_rol_edita_su_nombre_y_apellido(cliente, rol):
+    """CU-05 · Criterio 2: cualquier usuario autenticado edita su propio perfil."""
+    admin = await _registrar(cliente, f"edit{rol}")
+    await _crear_usuario(cliente, admin, f"edit{rol}", rol=rol)
+    sesion = await _login(cliente, f"usuarioedit{rol}@test.com")
+
+    r = await cliente.patch(
+        "/api/seguridad/yo",
+        headers=_auth(sesion["access_token"]),
+        json={"nombre": "Nuevo", "apellido": "Apellido"},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["nombre"] == "Nuevo"
+    assert r.json()["apellido"] == "Apellido"
+    assert r.json()["club_nombre"] == f"Club edit{rol}"
+    assert r.json()["rol"] == rol
+
+
+@pytest.mark.parametrize(
+    "cuerpo",
+    [
+        {},
+        {"rol": "ADMIN"},
+        {"nombre": "X", "email": "otro@test.com"},
+        {"nombre": "X", "activo": False},
+        {"nombre": "x" * 81},
+    ],
+)
+async def test_editar_perfil_rechaza_campos_no_permitidos(cliente, cuerpo):
+    """CU-05: el perfil propio no permite cambiar email, rol ni estado."""
+    sesion = await _registrar(cliente, "restringido")
+    r = await cliente.patch(
+        "/api/seguridad/yo", headers=_auth(sesion["access_token"]), json=cuerpo
+    )
+    assert r.status_code == 422
+
+
+async def test_cambio_password_exige_la_actual(cliente):
+    """CU-05 · Criterio 2: sin la contraseña actual válida no se cambia nada."""
+    sesion = await _registrar(cliente, "clave")
+    auth = _auth(sesion["access_token"])
+
+    r_mal = await cliente.post(
+        "/api/seguridad/yo/password",
+        headers=auth,
+        json={"password_actual": "incorrecta", "password_nueva": "nuevaClave456"},
+    )
+    assert r_mal.status_code == 403
+
+    r_igual = await cliente.post(
+        "/api/seguridad/yo/password",
+        headers=auth,
+        json={"password_actual": "password123", "password_nueva": "password123"},
+    )
+    assert r_igual.status_code == 400
+
+    r_corta = await cliente.post(
+        "/api/seguridad/yo/password",
+        headers=auth,
+        json={"password_actual": "password123", "password_nueva": "corta"},
+    )
+    assert r_corta.status_code == 422
+
+    # Nada de lo anterior cambió la clave ni cerró la sesión.
+    await _login(cliente, "adminclave@test.com")
+    assert (await cliente.get("/api/seguridad/yo", headers=auth)).status_code == 200
+
+
+async def test_cambio_password_cierra_las_demas_sesiones(cliente):
+    """CU-05: tras cambiar la clave, solo sirve la sesión nueva que devuelve el endpoint."""
+    movil = await _registrar(cliente, "sesiones")
+    web = await _login(cliente, "adminsesiones@test.com")
+
+    r = await cliente.post(
+        "/api/seguridad/yo/password",
+        headers=_auth(web["access_token"]),
+        json={"password_actual": "password123", "password_nueva": "nuevaClave456"},
+    )
+    assert r.status_code == 200, r.text
+    nueva = r.json()
+
+    # La sesión nueva funciona.
+    r_nueva = await cliente.get("/api/seguridad/yo", headers=_auth(nueva["access_token"]))
+    assert r_nueva.status_code == 200
+
+    # Los tokens de acceso y de refresco anteriores ya no sirven, en ningún dispositivo.
+    for viejo in (movil, web):
+        r_acc = await cliente.get("/api/seguridad/yo", headers=_auth(viejo["access_token"]))
+        assert r_acc.status_code == 401
+        r_ref = await cliente.post(
+            "/api/seguridad/refresh", json={"refresh_token": viejo["refresh_token"]}
+        )
+        assert r_ref.status_code == 401
+
+    # El refresco de la sesión nueva sí sirve.
+    r_ref_nuevo = await cliente.post(
+        "/api/seguridad/refresh", json={"refresh_token": nueva["refresh_token"]}
+    )
+    assert r_ref_nuevo.status_code == 200
+
+    # La clave vieja ya no entra; la nueva sí.
+    r_vieja = await cliente.post(
+        "/api/seguridad/login",
+        json={"email": "adminsesiones@test.com", "password": "password123"},
+    )
+    assert r_vieja.status_code == 401
+    r_login = await cliente.post(
+        "/api/seguridad/login",
+        json={"email": "adminsesiones@test.com", "password": "nuevaClave456"},
+    )
+    assert r_login.status_code == 200

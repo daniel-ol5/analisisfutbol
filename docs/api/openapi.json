@@ -180,7 +180,7 @@
         "tags": [
           "P1 · Seguridad y Administración"
         ],
-        "summary": "Datos del usuario autenticado",
+        "summary": "CU-05 · Consultar perfil propio",
         "operationId": "yo_api_seguridad_yo_get",
         "responses": {
           "200": {
@@ -188,7 +188,98 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/UsuarioOut"
+                  "$ref": "#/components/schemas/PerfilOut"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      },
+      "patch": {
+        "tags": [
+          "P1 · Seguridad y Administración"
+        ],
+        "summary": "CU-05 · Editar nombre y apellido propios",
+        "operationId": "editar_perfil_api_seguridad_yo_patch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PerfilEditar"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PerfilOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/seguridad/yo/password": {
+      "post": {
+        "tags": [
+          "P1 · Seguridad y Administración"
+        ],
+        "summary": "CU-05 · Cambiar la contraseña propia",
+        "description": "Exige la contraseña actual (403 si no coincide). Cierra todas las sesiones abiertas y devuelve una nueva para este dispositivo.",
+        "operationId": "cambiar_password_api_seguridad_yo_password_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CambioPassword"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Sesion"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -4901,6 +4992,26 @@
         "title": "CalibracionGuardar",
         "description": "Se exigen al menos 8 puntos repartidos por toda la cancha.\n\nCon 4 la homografia ajusta exacta y el residual da cero, que no informa nada.\nSolo puntos sobre el plano del suelo: nunca el travesano, que esta a 2,44 m."
       },
+      "CambioPassword": {
+        "properties": {
+          "password_actual": {
+            "type": "string",
+            "title": "Password Actual"
+          },
+          "password_nueva": {
+            "type": "string",
+            "maxLength": 72,
+            "minLength": 8,
+            "title": "Password Nueva"
+          }
+        },
+        "type": "object",
+        "required": [
+          "password_actual",
+          "password_nueva"
+        ],
+        "title": "CambioPassword"
+      },
       "Cancelacion": {
         "properties": {
           "motivo": {
@@ -7186,6 +7297,86 @@
         },
         "type": "object",
         "title": "PartidoEditar"
+      },
+      "PerfilEditar": {
+        "properties": {
+          "nombre": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 80
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nombre"
+          },
+          "apellido": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 80
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Apellido"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "PerfilEditar",
+        "description": "Solo nombre y apellido: email, rol y estado los administra el ADMIN (CU-04)."
+      },
+      "PerfilOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "club_id": {
+            "type": "integer",
+            "title": "Club Id"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "title": "Email"
+          },
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "apellido": {
+            "type": "string",
+            "title": "Apellido"
+          },
+          "rol": {
+            "$ref": "#/components/schemas/Rol"
+          },
+          "activo": {
+            "type": "boolean",
+            "title": "Activo"
+          },
+          "club_nombre": {
+            "type": "string",
+            "title": "Club Nombre"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "club_id",
+          "email",
+          "nombre",
+          "apellido",
+          "rol",
+          "activo",
+          "club_nombre"
+        ],
+        "title": "PerfilOut"
       },
       "Pie": {
         "type": "string",

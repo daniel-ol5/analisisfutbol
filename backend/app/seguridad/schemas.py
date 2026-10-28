@@ -1,6 +1,6 @@
 """Esquemas de entrada y salida de Seguridad."""
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
 from app.seguridad.models import Rol
 
@@ -67,6 +67,32 @@ class UsuarioEditar(BaseModel):
     rol: Rol | None = None
     activo: bool | None = None
     password: str | None = Field(default=None, min_length=8, max_length=72)
+
+
+# ---------- CU-05 Administrar perfil propio ----------
+
+class PerfilOut(UsuarioOut):
+    club_nombre: str
+
+
+class PerfilEditar(BaseModel):
+    """Solo nombre y apellido: email, rol y estado los administra el ADMIN (CU-04)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    nombre: str | None = Field(default=None, max_length=80)
+    apellido: str | None = Field(default=None, max_length=80)
+
+    @model_validator(mode="after")
+    def _al_menos_un_campo(self) -> "PerfilEditar":
+        if self.nombre is None and self.apellido is None:
+            raise ValueError("Indica al menos el nombre o el apellido")
+        return self
+
+
+class CambioPassword(BaseModel):
+    password_actual: str
+    password_nueva: str = Field(min_length=8, max_length=72)
 
 
 class ClubOut(BaseModel):

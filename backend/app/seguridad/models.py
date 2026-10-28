@@ -45,6 +45,9 @@ class Usuario(Base):
     apellido: Mapped[str] = mapped_column(String(80), default="")
     rol: Mapped[Rol] = mapped_column(String(20), default=Rol.ADMIN)
     activo: Mapped[bool] = mapped_column(default=True)
+    # CU-05: viaja en cada token como "ver". Cambiar la contraseña la sube y
+    # deja sin efecto todos los tokens emitidos antes, en cualquier dispositivo.
+    version_sesion: Mapped[int] = mapped_column(default=0, server_default="0")
     creado_en: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )

@@ -7,12 +7,19 @@ lanza excepciones de dominio. Así se puede probar sin levantar el servidor.
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.deps import UsuarioActual
 from app.core.security import decodificar, hashear, verificar
 from app.core.tenancy import del_club, verificar_pertenencia
 from app.seguridad.models import Club, Rol, TokenRevocado, Usuario
-from app.seguridad.schemas import NuevoUsuario, RegistroClub, UsuarioEditar
+from app.seguridad.schemas import (
+    CambioPassword,
+    NuevoUsuario,
+    PerfilEditar,
+    RegistroClub,
+    UsuarioEditar,
+)
 
 
 async def _email_existe(db: AsyncSession, email: str) -> bool:
@@ -84,9 +91,53 @@ async def crear_usuario(
 
 
 async def obtener_usuario_actual(db: AsyncSession, actor: UsuarioActual) -> Usuario:
-    """Obtiene al usuario del token sin permitir consultar otro club."""
-    q = await db.execute(del_club(Usuario, actor).where(Usuario.id == actor.id))
+    """Obtiene al usuario del token, con su club, sin permitir consultar otro club."""
+    q = await db.execute(
+        del_club(Usuario, actor)
+        .where(Usuario.id == actor.id)
+        .options(selectinload(Usuario.club))
+    )
     return verificar_pertenencia(q.scalar_one_or_none(), actor)
+
+
+async def editar_perfil(
+    db: AsyncSession, actor: UsuarioActual, datos: PerfilEditar
+) -> Usuario:
+    """CU-05: el usuario cambia su propio nombre y/o apellido."""
+    usuario = await obtener_usuario_actual(db, actor)
+    if datos.nombre is not None:
+        usuario.nombre = datos.nombre
+    if datos.apellido is not None:
+        usuario.apellido = datos.apellido
+    await db.commit()
+    return usuario
+
+
+async def cambiar_password(
+    db: AsyncSession, actor: UsuarioActual, datos: CambioPassword
+) -> Usuario:
+    """CU-05: cambia la contraseña propia exigiendo la actual.
+
+    Sube `version_sesion`, así que todos los tokens emitidos antes dejan de
+    servir en cualquier dispositivo. El router devuelve una sesión nueva para
+    que quien hizo el cambio siga conectado.
+    """
+    usuario = await obtener_usuario_actual(db, actor)
+
+    # 403 y no 401: el token es válido, lo que falla es la clave actual; un 401
+    # haría que el cliente cierre la sesión.
+    if not verificar(datos.password_actual, usuario.password_hash):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "La contraseña actual es incorrecta")
+    if datos.password_nueva == datos.password_actual:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "La nueva contraseña debe ser distinta de la actual",
+        )
+
+    usuario.password_hash = hashear(datos.password_nueva)
+    usuario.version_sesion += 1
+    await db.commit()
+    return usuario
 
 
 async def listar_usuarios(db: AsyncSession, actor: UsuarioActual) -> list[Usuario]:
@@ -145,6 +196,10 @@ async def refrescar_token(db: AsyncSession, token_ref: str) -> Usuario:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Usuario no encontrado")
     if not usuario.activo:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "La cuenta está desactivada")
+    if payload.get("ver", 0) != usuario.version_sesion:
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED, "La sesión fue cerrada; inicia sesión de nuevo"
+        )
 
     # Rotación: revocar el token de refresco usado
     if jti:
