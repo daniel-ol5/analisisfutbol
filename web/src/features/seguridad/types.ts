@@ -54,16 +54,24 @@ export interface ActualizarUsuario {
   rol?: Rol;
 }
 
+/** Respuesta de GET y PATCH /seguridad/yo (CU-05): el usuario y el nombre de su club. */
+export interface Perfil extends Usuario {
+  club_nombre: string;
+}
+
 /**
  * Cuerpo de PATCH /seguridad/yo (CU-05). Al menos un campo; no acepta email,
- * rol ni estado. PROPUESTO, NO ESTÁ EN EL CONTRATO.
+ * rol ni estado (el servidor responde 422).
  */
 export interface ActualizarPerfil {
   nombre?: string;
   apellido?: string;
 }
 
-/** Cuerpo de POST /seguridad/yo/password (CU-05). PROPUESTO, NO ESTÁ EN EL CONTRATO. */
+/**
+ * Cuerpo de POST /seguridad/yo/password (CU-05). Responde una Sesion nueva: las
+ * anteriores, incluida la de esta pestaña, quedan invalidadas.
+ */
 export interface CambioPassword {
   password_actual: string;
   password_nueva: string;

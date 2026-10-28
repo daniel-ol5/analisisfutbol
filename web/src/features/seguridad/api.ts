@@ -12,6 +12,7 @@ import type {
   CambioPassword,
   Credenciales,
   NuevoUsuario,
+  Perfil,
   RegistroClub,
   Sesion,
   Usuario,
@@ -51,31 +52,27 @@ export async function crearUsuario(datos: NuevoUsuario): Promise<Usuario> {
   return data;
 }
 
-/** CU-05 · Datos del usuario autenticado. */
-export async function obtenerPerfil(): Promise<Usuario> {
-  const { data } = await api.get<Usuario>("/seguridad/yo");
+/** CU-05 · Datos del usuario autenticado, con el nombre de su club. */
+export async function obtenerPerfil(): Promise<Perfil> {
+  const { data } = await api.get<Perfil>("/seguridad/yo");
+  return data;
+}
+
+/** CU-05 · Editar nombre y apellido propios. */
+export async function editarPerfil(cambios: ActualizarPerfil): Promise<Perfil> {
+  const { data } = await api.patch<Perfil>("/seguridad/yo", cambios);
   return data;
 }
 
 /**
- * CU-05 · Editar nombre y apellido propios.
+ * CU-05 · Cambiar la contraseña propia. 403 si la actual no coincide.
  *
- * PROPUESTO, NO ESTÁ EN EL CONTRATO: PATCH /seguridad/yo. Ver
- * HABILITAR_EDICION_PERFIL en config.ts.
+ * El servidor cierra TODAS las sesiones, también esta, y devuelve una nueva
+ * que hay que guardar para seguir conectado (ver useCambiarPassword).
  */
-export async function editarPerfil(cambios: ActualizarPerfil): Promise<Usuario> {
-  const { data } = await api.patch<Usuario>("/seguridad/yo", cambios);
+export async function cambiarPassword(datos: CambioPassword): Promise<Sesion> {
+  const { data } = await api.post<Sesion>("/seguridad/yo/password", datos);
   return data;
-}
-
-/**
- * CU-05 · Cambiar la contraseña propia (cierra las demás sesiones).
- *
- * PROPUESTO, NO ESTÁ EN EL CONTRATO: POST /seguridad/yo/password. Ver
- * HABILITAR_CAMBIO_PASSWORD en config.ts.
- */
-export async function cambiarPassword(datos: CambioPassword): Promise<void> {
-  await api.post("/seguridad/yo/password", datos);
 }
 
 /**
