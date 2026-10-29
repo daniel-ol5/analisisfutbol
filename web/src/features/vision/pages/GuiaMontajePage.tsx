@@ -70,11 +70,11 @@ export function GuiaMontajePage() {
 
       <section aria-labelledby="guia-siguiente">
         <h2 id="guia-siguiente">4. Siguiente paso</h2>
-        <button type="button" className="guia-boton" disabled aria-describedby="guia-calibrar-nota">
+        <Link to="/vision/calibracion" className="guia-boton" aria-describedby="guia-calibrar-nota">
           Ir a calibrar
-        </button>
+        </Link>
         <p id="guia-calibrar-nota" className="guia-texto-suave">
-          Disponible cuando esté la pantalla de calibración.
+          Abre la pantalla para cargar un cuadro congelado y marcar los puntos de la cancha (CU-19).
         </p>
       </section>
     </main>

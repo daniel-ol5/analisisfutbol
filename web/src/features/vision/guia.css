@@ -235,13 +235,20 @@
 /* ----- Siguiente paso ----- */
 
 .guia-boton {
+  display: inline-block;
+  margin-bottom: 8px;
   padding: 10px 18px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--pitch);
   border-radius: 3px;
-  background: var(--surface);
-  color: var(--text-2);
+  background: var(--pitch);
+  color: var(--on-pitch);
   font: inherit;
   font-weight: 700;
+  cursor: pointer;
+}
+
+.guia-boton:hover {
+  background: var(--pitch-hover);
 }
 
 .guia-boton:disabled {
