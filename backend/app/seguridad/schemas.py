@@ -41,6 +41,16 @@ class Sesion(BaseModel):
     usuario: UsuarioOut
 
 
+# ---------- CU-02 / CU-03 Refresco y Cierre de Sesión ----------
+
+class RefreshTokenInput(BaseModel):
+    refresh_token: str
+
+
+class LogoutInput(BaseModel):
+    refresh_token: str | None = None
+
+
 # ---------- CU-04 Gestionar usuarios ----------
 
 class NuevoUsuario(BaseModel):
@@ -49,6 +59,14 @@ class NuevoUsuario(BaseModel):
     nombre: str = Field(default="", max_length=80)
     apellido: str = Field(default="", max_length=80)
     rol: Rol
+
+
+class UsuarioEditar(BaseModel):
+    nombre: str | None = Field(default=None, max_length=80)
+    apellido: str | None = Field(default=None, max_length=80)
+    rol: Rol | None = None
+    activo: bool | None = None
+    password: str | None = Field(default=None, min_length=8, max_length=72)
 
 
 class ClubOut(BaseModel):
