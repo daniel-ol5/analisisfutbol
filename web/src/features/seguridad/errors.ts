@@ -19,6 +19,7 @@ const ETIQUETAS_CAMPO: Record<string, string> = {
   ciudad: "Ciudad",
   email: "Correo electrónico",
   password: "Contraseña",
+  password_nueva: "Nueva contraseña",
   nombre: "Nombre",
   apellido: "Apellido",
 };

@@ -4,8 +4,9 @@ El router traduce HTTP a llamadas de servicio y nada más: no toca la base de
 datos directamente ni contiene lógica de negocio.
 """
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, BackgroundTasks, Depends, status
 
+from app.core.correo import enviar_correo
 from app.core.deps import Actual, Db, requiere_rol
 from app.core.security import token_acceso, token_refresco
 from app.seguridad import service
@@ -13,12 +14,15 @@ from app.seguridad.schemas import (
     CambioPassword,
     Credenciales,
     LogoutInput,
+    Mensaje,
     NuevoUsuario,
     PerfilEditar,
     PerfilOut,
     RefreshTokenInput,
     RegistroClub,
+    RestablecerPassword,
     Sesion,
+    SolicitudRecuperacion,
     UsuarioEditar,
     UsuarioOut,
 )
@@ -75,6 +79,35 @@ async def logout(usuario: Actual, db: Db, datos: LogoutInput | None = None) -> N
         refresh_token=datos.refresh_token if datos else None,
     )
     return None
+
+
+@router.post("/password/olvido", response_model=Mensaje,
+             status_code=status.HTTP_202_ACCEPTED,
+             summary="CU-06 · Pedir enlace para restablecer la contraseña",
+             description="Responde lo mismo exista o no la cuenta, para no revelar qué "
+                         "correos están registrados. El enlace vence en 1 hora.")
+async def olvido_password(
+    datos: SolicitudRecuperacion, db: Db, tareas: BackgroundTasks
+) -> Mensaje:
+    resultado = await service.solicitar_recuperacion(db, datos.email)
+    if resultado is not None:
+        usuario, token = resultado
+        # En segundo plano: el tiempo de respuesta tampoco delata si existe.
+        asunto, cuerpo = service.correo_recuperacion(usuario, token)
+        tareas.add_task(enviar_correo, usuario.email, asunto, cuerpo)
+    return Mensaje(
+        detalle="Si el correo está registrado, te enviamos un enlace para "
+                "restablecer la contraseña."
+    )
+
+
+@router.post("/password/restablecer", response_model=Sesion,
+             summary="CU-06 · Restablecer la contraseña con el enlace recibido",
+             description="Enlace de un solo uso. Cierra todas las sesiones abiertas y "
+                         "devuelve una nueva para entrar de inmediato.")
+async def restablecer_password(datos: RestablecerPassword, db: Db) -> Sesion:
+    usuario = await service.restablecer_password(db, datos)
+    return _sesion(usuario)
 
 
 @router.get("/yo", response_model=PerfilOut,

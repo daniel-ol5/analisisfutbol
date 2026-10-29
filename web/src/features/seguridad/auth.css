@@ -71,6 +71,12 @@
   cursor: pointer;
 }
 
+.auth-boton-enlace {
+  display: block;
+  text-align: center;
+  text-decoration: none;
+}
+
 .auth-boton:disabled {
   opacity: 0.6;
   cursor: progress;
@@ -86,4 +92,30 @@
   color: var(--pitch);
   font-weight: 600;
   text-decoration: underline;
+}
+
+.auth-ok {
+  margin: 0 0 16px;
+  padding: 9px 12px;
+  border: 1px solid var(--ok);
+  border-radius: 3px;
+  background: var(--ok-bg);
+  font-size: 14px;
+  color: var(--ok);
+}
+
+.auth-texto {
+  margin: 0 0 16px;
+  color: var(--text-2);
+}
+
+.auth-olvido {
+  margin: -4px 0 16px;
+  font-size: 14px;
+  text-align: right;
+}
+
+.auth-olvido a {
+  color: var(--pitch);
+  font-weight: 600;
 }

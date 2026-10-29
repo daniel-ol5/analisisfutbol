@@ -14,7 +14,9 @@ import type {
   NuevoUsuario,
   Perfil,
   RegistroClub,
+  RestablecerPassword,
   Sesion,
+  SolicitudRecuperacion,
   Usuario,
 } from "./types";
 
@@ -32,6 +34,20 @@ export async function registrar(datos: RegistroClub): Promise<Sesion> {
 /** CU-02 · Iniciar sesión. */
 export async function login(credenciales: Credenciales): Promise<Sesion> {
   const { data } = await api.post<Sesion>("/seguridad/login", credenciales);
+  return data;
+}
+
+/**
+ * CU-06 · Pedir el enlace de recuperación. El servidor responde lo mismo exista
+ * o no la cuenta, así que la UI tampoco distingue.
+ */
+export async function pedirRecuperacion(datos: SolicitudRecuperacion): Promise<void> {
+  await api.post("/seguridad/password/olvido", datos);
+}
+
+/** CU-06 · Restablecer con el token del enlace. 400 si es inválido, usado o vencido. */
+export async function restablecerPassword(datos: RestablecerPassword): Promise<Sesion> {
+  const { data } = await api.post<Sesion>("/seguridad/password/restablecer", datos);
   return data;
 }
 

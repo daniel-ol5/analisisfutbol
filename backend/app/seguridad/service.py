@@ -4,20 +4,24 @@ Este módulo no conoce FastAPI: recibe una sesión y datos, devuelve objetos o
 lanza excepciones de dominio. Así se puede probar sin levantar el servidor.
 """
 
+from datetime import UTC, datetime, timedelta
+
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.config import settings
 from app.core.deps import UsuarioActual
-from app.core.security import decodificar, hashear, verificar
+from app.core.security import decodificar, hashear, token_recuperacion, verificar
 from app.core.tenancy import del_club, verificar_pertenencia
-from app.seguridad.models import Club, Rol, TokenRevocado, Usuario
+from app.seguridad.models import Club, Rol, TokenRecuperacion, TokenRevocado, Usuario
 from app.seguridad.schemas import (
     CambioPassword,
     NuevoUsuario,
     PerfilEditar,
     RegistroClub,
+    RestablecerPassword,
     UsuarioEditar,
 )
 
@@ -275,3 +279,95 @@ async def eliminar_usuario(
 
     usuario.activo = False
     await db.commit()
+
+
+# ---------- CU-06 Recuperar contraseña (HU-52) ----------
+
+ENLACE_INVALIDO = "El enlace no es válido o ya venció. Pide uno nuevo."
+
+
+def _anular_enlaces_pendientes(usuario_id: int, ahora: datetime):
+    return (
+        update(TokenRecuperacion)
+        .where(
+            TokenRecuperacion.usuario_id == usuario_id,
+            TokenRecuperacion.usado_en.is_(None),
+        )
+        .values(usado_en=ahora)
+    )
+
+
+async def solicitar_recuperacion(
+    db: AsyncSession, email: str
+) -> tuple[Usuario, str] | None:
+    """HU-52 · Criterio 1: genera un enlace de un solo uso y anula los anteriores.
+
+    Devuelve None si no hay una cuenta activa con ese email. El router responde
+    lo mismo en ambos casos para no revelar qué cuentas existen.
+    """
+    q = await db.execute(select(Usuario).where(Usuario.email == email))
+    usuario = q.scalar_one_or_none()
+    if usuario is None or not usuario.activo:
+        return None
+
+    ahora = datetime.now(UTC)
+    await db.execute(_anular_enlaces_pendientes(usuario.id, ahora))
+    token, jti = token_recuperacion(usuario.id)
+    db.add(TokenRecuperacion(
+        jti=jti,
+        usuario_id=usuario.id,
+        expira_en=ahora + timedelta(minutes=settings.reset_token_minutes),
+    ))
+    await db.commit()
+    return usuario, token
+
+
+def correo_recuperacion(usuario: Usuario, token: str) -> tuple[str, str]:
+    """Asunto y cuerpo del correo con el enlace de recuperación."""
+    enlace = f"{settings.web_url.rstrip('/')}/restablecer?token={token}"
+    saludo = f"Hola {usuario.nombre}," if usuario.nombre else "Hola,"
+    cuerpo = (
+        f"{saludo}\n\n"
+        "Recibimos un pedido para restablecer la contraseña de tu cuenta de "
+        "Área Técnica. Para elegir una nueva, abre este enlace:\n\n"
+        f"{enlace}\n\n"
+        f"El enlace vence en {settings.reset_token_minutes} minutos y sirve una "
+        "sola vez.\n\n"
+        "Si no lo pediste tú, ignora este correo: tu contraseña no cambia."
+    )
+    return "Restablecer tu contraseña de Área Técnica", cuerpo
+
+
+async def restablecer_password(db: AsyncSession, datos: RestablecerPassword) -> Usuario:
+    """HU-52 · Criterios 2 y 3: guarda la nueva contraseña, anula todo enlace
+    pendiente y cierra todas las sesiones abiertas.
+    """
+    payload = decodificar(datos.token)  # ya verifica firma y vencimiento
+    if payload is None or payload.get("tipo") != "recuperacion":
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, ENLACE_INVALIDO)
+
+    usuario = await db.get(Usuario, int(payload["sub"]))
+    if usuario is None or not usuario.activo:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, ENLACE_INVALIDO)
+
+    # Marcar el enlace como usado en una sola sentencia condicional: si llegan
+    # dos pedidos con el mismo enlace a la vez, solo uno lo consigue.
+    ahora = datetime.now(UTC)
+    marcado = await db.execute(
+        update(TokenRecuperacion)
+        .where(
+            TokenRecuperacion.jti == payload.get("jti"),
+            TokenRecuperacion.usuario_id == usuario.id,
+            TokenRecuperacion.usado_en.is_(None),
+        )
+        .values(usado_en=ahora)
+    )
+    if marcado.rowcount != 1:
+        await db.rollback()
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, ENLACE_INVALIDO)
+
+    await db.execute(_anular_enlaces_pendientes(usuario.id, ahora))
+    usuario.password_hash = hashear(datos.password_nueva)
+    usuario.version_sesion += 1
+    await db.commit()
+    return usuario

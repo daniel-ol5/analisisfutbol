@@ -47,6 +47,21 @@ def token_refresco(usuario_id: int, version: int = 0) -> str:
     )
 
 
+def token_recuperacion(usuario_id: int) -> tuple[str, str]:
+    """HU-52: token del enlace para restablecer la contraseña. Devuelve (token, jti).
+
+    La firma garantiza que nadie lo fabrique; el jti, guardado en la tabla
+    token_recuperacion, es lo que lo hace de un solo uso.
+    """
+    jti = uuid.uuid4().hex
+    token = _crear_token(
+        {"sub": str(usuario_id), "jti": jti},
+        timedelta(minutes=settings.reset_token_minutes),
+        "recuperacion",
+    )
+    return token, jti
+
+
 def token_ingesta(club_id: int, partido_id: int) -> str:
     """T-033: token del worker de visión, válido para un solo partido.
 

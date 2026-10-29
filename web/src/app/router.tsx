@@ -4,7 +4,7 @@
  * Cada feature exporta sus páginas desde su `index.ts`. Este archivo es el
  * único lugar que las conoce: las features no se importan entre sí.
  *
- * /login y /registro van fuera del Layout; el resto, dentro.
+ * /login, /registro, /recuperar y /restablecer van fuera del Layout; el resto, dentro.
  */
 import { Navigate, Route, Routes } from "react-router-dom";
 
@@ -19,7 +19,14 @@ import { AnalisisPage } from "@/features/analisis";
 import { AsistenciaPage } from "@/features/asistencia";
 import { DeportivoPage } from "@/features/deportivo";
 import { PartidoPage } from "@/features/partido";
-import { LoginPage, PerfilPage, RegistroPage, UsuariosPage } from "@/features/seguridad";
+import {
+  LoginPage,
+  PerfilPage,
+  RecuperarPage,
+  RegistroPage,
+  RestablecerPage,
+  UsuariosPage,
+} from "@/features/seguridad";
 import { VisionPage } from "@/features/vision";
 
 export function Router() {
@@ -27,6 +34,8 @@ export function Router() {
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/registro" element={<RegistroPage />} />
+      <Route path="/recuperar" element={<RecuperarPage />} />
+      <Route path="/restablecer" element={<RestablecerPage />} />
       <Route element={<RequiereAutenticacion />}>
         <Route element={<Layout />}>
           <Route

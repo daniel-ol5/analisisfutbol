@@ -77,6 +77,17 @@ export interface CambioPassword {
   password_nueva: string;
 }
 
+/** Cuerpo de POST /seguridad/password/olvido (CU-06). */
+export interface SolicitudRecuperacion {
+  email: string;
+}
+
+/** Cuerpo de POST /seguridad/password/restablecer (CU-06). Responde una Sesion. */
+export interface RestablecerPassword {
+  token: string;
+  password_nueva: string;
+}
+
 /** Cuerpo de POST /seguridad/registro (CU-01). */
 export interface RegistroClub {
   nombre_club: string;
