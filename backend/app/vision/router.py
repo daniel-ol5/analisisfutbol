@@ -6,10 +6,11 @@ Responsables segun el Sprint Planning:
     CU-27 a CU-29  video y modelos           · S3 · Araceli
 """
 
-from fastapi import APIRouter, UploadFile, status
+from fastapi import APIRouter, Depends, Response, UploadFile, status
 
-from app.core.deps import Actual, Db
+from app.core.deps import Actual, Db, requiere_rol
 from app.core.pendiente import RESPUESTA_501, pendiente
+from app.vision import service
 from app.vision.schemas import (
     Calibracion,
     CalibracionGuardar,
@@ -22,27 +23,58 @@ from app.vision.schemas import (
 
 router = APIRouter(responses=RESPUESTA_501)
 
+# 422 de los dos POST de calibracion. Declarar `responses={422: ...}` REEMPLAZA el 422 que
+# FastAPI genera solo, asi que el esquema estandar se vuelve a referenciar a mano
+# (HTTPValidationError ya existe en components porque lo usan los demas endpoints).
+RESPUESTA_422_CALIBRACION = {
+    422: {
+        "description": (
+            "Datos invalidos. La validacion de Pydantic (formas, rangos, minimo de 8 puntos, "
+            "misma cantidad de puntos) devuelve `detail` como LISTA de errores. Una homografia "
+            "degenerada (puntos colineales, repetidos, matriz singular) devuelve `detail` como "
+            "TEXTO con el motivo, y en POST /calibracion no se guarda nada"
+        ),
+        "content": {
+            "application/json": {
+                "schema": {"$ref": "#/components/schemas/HTTPValidationError"}
+            }
+        },
+    }
+}
+
 
 # ---------------- CU-19, CU-20, CU-21, CU-22 · Calibracion ----------------
 
 @router.get("/partidos/{partido_id}/calibracion", response_model=Calibracion,
             summary="CU-19 · Ver la calibracion vigente del partido")
 async def ver_calibracion(partido_id: int, usuario: Actual, db: Db) -> Calibracion:
-    pendiente("CU-19", "Sprint 2", "Jhon")
+    calibracion = await service.obtener_calibracion(db, usuario, partido_id)
+    return Calibracion.model_validate(calibracion)
 
 
 @router.post("/partidos/{partido_id}/calibracion", response_model=Calibracion,
              status_code=status.HTTP_201_CREATED,
+             dependencies=[Depends(requiere_rol("ADMIN", "ANALISTA"))],
+             responses={200: {"model": Calibracion,
+                              "description": "El partido ya tenia calibracion: se actualizo"},
+                        **RESPUESTA_422_CALIBRACION},
              summary="CU-19, CU-20 · Calibrar camara y registrar medidas de cancha")
-async def calibrar(partido_id: int, datos: CalibracionGuardar, usuario: Actual, db: Db) -> Calibracion:
-    pendiente("CU-19", "Sprint 2", "Jhon")
+async def calibrar(partido_id: int, datos: CalibracionGuardar, usuario: Actual, db: Db,
+                   response: Response) -> Calibracion:
+    # 201 al crear, 200 al actualizar una calibracion existente (upsert).
+    calibracion, creada = await service.guardar_calibracion(db, usuario, partido_id, datos)
+    if not creada:
+        response.status_code = status.HTTP_200_OK
+    return Calibracion.model_validate(calibracion)
 
 
 @router.post("/partidos/{partido_id}/calibracion/validar", response_model=ErrorCalibracion,
+             responses=RESPUESTA_422_CALIBRACION,
              summary="CU-21 · Calcular el error de reproyeccion sin guardar")
 async def validar_calibracion(partido_id: int, datos: CalibracionGuardar,
-                              usuario: Actual, db: Db) -> ErrorCalibracion:
-    pendiente("CU-21", "Sprint 2", "Jhon")
+                              usuario: Actual) -> ErrorCalibracion:
+    # Calculo puro: no consulta ni escribe la base, por eso no pide sesion ni rol.
+    return service.validar_calibracion(datos)
 
 
 @router.get("/sedes/{sede}/calibracion-previa", response_model=Calibracion,

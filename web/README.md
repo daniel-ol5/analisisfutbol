@@ -189,3 +189,21 @@ Rutas públicas: `/login` (CU-02) y `/registro` (CU-01). Tras iniciar sesión o 
 - **Dónde se guarda:** `localStorage` (clave `areatecnica.sesion`). Hay un TODO en `session.ts` para revisarlo cuando exista refresh.
 - **Mock o API real:** cambiar solo `VITE_API_URL` en `.env.local` (`http://127.0.0.1:8000/api` o `http://127.0.0.1:4010/api`).
 - **Guardas de ruta:** todavía no existen; abrir `/` sin sesión no redirige. Solo un 401 de la API cierra la sesión.
+
+---
+
+## Guía de montaje de cámara (feature `vision`, CU-18)
+
+Pantalla estática en `/vision/guia-montaje`. No llama a la API. Por ahora solo se abre escribiendo la URL: no hay menú ni enlace desde `VisionPage`.
+
+| Archivo (en `src/features/vision/`) | Para qué sirve |
+| --- | --- |
+| `guia.ts` | Único lugar con los valores: datos recomendados, tamaños de referencia y los ítems de la lista. Los valores salen de `docs/adr/ADR-001-montaje-de-camara.md`. Lo que el ADR deja en blanco es `null` y se muestra «Por definir». |
+| `pages/GuiaMontajePage.tsx` | La pantalla. |
+| `components/ListaComprobacion.tsx` | Casillas con contador «X de Y completados» y aviso cuando todo está marcado. El estado no se guarda: al recargar se reinicia. |
+| `components/EsquemaMontaje.tsx` | Esquemas SVG (vista desde arriba y vista lateral). Son ilustrativos y no están a escala. |
+| `guia.css` | Estilos con prefijo `guia-`. |
+
+- **Ítems de la lista:** los de `ITEMS_ADR` vienen del ADR. Los de `ITEMS_PROPUESTA` no: están marcados «Por confirmar» hasta que el equipo los apruebe.
+- **Aviso de estado del ADR:** `AVISO_ESTADO_ADR` en `guia.ts` muestra que el ADR sigue «pendiente de decisión». Cuando se cierre, ponerlo en `null` quita el aviso.
+- **Botón «Ir a calibrar»:** está deshabilitado a propósito; la pantalla de calibración es otra tarea.

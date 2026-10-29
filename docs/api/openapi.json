@@ -1856,8 +1856,18 @@
               }
             }
           },
+          "200": {
+            "description": "El partido ya tenia calibracion: se actualizo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Calibracion"
+                }
+              }
+            }
+          },
           "422": {
-            "description": "Validation Error",
+            "description": "Datos invalidos. La validacion de Pydantic (formas, rangos, minimo de 8 puntos, misma cantidad de puntos) devuelve `detail` como LISTA de errores. Una homografia degenerada (puntos colineales, repetidos, matriz singular) devuelve `detail` como TEXTO con el motivo, y en POST /calibracion no se guarda nada",
             "content": {
               "application/json": {
                 "schema": {
@@ -1924,7 +1934,7 @@
             }
           },
           "422": {
-            "description": "Validation Error",
+            "description": "Datos invalidos. La validacion de Pydantic (formas, rangos, minimo de 8 puntos, misma cantidad de puntos) devuelve `detail` como LISTA de errores. Una homografia degenerada (puntos colineales, repetidos, matriz singular) devuelve `detail` como TEXTO con el motivo, y en POST /calibracion no se guarda nada",
             "content": {
               "application/json": {
                 "schema": {
@@ -4799,28 +4809,79 @@
             "type": "number",
             "title": "Ancho M"
           },
-          "matriz_h": {
+          "puntos_imagen": {
             "items": {
-              "items": {
-                "type": "number"
-              },
-              "type": "array"
+              "$ref": "#/components/schemas/Punto"
             },
             "type": "array",
+            "title": "Puntos Imagen"
+          },
+          "puntos_cancha": {
+            "items": {
+              "$ref": "#/components/schemas/Punto"
+            },
+            "type": "array",
+            "title": "Puntos Cancha"
+          },
+          "matriz_h": {
+            "anyOf": [
+              {
+                "items": {
+                  "items": {
+                    "type": "number"
+                  },
+                  "type": "array"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Matriz H",
-            "description": "Matriz de homografia 3x3"
+            "description": "Matriz de homografia 3x3 (pixeles a metros), calculada al guardar"
           },
           "error_medio_m": {
-            "type": "number",
-            "title": "Error Medio M"
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Medio M",
+            "description": "Error medio de reproyeccion en metros, calculado al guardar"
           },
           "error_max_m": {
-            "type": "number",
-            "title": "Error Max M"
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Max M",
+            "description": "Error maximo de reproyeccion en metros, calculado al guardar"
           },
           "valida": {
             "type": "boolean",
             "title": "Valida"
+          },
+          "coef_distorsion": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Coef Distorsion"
           },
           "creada_en": {
             "type": "string",
@@ -4834,9 +4895,8 @@
           "partido_id",
           "largo_m",
           "ancho_m",
-          "matriz_h",
-          "error_medio_m",
-          "error_max_m",
+          "puntos_imagen",
+          "puntos_cancha",
           "valida",
           "creada_en"
         ],
@@ -5382,7 +5442,7 @@
           "punto_peor": {
             "type": "integer",
             "title": "Punto Peor",
-            "description": "Indice del punto con mayor residual"
+            "description": "Indice (base 0) sobre la lista de puntos enviada del punto con mayor residual"
           },
           "valida": {
             "type": "boolean",
