@@ -1,8 +1,4 @@
-"""Pruebas de Seguridad  —  CU-01, CU-02, CU-04.
-
-Incluye la prueba de aislamiento entre clubes (Pb-03), que es criterio de
-aceptación y debe correr en cada integración.
-"""
+"""Pruebas de Seguridad — CU-01, CU-02, CU-04 y acceso multi-club."""
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -20,24 +16,58 @@ async def cliente():
 
 
 async def _registrar(cliente, sufijo: str) -> dict:
-    r = await cliente.post("/api/seguridad/registro", json={
-        "nombre_club": f"Club {sufijo}",
-        "ciudad": "Santa Cruz",
-        "email": f"admin{sufijo}@test.com",
-        "password": "password123",
-        "nombre": "Admin",
-        "apellido": sufijo,
-    })
+    r = await cliente.post(
+        "/api/seguridad/registro",
+        json={
+            "nombre_club": f"Club {sufijo}",
+            "ciudad": "Santa Cruz",
+            "email": f"admin{sufijo}@test.com",
+            "password": "password123",
+            "nombre": "Admin",
+            "apellido": sufijo,
+        },
+    )
     assert r.status_code == 201, r.text
     return r.json()
 
+
+def _auth(token: str) -> dict[str, str]:
+    return {"Authorization": f"Bearer {token}"}
+
+
+async def _crear_usuario(
+    cliente, sesion: dict, sufijo: str, rol: str = "DT", **extra
+) -> dict:
+    datos = {
+        "email": f"usuario{sufijo}@test.com",
+        "password": "password123",
+        "nombre": "Usuario",
+        "apellido": sufijo,
+        "rol": rol,
+        **extra,
+    }
+    r = await cliente.post(
+        "/api/seguridad/usuarios",
+        json=datos,
+        headers=_auth(sesion["access_token"]),
+    )
+    assert r.status_code == 201, r.text
+    return r.json()
+
+
+async def _login(cliente, email: str) -> dict:
+    r = await cliente.post(
+        "/api/seguridad/login",
+        json={"email": email, "password": "password123"},
+    )
+    assert r.status_code == 200, r.text
+    return r.json()
 
 
 async def test_salud(cliente):
     r = await cliente.get("/api/salud")
     assert r.status_code == 200
     assert r.json()["estado"] == "ok"
-
 
 
 async def test_registro_devuelve_sesion(cliente):
@@ -47,45 +77,281 @@ async def test_registro_devuelve_sesion(cliente):
     assert data["usuario"]["rol"] == "ADMIN"
 
 
-
 async def test_email_duplicado_es_rechazado(cliente):
     """CU-01: un email solo puede tener una cuenta."""
     await _registrar(cliente, "dos")
-    r = await cliente.post("/api/seguridad/registro", json={
-        "nombre_club": "Otro", "email": "admindos@test.com",
-        "password": "password123",
-    })
+    r = await cliente.post(
+        "/api/seguridad/registro",
+        json={
+            "nombre_club": "Otro",
+            "email": "admindos@test.com",
+            "password": "password123",
+        },
+    )
     assert r.status_code == 409
-
 
 
 async def test_login_con_credenciales_invalidas(cliente):
     """CU-02: el error no revela si el email existe."""
     await _registrar(cliente, "tres")
-    r = await cliente.post("/api/seguridad/login", json={
-        "email": "admintres@test.com", "password": "incorrecta",
-    })
+    r = await cliente.post(
+        "/api/seguridad/login",
+        json={"email": "admintres@test.com", "password": "incorrecta"},
+    )
     assert r.status_code == 401
 
 
-
-async def test_endpoint_protegido_sin_token(cliente):
-    r = await cliente.get("/api/seguridad/usuarios")
+@pytest.mark.parametrize(
+    ("metodo", "ruta", "json"),
+    [
+        ("GET", "/api/seguridad/yo", None),
+        ("GET", "/api/seguridad/usuarios", None),
+        (
+            "POST",
+            "/api/seguridad/usuarios",
+            {
+                "email": "sin-auth@test.com",
+                "password": "password123",
+                "rol": "DT",
+            },
+        ),
+    ],
+)
+async def test_todos_los_endpoints_de_usuario_exigen_autenticacion(
+    cliente, metodo, ruta, json
+):
+    r = await cliente.request(metodo, ruta, json=json)
     assert r.status_code == 401
 
+
+async def test_usuario_puede_consultar_sus_recursos(cliente):
+    club_a = await _registrar(cliente, "propio")
+    creado = await _crear_usuario(cliente, club_a, "propio")
+
+    yo = await cliente.get(
+        "/api/seguridad/yo", headers=_auth(club_a["access_token"])
+    )
+    listado = await cliente.get(
+        "/api/seguridad/usuarios", headers=_auth(club_a["access_token"])
+    )
+
+    assert yo.status_code == 200
+    assert yo.json()["id"] == club_a["usuario"]["id"]
+    assert {u["id"] for u in listado.json()} == {
+        club_a["usuario"]["id"],
+        creado["id"],
+    }
 
 
 async def test_aislamiento_entre_clubes(cliente):
-    """Pb-03: un club nunca ve usuarios de otro club."""
+    """T-010: un club nunca ve usuarios de otro club en sus listados."""
     club_a = await _registrar(cliente, "aaa")
     club_b = await _registrar(cliente, "bbb")
 
-    token_a = club_a["access_token"]
-    r = await cliente.get("/api/seguridad/usuarios",
-                          headers={"Authorization": f"Bearer {token_a}"})
+    r = await cliente.get(
+        "/api/seguridad/usuarios", headers=_auth(club_a["access_token"])
+    )
     assert r.status_code == 200
 
     emails = {u["email"] for u in r.json()}
+    assert club_a["usuario"]["email"] in emails
     assert club_b["usuario"]["email"] not in emails, (
         "FILTRACIÓN: el club A puede ver usuarios del club B"
     )
+
+
+# ---------- T-004: CU-02, CU-03 Login, logout y refresco ----------
+
+async def test_refresco_token_exitoso_y_rotacion(cliente):
+    """CU-02: el token de refresco emite nueva sesión y no puede reutilizarse (rotación)."""
+    sesion = await _registrar(cliente, "rotacion")
+    refresh_1 = sesion["refresh_token"]
+
+    # Refresco exitoso
+    r = await cliente.post("/api/seguridad/refresh", json={"refresh_token": refresh_1})
+    assert r.status_code == 200, r.text
+    nueva_sesion = r.json()
+    assert nueva_sesion["access_token"]
+    assert nueva_sesion["refresh_token"]
+    assert nueva_sesion["refresh_token"] != refresh_1
+
+    # Rotación: el token previo queda revocado y es rechazado
+    r_reuso = await cliente.post("/api/seguridad/refresh", json={"refresh_token": refresh_1})
+    assert r_reuso.status_code == 401
+
+    # El nuevo token de refresco sí es válido
+    r_nuevo = await cliente.post("/api/seguridad/refresh", json={"refresh_token": nueva_sesion["refresh_token"]})
+    assert r_nuevo.status_code == 200
+
+
+async def test_logout_invalida_token_acceso_y_refresco(cliente):
+    """CU-03 / Pb-01: logout revoca token de acceso y de refresco en la lista negra."""
+    sesion = await _registrar(cliente, "logout")
+    token_acc = sesion["access_token"]
+    token_ref = sesion["refresh_token"]
+
+    # Cerrar sesión pasando el refresh token
+    r = await cliente.post(
+        "/api/seguridad/logout",
+        headers={"Authorization": f"Bearer {token_acc}"},
+        json={"refresh_token": token_ref},
+    )
+    assert r.status_code == 204
+
+    # El token de acceso revocado ya no sirve
+    r_acc = await cliente.get(
+        "/api/seguridad/usuarios",
+        headers={"Authorization": f"Bearer {token_acc}"},
+    )
+    assert r_acc.status_code == 401
+    assert "revocado" in r_acc.text.lower()
+
+    # El token de refresco revocado ya no sirve
+    r_ref = await cliente.post("/api/seguridad/refresh", json={"refresh_token": token_ref})
+    assert r_ref.status_code == 401
+
+
+async def test_refresco_con_token_invalido_o_tipo_incorrecto(cliente):
+    """CU-02: tokens malformados o tokens de acceso usados como refresco son rechazados."""
+    sesion = await _registrar(cliente, "falso")
+    r1 = await cliente.post("/api/seguridad/refresh", json={"refresh_token": "token_invalido"})
+    assert r1.status_code == 401
+
+    # Intentar usar access_token como refresh_token
+    r2 = await cliente.post("/api/seguridad/refresh", json={"refresh_token": sesion["access_token"]})
+    assert r2.status_code == 401
+
+
+# ---------- T-005: CU-04 ABM de usuarios y control de roles ----------
+
+async def test_admin_abm_completo_usuario(cliente):
+    """CU-04: admin puede crear, consultar por id, editar y dar de baja usuarios."""
+    sesion = await _registrar(cliente, "abm")
+    auth = {"Authorization": f"Bearer {sesion['access_token']}"}
+
+    # Crear usuario
+    r_crear = await cliente.post("/api/seguridad/usuarios", headers=auth, json={
+        "email": "dt_abm@test.com",
+        "password": "password123",
+        "nombre": "Carlos",
+        "apellido": "Bilardo",
+        "rol": "DT",
+    })
+    assert r_crear.status_code == 201
+    usr = r_crear.json()
+    u_id = usr["id"]
+    assert usr["rol"] == "DT"
+
+    # Consultar por ID
+    r_get = await cliente.get(f"/api/seguridad/usuarios/{u_id}", headers=auth)
+    assert r_get.status_code == 200
+    assert r_get.json()["email"] == "dt_abm@test.com"
+
+    # Editar usuario (cambiar nombre y rol)
+    r_patch = await cliente.patch(f"/api/seguridad/usuarios/{u_id}", headers=auth, json={
+        "nombre": "Carlos Salvador",
+        "rol": "ANALISTA",
+    })
+    assert r_patch.status_code == 200
+    editado = r_patch.json()
+    assert editado["nombre"] == "Carlos Salvador"
+    assert editado["rol"] == "ANALISTA"
+
+    # Dar de baja (soft-delete activo=False)
+    r_del = await cliente.delete(f"/api/seguridad/usuarios/{u_id}", headers=auth)
+    assert r_del.status_code == 204
+
+    # Verificar que quedó inactivo
+    r_get_del = await cliente.get(f"/api/seguridad/usuarios/{u_id}", headers=auth)
+    assert r_get_del.status_code == 200
+    assert r_get_del.json()["activo"] is False
+
+
+async def test_admin_no_puede_desactivar_su_propia_cuenta(cliente):
+    """CU-04: protección contra bloqueo accidental del administrador."""
+    sesion = await _registrar(cliente, "autobloqueo")
+    auth = {"Authorization": f"Bearer {sesion['access_token']}"}
+    admin_id = sesion["usuario"]["id"]
+
+    r_del = await cliente.delete(f"/api/seguridad/usuarios/{admin_id}", headers=auth)
+    assert r_del.status_code == 400
+
+    r_patch = await cliente.patch(f"/api/seguridad/usuarios/{admin_id}", headers=auth, json={
+        "activo": False,
+    })
+    assert r_patch.status_code == 400
+
+    r_rol = await cliente.patch(f"/api/seguridad/usuarios/{admin_id}", headers=auth, json={
+        "rol": "ASISTENTE",
+    })
+    assert r_rol.status_code == 400
+
+
+async def test_asistente_recibe_403_al_intentar_gestionar_usuarios(cliente):
+    """CU-04: un ASISTENTE recibe 403 al intentar crear, ver, editar o borrar usuarios."""
+    sesion = await _registrar(cliente, "asistente_club")
+    auth_admin = {"Authorization": f"Bearer {sesion['access_token']}"}
+
+    # Admin crea al asistente
+    r_crear = await cliente.post("/api/seguridad/usuarios", headers=auth_admin, json={
+        "email": "asistente@test.com",
+        "password": "password123",
+        "nombre": "Pedro",
+        "apellido": "Asistente",
+        "rol": "ASISTENTE",
+    })
+    assert r_crear.status_code == 201
+    asistente_id = r_crear.json()["id"]
+
+    # Login del asistente
+    r_login = await cliente.post("/api/seguridad/login", json={
+        "email": "asistente@test.com",
+        "password": "password123",
+    })
+    assert r_login.status_code == 200
+    auth_asistente = {"Authorization": f"Bearer {r_login.json()['access_token']}"}
+
+    # Intentos no autorizados responden 403
+    r_list = await cliente.get("/api/seguridad/usuarios", headers=auth_asistente)
+    assert r_list.status_code == 403
+
+    r_post = await cliente.post("/api/seguridad/usuarios", headers=auth_asistente, json={
+        "email": "otro@test.com", "password": "password123", "rol": "DT",
+    })
+    assert r_post.status_code == 403
+
+    r_ver = await cliente.get(f"/api/seguridad/usuarios/{asistente_id}", headers=auth_asistente)
+    assert r_ver.status_code == 403
+
+    r_edit = await cliente.patch(f"/api/seguridad/usuarios/{asistente_id}", headers=auth_asistente, json={
+        "nombre": "Hack",
+    })
+    assert r_edit.status_code == 403
+
+    r_del = await cliente.delete(f"/api/seguridad/usuarios/{asistente_id}", headers=auth_asistente)
+    assert r_del.status_code == 403
+
+
+async def test_aislamiento_entre_clubes_en_abm(cliente):
+    """CU-04: un administrador no puede consultar, editar ni dar de baja usuarios de otro club."""
+    club_x = await _registrar(cliente, "clubx")
+    club_y = await _registrar(cliente, "cuby")
+
+    auth_x = {"Authorization": f"Bearer {club_x['access_token']}"}
+    auth_y = {"Authorization": f"Bearer {club_y['access_token']}"}
+
+    # Club Y crea un usuario
+    r_crear = await cliente.post("/api/seguridad/usuarios", headers=auth_y, json={
+        "email": "dt_y@test.com", "password": "password123", "rol": "DT",
+    })
+    id_y = r_crear.json()["id"]
+
+    # Admin de Club X no puede ver, editar ni eliminar usuario de Club Y (debe ser 404)
+    r_get = await cliente.get(f"/api/seguridad/usuarios/{id_y}", headers=auth_x)
+    assert r_get.status_code == 404
+
+    r_patch = await cliente.patch(f"/api/seguridad/usuarios/{id_y}", headers=auth_x, json={"nombre": "Infiltrado"})
+    assert r_patch.status_code == 404
+
+    r_delete = await cliente.delete(f"/api/seguridad/usuarios/{id_y}", headers=auth_x)
+    assert r_delete.status_code == 404

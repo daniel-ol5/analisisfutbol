@@ -1,0 +1,186 @@
+.layout {
+  display: flex;
+  min-height: 100vh;
+}
+
+.layout-lateral {
+  position: sticky;
+  top: 0;
+  align-self: flex-start;
+  width: var(--sidebar-w);
+  height: 100vh;
+  flex-shrink: 0;
+  padding: var(--sp-5) var(--sp-4);
+  border-right: 1px solid var(--line);
+  background: var(--surface);
+  overflow-y: auto;
+}
+
+.layout-marca {
+  display: block;
+  margin-bottom: var(--sp-5);
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-black);
+  letter-spacing: -0.02em;
+}
+
+.layout-marca em {
+  font-style: normal;
+  color: var(--pitch);
+}
+
+.layout-nav-titulo {
+  margin-bottom: var(--sp-2);
+}
+
+.layout-lateral ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.layout-lateral nav a {
+  display: block;
+  padding: 7px var(--sp-3);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-md);
+  color: var(--text-2);
+}
+
+.layout-lateral nav a:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.layout-lateral nav a.active {
+  border-color: var(--line);
+  background: var(--surface-2);
+  color: var(--pitch);
+  font-weight: var(--fw-bold);
+}
+
+/* Sección padre cuando la página actual es uno de sus subenlaces: resalte sutil. */
+.layout-lateral nav a.padre-activo {
+  color: var(--text);
+  font-weight: var(--fw-medium);
+}
+
+/* Subenlaces: siempre visibles, con sangría y más discretos que las secciones. */
+.layout-lateral ul.layout-sub {
+  margin: 2px 0 var(--sp-1) var(--sp-3);
+  padding-left: var(--sp-2);
+  border-left: 1px solid var(--line);
+}
+
+.layout-lateral .layout-sub a {
+  padding: 4px var(--sp-3);
+  font-size: var(--fs-sm);
+  color: var(--text-3);
+}
+
+.layout-lateral .layout-sub a.active {
+  border-color: transparent;
+  background: transparent;
+  color: var(--pitch);
+  font-weight: var(--fw-bold);
+}
+
+.layout-lateral nav a:focus-visible,
+.layout-marca:focus-visible,
+.layout-enlace:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.layout-principal {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.layout-cabecera {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  height: var(--header-h);
+  padding: 0 var(--sp-5);
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.layout-acciones {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin-left: auto;
+}
+
+.layout-usuario {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-md);
+  font-weight: var(--fw-medium);
+}
+
+.layout-enlace {
+  color: var(--pitch);
+  font-weight: var(--fw-medium);
+  text-decoration: underline;
+}
+
+.layout-contenido {
+  flex: 1;
+}
+
+/* El contenido ya trae su propio ancho máximo; la cabecera aporta el aire superior. */
+.layout-contenido .inicio,
+.layout-contenido .pendiente {
+  padding-top: var(--sp-6);
+}
+
+.layout-menu,
+.layout-velo {
+  display: none;
+}
+
+@media (max-width: 800px) {
+  .layout-lateral {
+    position: fixed;
+    z-index: 30;
+    inset: 0 auto 0 0;
+    transform: translateX(-100%);
+    transition: transform 0.2s;
+  }
+
+  .layout-lateral.abierto {
+    transform: none;
+    box-shadow: var(--shadow-lg);
+  }
+
+  .layout-velo {
+    position: fixed;
+    z-index: 20;
+    inset: 0;
+    display: block;
+    background: rgb(0 0 0 / 0.55);
+  }
+
+  .layout-menu {
+    display: inline-flex;
+  }
+
+  .layout-cabecera {
+    padding: 0 var(--sp-3);
+  }
+
+  .layout-usuario span:first-child {
+    display: none;
+  }
+}

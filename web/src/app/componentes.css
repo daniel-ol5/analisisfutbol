@@ -1,0 +1,44 @@
+.componentes {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: var(--sp-6) var(--sp-5) 80px;
+}
+
+.componentes h1 {
+  margin: var(--sp-3) 0 0;
+  font-size: var(--fs-xl);
+  font-weight: var(--fw-black);
+  letter-spacing: -0.02em;
+}
+
+.muestras {
+  display: grid;
+  gap: var(--sp-5);
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  margin-top: var(--sp-5);
+}
+
+/* Cada muestra redefine los tokens con su propio data-theme. */
+.muestra {
+  padding: var(--sp-5);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--ground);
+  color: var(--text);
+}
+
+.muestra h3 {
+  margin: var(--sp-5) 0 var(--sp-3);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-bold);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.muestra-fila {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+}

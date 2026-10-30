@@ -1,5 +1,6 @@
 """Hashing de contraseñas y emisión/verificación de JWT."""
 
+import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -25,6 +26,7 @@ def verificar(password: str, hash_guardado: str) -> bool:
 
 def _crear_token(datos: dict[str, Any], expira: timedelta, tipo: str) -> str:
     payload = datos.copy()
+    payload.setdefault("jti", uuid.uuid4().hex)
     payload.update({"exp": datetime.now(UTC) + expira, "tipo": tipo})
     return jwt.encode(payload, settings.secret_key, algorithm=settings.algoritmo)
 
@@ -42,6 +44,18 @@ def token_refresco(usuario_id: int) -> str:
         {"sub": str(usuario_id)},
         timedelta(days=settings.refresh_token_days),
         "refresco",
+    )
+
+
+def token_ingesta(club_id: int, partido_id: int) -> str:
+    """T-033: token del worker de visión, válido para un solo partido.
+
+    Si se filtra, solo sirve para publicar en ese partido y por pocas horas.
+    """
+    return _crear_token(
+        {"sub": "worker", "club": club_id, "partido": partido_id},
+        timedelta(hours=settings.ingesta_token_hours),
+        "ingesta",
     )
 
 

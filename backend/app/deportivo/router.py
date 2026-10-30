@@ -14,6 +14,7 @@ from fastapi import APIRouter, Query, UploadFile, status
 
 from app.core.deps import Actual, Db
 from app.core.pendiente import RESPUESTA_501, pendiente
+from app.deportivo import service
 from app.deportivo.schemas import (
     Alineacion,
     AlineacionGuardar,
@@ -41,35 +42,36 @@ router = APIRouter(responses=RESPUESTA_501)
 
 @router.get("/equipos", response_model=list[Equipo], summary="CU-09 · Listar equipos del club")
 async def listar_equipos(usuario: Actual, db: Db, activos: bool = True) -> list[Equipo]:
-    pendiente("CU-09", "Sprint 2", "Daniel")
+    return await service.listar_equipos(db, usuario, activos=activos)
 
 
 @router.post("/equipos", response_model=Equipo, status_code=status.HTTP_201_CREATED,
              summary="CU-09 · Crear equipo")
 async def crear_equipo(datos: EquipoCrear, usuario: Actual, db: Db) -> Equipo:
-    pendiente("CU-09", "Sprint 2", "Daniel")
+    return await service.crear_equipo(db, usuario, datos)
 
 
 @router.get("/equipos/{equipo_id}", response_model=Equipo, summary="CU-09 · Ver equipo")
 async def ver_equipo(equipo_id: int, usuario: Actual, db: Db) -> Equipo:
-    pendiente("CU-09", "Sprint 2", "Daniel")
+    return await service.ver_equipo(db, usuario, equipo_id)
 
 
 @router.patch("/equipos/{equipo_id}", response_model=Equipo, summary="CU-09 · Editar equipo")
 async def editar_equipo(equipo_id: int, datos: EquipoEditar, usuario: Actual, db: Db) -> Equipo:
-    pendiente("CU-09", "Sprint 2", "Daniel")
+    return await service.editar_equipo(db, usuario, equipo_id, datos)
 
 
 @router.delete("/equipos/{equipo_id}", status_code=status.HTTP_204_NO_CONTENT,
                summary="CU-09 · Desactivar equipo (baja logica)")
 async def desactivar_equipo(equipo_id: int, usuario: Actual, db: Db) -> None:
-    pendiente("CU-09", "Sprint 2", "Daniel")
+    await service.desactivar_equipo(db, usuario, equipo_id)
+    return None
 
 
 @router.get("/equipos/{equipo_id}/colores/verificar", response_model=AvisoColores,
             summary="CU-10 · Verificar si dos equipos tienen colores demasiado similares")
 async def verificar_colores(equipo_id: int, color_rival: str, usuario: Actual, db: Db) -> AvisoColores:
-    pendiente("CU-10", "Sprint 2", "Daniel")
+    return await service.verificar_colores_equipo(db, usuario, equipo_id, color_rival)
 
 
 # ---------------- CU-11, CU-12 · Jugadores ----------------
