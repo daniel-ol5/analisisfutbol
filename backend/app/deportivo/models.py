@@ -111,7 +111,10 @@ class Alineacion(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     club_id: Mapped[int] = mapped_column(ForeignKey("club.id"), index=True)
-    partido_id: Mapped[int] = mapped_column(ForeignKey("partido.id"), index=True)
+    # CU-17: una sola alineación por partido; guardar de nuevo la reemplaza.
+    partido_id: Mapped[int] = mapped_column(
+        ForeignKey("partido.id"), index=True, unique=True
+    )
 
     formacion: Mapped[str] = mapped_column(String(20), default="4-3-3")
     creado_en: Mapped[datetime] = mapped_column(

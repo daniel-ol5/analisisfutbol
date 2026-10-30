@@ -1806,6 +1806,7 @@
           "P2 · Gestión Deportiva"
         ],
         "summary": "CU-17 · Ver alineacion del partido",
+        "description": "404 si el partido todavia no tiene alineacion.",
         "operationId": "ver_alineacion_api_deportivo_partidos__partido_id__alineacion_get",
         "security": [
           {
@@ -1861,6 +1862,7 @@
           "P2 · Gestión Deportiva"
         ],
         "summary": "CU-17 · Guardar alineacion y formacion",
+        "description": "Reemplaza la alineacion completa. Exige 11 titulares, un solo arquero titular y un solo capitan titular. 409 si el partido ya no esta PROGRAMADO ni EN_CURSO.",
         "operationId": "guardar_alineacion_api_deportivo_partidos__partido_id__alineacion_put",
         "security": [
           {
@@ -4809,18 +4811,6 @@
     "schemas": {
       "Alineacion": {
         "properties": {
-          "formacion": {
-            "$ref": "#/components/schemas/Formacion",
-            "default": "4-3-3"
-          },
-          "jugadores": {
-            "items": {
-              "$ref": "#/components/schemas/JugadorAlineado"
-            },
-            "type": "array",
-            "title": "Jugadores",
-            "description": "Maximo 11 con es_titular=true"
-          },
           "id": {
             "type": "integer",
             "title": "Id"
@@ -4828,13 +4818,25 @@
           "partido_id": {
             "type": "integer",
             "title": "Partido Id"
+          },
+          "formacion": {
+            "$ref": "#/components/schemas/Formacion"
+          },
+          "jugadores": {
+            "items": {
+              "$ref": "#/components/schemas/JugadorAlineadoOut"
+            },
+            "type": "array",
+            "title": "Jugadores",
+            "description": "Primero los titulares y después los suplentes, cada grupo por dorsal"
           }
         },
         "type": "object",
         "required": [
-          "jugadores",
           "id",
-          "partido_id"
+          "partido_id",
+          "formacion",
+          "jugadores"
         ],
         "title": "Alineacion"
       },
@@ -4850,7 +4852,7 @@
             },
             "type": "array",
             "title": "Jugadores",
-            "description": "Maximo 11 con es_titular=true"
+            "description": "Titulares y suplentes. Exactamente 11 con es_titular=true, uno solo de ellos arquero (posicion ARQ) y uno solo capitan."
           }
         },
         "type": "object",
@@ -6316,18 +6318,21 @@
             "maximum": 100.0,
             "minimum": 0.0,
             "title": "Pos X",
-            "description": "Coordenada relativa en el plano, 0 a 100"
+            "description": "Porcentaje del largo: 0 = arco propio, 100 = arco rival"
           },
           "pos_y": {
             "type": "number",
             "maximum": 100.0,
             "minimum": 0.0,
-            "title": "Pos Y"
+            "title": "Pos Y",
+            "description": "Porcentaje del ancho: 0 = banda izquierda, 100 = banda derecha (mirando hacia el arco rival)"
           },
           "minuto_entra": {
             "anyOf": [
               {
-                "type": "integer"
+                "type": "integer",
+                "maximum": 130.0,
+                "minimum": 0.0
               },
               {
                 "type": "null"
@@ -6338,7 +6343,9 @@
           "minuto_sale": {
             "anyOf": [
               {
-                "type": "integer"
+                "type": "integer",
+                "maximum": 130.0,
+                "minimum": 0.0
               },
               {
                 "type": "null"
@@ -6353,7 +6360,93 @@
           "pos_x",
           "pos_y"
         ],
-        "title": "JugadorAlineado"
+        "title": "JugadorAlineado",
+        "description": "Coordenadas relativas, mismos ejes que el tracking (x largo, y ancho):\nse pasan a metros con `pos_x / 100 * largo_m` de la calibración."
+      },
+      "JugadorAlineadoOut": {
+        "properties": {
+          "jugador_id": {
+            "type": "integer",
+            "title": "Jugador Id"
+          },
+          "es_titular": {
+            "type": "boolean",
+            "title": "Es Titular",
+            "default": true
+          },
+          "es_capitan": {
+            "type": "boolean",
+            "title": "Es Capitan",
+            "default": false
+          },
+          "pos_x": {
+            "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Pos X",
+            "description": "Porcentaje del largo: 0 = arco propio, 100 = arco rival"
+          },
+          "pos_y": {
+            "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Pos Y",
+            "description": "Porcentaje del ancho: 0 = banda izquierda, 100 = banda derecha (mirando hacia el arco rival)"
+          },
+          "minuto_entra": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 130.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Minuto Entra"
+          },
+          "minuto_sale": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 130.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Minuto Sale"
+          },
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "apellido": {
+            "type": "string",
+            "title": "Apellido"
+          },
+          "dorsal": {
+            "type": "integer",
+            "title": "Dorsal"
+          },
+          "posicion": {
+            "$ref": "#/components/schemas/Posicion"
+          }
+        },
+        "type": "object",
+        "required": [
+          "jugador_id",
+          "pos_x",
+          "pos_y",
+          "nombre",
+          "apellido",
+          "dorsal",
+          "posicion"
+        ],
+        "title": "JugadorAlineadoOut",
+        "description": "Con los datos del jugador, para dibujar la cancha sin pedir el plantel."
       },
       "JugadorCrear": {
         "properties": {

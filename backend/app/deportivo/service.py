@@ -9,15 +9,24 @@ import math
 
 from fastapi import HTTPException, status
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.deps import UsuarioActual
 from app.core.tenancy import del_club, verificar_pertenencia
-from app.deportivo.models import Equipo, Jugador
+from app.deportivo.models import Alineacion, AlineacionJugador, Equipo, Jugador, Partido
 from app.deportivo.schemas import (
+    Alineacion as AlineacionOut,
+)
+from app.deportivo.schemas import (
+    AlineacionGuardar,
     AvisoColores,
     EquipoCrear,
     EquipoEditar,
+    EstadoPartido,
+    JugadorAlineadoOut,
+    Posicion,
 )
 from app.deportivo.schemas import (
     Equipo as EquipoOut,
@@ -253,3 +262,145 @@ async def verificar_colores_equipo(
         distancia_hsv=distancia_redondeada,
         mensaje=mensaje,
     )
+
+
+# ---------------- CU-17 · Alineación y formación (T-048) ----------------
+
+# Con el partido terminado, la alineación ya alimentó el análisis: no se toca.
+ESTADOS_ALINEACION_EDITABLE = {EstadoPartido.PROGRAMADO, EstadoPartido.EN_CURSO}
+
+
+async def _partido_del_club(
+    db: AsyncSession, usuario: UsuarioActual, partido_id: int
+) -> Partido:
+    res = await db.execute(del_club(Partido, usuario).where(Partido.id == partido_id))
+    return verificar_pertenencia(res.scalar_one_or_none(), usuario)
+
+
+async def _alineacion_del_partido(db: AsyncSession, partido_id: int) -> Alineacion | None:
+    res = await db.execute(
+        select(Alineacion)
+        .where(Alineacion.partido_id == partido_id)
+        .options(
+            selectinload(Alineacion.jugadores_alineados).selectinload(
+                AlineacionJugador.jugador
+            )
+        )
+    )
+    return res.scalar_one_or_none()
+
+
+def _alineacion_a_salida(alineacion: Alineacion) -> AlineacionOut:
+    filas = sorted(
+        alineacion.jugadores_alineados,
+        key=lambda f: (not f.es_titular, f.jugador.dorsal),
+    )
+    return AlineacionOut(
+        id=alineacion.id,
+        partido_id=alineacion.partido_id,
+        formacion=alineacion.formacion,
+        jugadores=[
+            JugadorAlineadoOut(
+                jugador_id=f.jugador_id,
+                es_titular=f.es_titular,
+                es_capitan=f.es_capitan,
+                pos_x=f.pos_x,
+                pos_y=f.pos_y,
+                minuto_entra=f.minuto_entra,
+                minuto_sale=f.minuto_sale,
+                nombre=f.jugador.nombre,
+                apellido=f.jugador.apellido,
+                dorsal=f.jugador.dorsal,
+                posicion=f.jugador.posicion,
+            )
+            for f in filas
+        ],
+    )
+
+
+async def ver_alineacion(
+    db: AsyncSession, usuario: UsuarioActual, partido_id: int
+) -> AlineacionOut:
+    """CU-17: alineación del partido, con los datos de cada jugador."""
+    await _partido_del_club(db, usuario, partido_id)
+    alineacion = await _alineacion_del_partido(db, partido_id)
+    if alineacion is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND, "El partido todavía no tiene alineación"
+        )
+    return _alineacion_a_salida(alineacion)
+
+
+async def guardar_alineacion(
+    db: AsyncSession, usuario: UsuarioActual, partido_id: int, datos: AlineacionGuardar
+) -> AlineacionOut:
+    """CU-17: guarda la formación, titulares, suplentes y capitán del partido.
+
+    Si ya había una alineación, la reemplaza completa. El esquema ya validó
+    11 titulares y un capitán; acá se valida lo que necesita la base: que los
+    jugadores sean del plantel del equipo y que haya un único arquero titular.
+    """
+    partido = await _partido_del_club(db, usuario, partido_id)
+    if partido.estado not in ESTADOS_ALINEACION_EDITABLE:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"No se puede cambiar la alineación de un partido {partido.estado}",
+        )
+
+    ids = [j.jugador_id for j in datos.jugadores]
+    res = await db.execute(
+        select(Jugador).where(
+            Jugador.id.in_(ids),
+            Jugador.club_id == usuario.club_id,
+            Jugador.equipo_id == partido.equipo_id,
+            Jugador.activo,
+        )
+    )
+    plantel = {j.id: j for j in res.scalars().all()}
+    ajenos = [i for i in ids if i not in plantel]
+    if ajenos:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "Estos jugadores no están en el plantel activo del equipo: "
+            + ", ".join(map(str, ajenos)),
+        )
+
+    arqueros = [
+        j for j in datos.jugadores
+        if j.es_titular and plantel[j.jugador_id].posicion == Posicion.ARQUERO
+    ]
+    if len(arqueros) != 1:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            f"Tiene que haber un solo arquero entre los titulares (hay {len(arqueros)})",
+        )
+
+    alineacion = await _alineacion_del_partido(db, partido_id)
+    if alineacion is None:
+        alineacion = Alineacion(club_id=usuario.club_id, partido_id=partido_id)
+        db.add(alineacion)
+    alineacion.formacion = datos.formacion.value
+    # delete-orphan borra las filas anteriores al reemplazar la colección.
+    alineacion.jugadores_alineados = [
+        AlineacionJugador(
+            jugador_id=j.jugador_id,
+            jugador=plantel[j.jugador_id],
+            es_titular=j.es_titular,
+            es_capitan=j.es_capitan,
+            pos_x=j.pos_x,
+            pos_y=j.pos_y,
+            minuto_entra=j.minuto_entra,
+            minuto_sale=j.minuto_sale,
+        )
+        for j in datos.jugadores
+    ]
+    try:
+        await db.commit()
+    except IntegrityError:
+        # Dos personas guardaron la primera alineación del partido a la vez.
+        await db.rollback()
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Otra persona guardó la alineación al mismo tiempo. Recarga y vuelve a intentar.",
+        ) from None
+    return _alineacion_a_salida(alineacion)

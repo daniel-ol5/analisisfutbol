@@ -10,9 +10,9 @@ Responsables segun el Sprint Planning:
     CU-17         alineacion y formacion   · S2 · Araceli
 """
 
-from fastapi import APIRouter, Query, UploadFile, status
+from fastapi import APIRouter, Depends, Query, UploadFile, status
 
-from app.core.deps import Actual, Db
+from app.core.deps import Actual, Db, requiere_rol
 from app.core.pendiente import RESPUESTA_501, pendiente
 from app.deportivo import service
 from app.deportivo.schemas import (
@@ -165,13 +165,18 @@ async def cancelar_partido(partido_id: int, datos: Cancelacion, usuario: Actual,
 # ---------------- CU-17 · Alineacion ----------------
 
 @router.get("/partidos/{partido_id}/alineacion", response_model=Alineacion,
-            summary="CU-17 · Ver alineacion del partido")
+            summary="CU-17 · Ver alineacion del partido",
+            description="404 si el partido todavia no tiene alineacion.")
 async def ver_alineacion(partido_id: int, usuario: Actual, db: Db) -> Alineacion:
-    pendiente("CU-17", "Sprint 2", "Araceli")
+    return await service.ver_alineacion(db, usuario, partido_id)
 
 
 @router.put("/partidos/{partido_id}/alineacion", response_model=Alineacion,
-            summary="CU-17 · Guardar alineacion y formacion")
+            dependencies=[Depends(requiere_rol("ADMIN", "DT", "ASISTENTE"))],
+            summary="CU-17 · Guardar alineacion y formacion",
+            description="Reemplaza la alineacion completa. Exige 11 titulares, un solo "
+                        "arquero titular y un solo capitan titular. 409 si el partido "
+                        "ya no esta PROGRAMADO ni EN_CURSO.")
 async def guardar_alineacion(partido_id: int, datos: AlineacionGuardar,
                              usuario: Actual, db: Db) -> Alineacion:
-    pendiente("CU-17", "Sprint 2", "Araceli")
+    return await service.guardar_alineacion(db, usuario, partido_id, datos)
