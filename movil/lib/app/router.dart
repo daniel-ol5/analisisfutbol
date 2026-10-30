@@ -14,6 +14,8 @@ import '../features/seguridad/login_pagina.dart';
 import '../features/seguridad/pagina.dart';
 import '../features/seguridad/perfil_pagina.dart';
 import '../features/deportivo/pagina.dart';
+import '../features/deportivo/alineacion/alineacion_pagina.dart';
+import '../features/deportivo/alineacion/elegir_partido_pagina.dart';
 import '../features/vision/pagina.dart';
 import '../features/partido/pagina.dart';
 import '../features/analisis/pagina.dart';
@@ -35,6 +37,19 @@ final router = GoRouter(
           path: '/perfil',
           redirect: _requiereSesion,
           builder: (_, _) => const PerfilPagina(),
+        ),
+        // T-053. PROVISORIO hasta T-052: /partidos será la agenda.
+        GoRoute(
+          path: '/partidos',
+          redirect: _requiereSesion,
+          builder: (_, _) => const ElegirPartidoPagina(),
+        ),
+        GoRoute(
+          path: '/partidos/:id/alineacion',
+          redirect: _requiereSesion,
+          builder: (_, estado) => AlineacionPagina(
+            partidoId: int.parse(estado.pathParameters['id']!),
+          ),
         ),
         GoRoute(path: '/seguridad', builder: (_, _) => const SeguridadPagina()),
         GoRoute(path: '/deportivo', builder: (_, _) => const DeportivoPagina()),

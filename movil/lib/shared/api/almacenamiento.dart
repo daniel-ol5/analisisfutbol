@@ -41,9 +41,34 @@ class Almacenamiento {
     await _seguro.delete(key: _claveRefresco);
     final p = await SharedPreferences.getInstance();
     await p.remove(_claveUsuario);
+    // Lo descargado pertenece al club de esta cuenta: no se deja para la próxima.
+    for (final clave in p.getKeys().where((k) => k.startsWith(_prefijoCache))) {
+      await p.remove(clave);
+    }
   }
 
   static Future<bool> haySesion() async => await leerToken() != null;
+
+  // ---------- Caché de respuestas para usar sin conexión ----------
+
+  static const _prefijoCache = 'areatecnica.cache.';
+
+  static Future<void> guardarCache(String clave, Map<String, dynamic> datos) async {
+    final p = await SharedPreferences.getInstance();
+    await p.setString('$_prefijoCache$clave', jsonEncode(datos));
+  }
+
+  static Future<Map<String, dynamic>?> leerCache(String clave) async {
+    final p = await SharedPreferences.getInstance();
+    final crudo = p.getString('$_prefijoCache$clave');
+    if (crudo == null) return null;
+    try {
+      final valor = jsonDecode(crudo);
+      return valor is Map<String, dynamic> ? valor : null;
+    } on FormatException {
+      return null;
+    }
+  }
 
   // ---------- Perfil en caché (respuesta de GET /seguridad/yo) ----------
 

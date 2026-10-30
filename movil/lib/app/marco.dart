@@ -11,12 +11,16 @@ class Marco extends StatelessWidget {
   const Marco({super.key, required this.child});
   final Widget child;
 
-  static const _destinos = ['/', '/perfil'];
+  static const _destinos = ['/', '/partidos', '/perfil'];
 
   @override
   Widget build(BuildContext context) {
     final ruta = GoRouterState.of(context).uri.path;
-    final seleccionado = ruta.startsWith('/perfil') ? 1 : 0;
+    final seleccionado = ruta.startsWith('/perfil')
+        ? 2
+        : ruta.startsWith('/partidos')
+            ? 1
+            : 0;
 
     return Scaffold(
       body: child,
@@ -28,6 +32,11 @@ class Marco extends StatelessWidget {
             icon: Icon(Icons.home_outlined),
             selectedIcon: Icon(Icons.home),
             label: 'Inicio',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.sports_soccer_outlined),
+            selectedIcon: Icon(Icons.sports_soccer),
+            label: 'Partidos',
           ),
           NavigationDestination(
             icon: Icon(Icons.person_outline),
