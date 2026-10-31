@@ -316,7 +316,7 @@ async def test_editar_jugador_valida_dorsal(cliente):
     _, auth = await _crear_sesion(cliente, "jug_edit")
     eq_id = await _crear_equipo(cliente, auth, "jug_edit")
 
-    r1 = await cliente.post("/api/deportivo/jugadores", headers=auth, json={
+    await cliente.post("/api/deportivo/jugadores", headers=auth, json={
         "equipo_id": eq_id, "nombre": "Uno", "apellido": "A", "dorsal": 5, "altura_cm": 170,
     })
     r2 = await cliente.post("/api/deportivo/jugadores", headers=auth, json={
