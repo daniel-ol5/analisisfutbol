@@ -11,6 +11,7 @@ Responsables segun el Sprint Planning:
 """
 
 from fastapi import APIRouter, Query, UploadFile, status
+from fastapi.responses import Response
 
 from app.core.deps import Actual, Db
 from app.core.pendiente import RESPUESTA_501, pendiente
@@ -81,29 +82,55 @@ async def verificar_colores(equipo_id: int, color_rival: str, usuario: Actual, d
 async def listar_jugadores(equipo_id: int, usuario: Actual, db: Db,
                            activos: bool = True,
                            orden: str = Query("dorsal", pattern="^(dorsal|posicion|apellido)$")) -> list[Jugador]:
-    pendiente("CU-11", "Sprint 2", "Alex")
+    return await service.listar_jugadores(db, usuario, equipo_id, activos=activos, orden=orden)
 
 
 @router.post("/jugadores", response_model=Jugador, status_code=status.HTTP_201_CREATED,
              summary="CU-11 · Crear jugador")
 async def crear_jugador(datos: JugadorCrear, usuario: Actual, db: Db) -> Jugador:
-    pendiente("CU-11", "Sprint 2", "Alex")
+    return await service.crear_jugador(db, usuario, datos)
 
 
 @router.get("/jugadores/{jugador_id}", response_model=Jugador, summary="CU-11 · Ver ficha de jugador")
 async def ver_jugador(jugador_id: int, usuario: Actual, db: Db) -> Jugador:
-    pendiente("CU-11", "Sprint 2", "Alex")
+    return await service.ver_jugador(db, usuario, jugador_id)
 
 
 @router.patch("/jugadores/{jugador_id}", response_model=Jugador, summary="CU-11 · Editar jugador")
 async def editar_jugador(jugador_id: int, datos: JugadorEditar, usuario: Actual, db: Db) -> Jugador:
-    pendiente("CU-11", "Sprint 2", "Alex")
+    return await service.editar_jugador(db, usuario, jugador_id, datos)
 
 
 @router.delete("/jugadores/{jugador_id}", status_code=status.HTTP_204_NO_CONTENT,
                summary="CU-11 · Dar de baja un jugador (conserva su historial)")
 async def baja_jugador(jugador_id: int, usuario: Actual, db: Db) -> None:
-    pendiente("CU-11", "Sprint 2", "Alex")
+    await service.baja_jugador(db, usuario, jugador_id)
+    return None
+
+
+@router.get("/equipos/{equipo_id}/jugadores/plantilla",
+            summary="CU-12 · Descargar plantilla CSV para importar un plantel")
+async def descargar_plantilla_jugadores(equipo_id: int, usuario: Actual) -> Response:
+    contenido = service.generar_plantilla_csv_jugadores()
+    return Response(
+        content="﻿" + contenido,  # BOM: asi Excel/Sheets detectan UTF-8 en vez de leer Latin-1
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=plantilla_jugadores.csv"},
+    )
+
+
+@router.get("/equipos/{equipo_id}/jugadores/exportar",
+            summary="CU-12 · Exportar el plantel actual a CSV")
+async def exportar_jugadores_csv(equipo_id: int, usuario: Actual, db: Db,
+                                 activos: bool = True,
+                                 orden: str = Query("dorsal", pattern="^(dorsal|posicion|apellido)$"),
+                                 ) -> Response:
+    contenido = await service.exportar_jugadores_csv(db, usuario, equipo_id, activos=activos, orden=orden)
+    return Response(
+        content="﻿" + contenido,  # BOM: asi Excel/Sheets detectan UTF-8 en vez de leer Latin-1
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=plantel_equipo_{equipo_id}.csv"},
+    )
 
 
 @router.post("/equipos/{equipo_id}/jugadores/importar", response_model=ResultadoImportacion,
@@ -111,7 +138,8 @@ async def baja_jugador(jugador_id: int, usuario: Actual, db: Db) -> None:
 async def importar_plantel(equipo_id: int, archivo: UploadFile, usuario: Actual, db: Db,
                            confirmar: bool = Query(False, description="False devuelve la vista previa sin guardar")
                            ) -> ResultadoImportacion:
-    pendiente("CU-12", "Sprint 2", "Alex")
+    contenido = await archivo.read()
+    return await service.importar_plantel(db, usuario, equipo_id, contenido, confirmar=confirmar)
 
 
 # ---------------- CU-13 · Competiciones ----------------

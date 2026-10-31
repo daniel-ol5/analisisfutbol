@@ -8,7 +8,7 @@ clubes (Pb-03), salvo las que cuelgan de otra que ya lo tenga.
 
 from datetime import UTC, date, datetime
 
-from sqlalchemy import Date, DateTime, Float, ForeignKey, Integer, String
+from sqlalchemy import Date, DateTime, Float, ForeignKey, Index, Integer, String, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -37,6 +37,19 @@ class Equipo(Base):
 
 class Jugador(Base):
     __tablename__ = "jugador"
+    __table_args__ = (
+        # Dorsal único por equipo entre jugadores activos (CU-11). Parcial
+        # porque un dorsal debe poder reasignarse tras dar de baja a quien
+        # lo tenía, igual que valida `_validar_dorsal_disponible` en service.py.
+        Index(
+            "ux_jugador_equipo_dorsal_activo",
+            "equipo_id",
+            "dorsal",
+            unique=True,
+            postgresql_where=text("activo"),
+            sqlite_where=text("activo"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     club_id: Mapped[int] = mapped_column(ForeignKey("club.id"), index=True)

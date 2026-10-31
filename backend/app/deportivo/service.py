@@ -5,9 +5,12 @@ lanza excepciones de dominio. Así se prueba sin levantar el servidor.
 """
 
 import colorsys
+import csv
+import io
 import math
 
 from fastapi import HTTPException, status
+from pydantic import ValidationError
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -18,10 +21,24 @@ from app.deportivo.schemas import (
     AvisoColores,
     EquipoCrear,
     EquipoEditar,
+    FilaImportacion,
+    JugadorBase,
+    JugadorCrear,
+    JugadorEditar,
+    ResultadoImportacion,
 )
 from app.deportivo.schemas import (
     Equipo as EquipoOut,
 )
+from app.deportivo.schemas import (
+    Jugador as JugadorOut,
+)
+
+_ORDEN_JUGADOR = {
+    "dorsal": Jugador.dorsal,
+    "posicion": Jugador.posicion,
+    "apellido": Jugador.apellido,
+}
 
 
 def _hex_a_hsv(hex_color: str) -> tuple[float, float, float]:
@@ -252,4 +269,323 @@ async def verificar_colores_equipo(
         hay_riesgo=hay_riesgo,
         distancia_hsv=distancia_redondeada,
         mensaje=mensaje,
+    )
+
+
+async def _equipo_del_club(
+    db: AsyncSession, usuario: UsuarioActual, equipo_id: int
+) -> Equipo:
+    res = await db.execute(select(Equipo).where(Equipo.id == equipo_id))
+    return verificar_pertenencia(res.scalar_one_or_none(), usuario)
+
+
+async def _validar_dorsal_disponible(
+    db: AsyncSession,
+    club_id: int,
+    equipo_id: int,
+    dorsal: int,
+    excluir_jugador_id: int | None = None,
+) -> None:
+    stmt = select(Jugador).where(
+        Jugador.club_id == club_id,
+        Jugador.equipo_id == equipo_id,
+        Jugador.dorsal == dorsal,
+        Jugador.activo,
+    )
+    if excluir_jugador_id is not None:
+        stmt = stmt.where(Jugador.id != excluir_jugador_id)
+    res = await db.execute(stmt)
+    if res.scalar_one_or_none() is not None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"El dorsal {dorsal} ya está en uso por otro jugador activo del equipo.",
+        )
+
+
+async def listar_jugadores(
+    db: AsyncSession,
+    usuario: UsuarioActual,
+    equipo_id: int,
+    activos: bool = True,
+    orden: str = "dorsal",
+) -> list[JugadorOut]:
+    """CU-11: lista el plantel de un equipo, verificando pertenencia al club."""
+    await _equipo_del_club(db, usuario, equipo_id)
+
+    stmt = select(Jugador).where(
+        Jugador.club_id == usuario.club_id, Jugador.equipo_id == equipo_id
+    )
+    if activos:
+        stmt = stmt.where(Jugador.activo)
+    stmt = stmt.order_by(_ORDEN_JUGADOR[orden])
+
+    res = await db.execute(stmt)
+    return [JugadorOut.model_validate(j) for j in res.scalars().all()]
+
+
+async def crear_jugador(
+    db: AsyncSession, usuario: UsuarioActual, datos: JugadorCrear
+) -> JugadorOut:
+    """CU-11: alta de jugador con dorsal único entre los activos del equipo."""
+    await _equipo_del_club(db, usuario, datos.equipo_id)
+    await _validar_dorsal_disponible(db, usuario.club_id, datos.equipo_id, datos.dorsal)
+
+    jugador = Jugador(
+        club_id=usuario.club_id,
+        equipo_id=datos.equipo_id,
+        nombre=datos.nombre,
+        apellido=datos.apellido,
+        dorsal=datos.dorsal,
+        posicion=datos.posicion,
+        pie_habil=datos.pie_habil,
+        altura_cm=datos.altura_cm,
+        peso_kg=datos.peso_kg,
+        fecha_nacimiento=datos.fecha_nacimiento,
+        activo=True,
+    )
+    db.add(jugador)
+    await db.commit()
+    await db.refresh(jugador)
+
+    return JugadorOut.model_validate(jugador)
+
+
+async def ver_jugador(
+    db: AsyncSession, usuario: UsuarioActual, jugador_id: int
+) -> JugadorOut:
+    """CU-11: obtiene la ficha de un jugador verificando pertenencia al club."""
+    res = await db.execute(select(Jugador).where(Jugador.id == jugador_id))
+    jugador = verificar_pertenencia(res.scalar_one_or_none(), usuario)
+    return JugadorOut.model_validate(jugador)
+
+
+async def editar_jugador(
+    db: AsyncSession, usuario: UsuarioActual, jugador_id: int, datos: JugadorEditar
+) -> JugadorOut:
+    """CU-11: edición parcial de la ficha, re-validando el dorsal si cambia."""
+    res = await db.execute(select(Jugador).where(Jugador.id == jugador_id))
+    jugador = verificar_pertenencia(res.scalar_one_or_none(), usuario)
+
+    if datos.dorsal is not None and datos.dorsal != jugador.dorsal:
+        await _validar_dorsal_disponible(
+            db, usuario.club_id, jugador.equipo_id, datos.dorsal, excluir_jugador_id=jugador.id
+        )
+        jugador.dorsal = datos.dorsal
+    if datos.nombre is not None:
+        jugador.nombre = datos.nombre
+    if datos.apellido is not None:
+        jugador.apellido = datos.apellido
+    if datos.posicion is not None:
+        jugador.posicion = datos.posicion
+    if datos.pie_habil is not None:
+        jugador.pie_habil = datos.pie_habil
+    if datos.altura_cm is not None:
+        jugador.altura_cm = datos.altura_cm
+    if datos.peso_kg is not None:
+        jugador.peso_kg = datos.peso_kg
+    if datos.fecha_nacimiento is not None:
+        jugador.fecha_nacimiento = datos.fecha_nacimiento
+
+    await db.commit()
+    await db.refresh(jugador)
+
+    return JugadorOut.model_validate(jugador)
+
+
+async def baja_jugador(
+    db: AsyncSession, usuario: UsuarioActual, jugador_id: int
+) -> None:
+    """CU-11: baja lógica del jugador, preservando sus métricas históricas."""
+    res = await db.execute(select(Jugador).where(Jugador.id == jugador_id))
+    jugador = verificar_pertenencia(res.scalar_one_or_none(), usuario)
+
+    jugador.activo = False
+    await db.commit()
+
+
+_COLUMNAS_CSV_REQUERIDAS = {"nombre", "apellido", "dorsal", "altura_cm"}
+_COLUMNAS_CSV_OPCIONALES = ("posicion", "pie_habil", "peso_kg", "fecha_nacimiento")
+_COLUMNAS_CSV_ORDEN = (
+    "nombre", "apellido", "dorsal", "altura_cm", "posicion", "pie_habil", "peso_kg", "fecha_nacimiento",
+)
+_FILA_EJEMPLO_CSV = {
+    "nombre": "Marcelo",
+    "apellido": "Moreno",
+    "dorsal": "9",
+    "altura_cm": "181",
+    "posicion": "DEL",
+    "pie_habil": "DER",
+    "peso_kg": "78",
+    "fecha_nacimiento": "1998-05-12",
+}
+
+
+def _detectar_delimitador(texto: str) -> str:
+    """Detecta si el CSV usa coma o punto y coma (Excel en español usa ';'
+    porque ',' es el separador decimal). Si no logra detectarlo, asume coma."""
+    primera_linea = texto.splitlines()[0] if texto.splitlines() else ""
+    try:
+        return csv.Sniffer().sniff(primera_linea, delimiters=",;").delimiter
+    except csv.Error:
+        return ","
+
+
+def generar_plantilla_csv_jugadores() -> str:
+    """CU-12: CSV de ejemplo con las columnas esperadas por `importar_plantel`,
+    para que el usuario lo complete y vuelva a subirlo. Se usa ';' como
+    separador porque es lo que Excel/Sheets en español esperan por defecto."""
+    buffer = io.StringIO()
+    escritor = csv.DictWriter(buffer, fieldnames=_COLUMNAS_CSV_ORDEN, delimiter=";")
+    escritor.writeheader()
+    escritor.writerow(_FILA_EJEMPLO_CSV)
+    return buffer.getvalue()
+
+
+async def exportar_jugadores_csv(
+    db: AsyncSession,
+    usuario: UsuarioActual,
+    equipo_id: int,
+    activos: bool = True,
+    orden: str = "dorsal",
+) -> str:
+    """CU-12: exporta el plantel actual a CSV con las mismas columnas que
+    `importar_plantel`, para respaldo o para editarlo y volver a subirlo. Se
+    usa ';' como separador porque es lo que Excel/Sheets en español esperan
+    por defecto."""
+    jugadores = await listar_jugadores(db, usuario, equipo_id, activos=activos, orden=orden)
+
+    buffer = io.StringIO()
+    escritor = csv.DictWriter(buffer, fieldnames=_COLUMNAS_CSV_ORDEN, delimiter=";")
+    escritor.writeheader()
+    for j in jugadores:
+        escritor.writerow({
+            "nombre": j.nombre,
+            "apellido": j.apellido,
+            "dorsal": j.dorsal,
+            "altura_cm": j.altura_cm,
+            "posicion": j.posicion.value,
+            "pie_habil": j.pie_habil.value,
+            "peso_kg": j.peso_kg if j.peso_kg is not None else "",
+            "fecha_nacimiento": j.fecha_nacimiento.isoformat() if j.fecha_nacimiento else "",
+        })
+    return buffer.getvalue()
+
+
+async def importar_plantel(
+    db: AsyncSession,
+    usuario: UsuarioActual,
+    equipo_id: int,
+    contenido: bytes,
+    confirmar: bool = False,
+) -> ResultadoImportacion:
+    """CU-12: valida e importa un plantel desde CSV.
+
+    Las filas válidas se importan aunque otras tengan errores. Con
+    `confirmar=False` se devuelve la vista previa (nada se guarda); con
+    `confirmar=True` se persisten las filas válidas. Columnas esperadas:
+    nombre, apellido, dorsal, altura_cm (obligatorias) y posicion,
+    pie_habil, peso_kg, fecha_nacimiento (opcionales), con los mismos
+    códigos que usa la API (ARQ/DEF/MED/DEL, IZQ/DER/AMBOS, fecha ISO).
+    """
+    await _equipo_del_club(db, usuario, equipo_id)
+
+    try:
+        texto = contenido.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "El archivo no es un CSV de texto válido (UTF-8).",
+        ) from None
+
+    delimitador = _detectar_delimitador(texto)
+    lector = csv.DictReader(io.StringIO(texto), delimiter=delimitador)
+    columnas = set(lector.fieldnames or [])
+    if not columnas:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "El archivo CSV está vacío."
+        )
+    faltantes = _COLUMNAS_CSV_REQUERIDAS - columnas
+    if faltantes:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            f"Faltan columnas obligatorias en el CSV: {', '.join(sorted(faltantes))}.",
+        )
+
+    res = await db.execute(
+        select(Jugador.dorsal).where(
+            Jugador.club_id == usuario.club_id,
+            Jugador.equipo_id == equipo_id,
+            Jugador.activo,
+        )
+    )
+    dorsales_usados = set(res.scalars().all())
+
+    detalle: list[FilaImportacion] = []
+    validas: list[JugadorBase] = []
+
+    for i, fila in enumerate(lector, start=1):
+        datos_fila = {
+            clave: (valor or "").strip()
+            for clave, valor in fila.items()
+            if clave is not None
+        }
+
+        candidato: dict = {
+            "nombre": datos_fila.get("nombre", ""),
+            "apellido": datos_fila.get("apellido", ""),
+            "dorsal": datos_fila.get("dorsal", ""),
+            "altura_cm": datos_fila.get("altura_cm", ""),
+        }
+        for columna in _COLUMNAS_CSV_OPCIONALES:
+            if datos_fila.get(columna):
+                candidato[columna] = datos_fila[columna]
+
+        try:
+            jugador_validado = JugadorBase.model_validate(candidato)
+        except ValidationError as err:
+            mensaje = "; ".join(e["msg"] for e in err.errors())
+            detalle.append(FilaImportacion(fila=i, datos=datos_fila, error=mensaje))
+            continue
+
+        if jugador_validado.dorsal in dorsales_usados:
+            detalle.append(
+                FilaImportacion(
+                    fila=i,
+                    datos=datos_fila,
+                    error=(
+                        f"El dorsal {jugador_validado.dorsal} ya está en uso en el "
+                        "equipo o duplicado en el archivo."
+                    ),
+                )
+            )
+            continue
+
+        dorsales_usados.add(jugador_validado.dorsal)
+        validas.append(jugador_validado)
+        detalle.append(FilaImportacion(fila=i, datos=datos_fila, error=None))
+
+    if confirmar:
+        for datos_jugador in validas:
+            db.add(
+                Jugador(
+                    club_id=usuario.club_id,
+                    equipo_id=equipo_id,
+                    nombre=datos_jugador.nombre,
+                    apellido=datos_jugador.apellido,
+                    dorsal=datos_jugador.dorsal,
+                    posicion=datos_jugador.posicion,
+                    pie_habil=datos_jugador.pie_habil,
+                    altura_cm=datos_jugador.altura_cm,
+                    peso_kg=datos_jugador.peso_kg,
+                    fecha_nacimiento=datos_jugador.fecha_nacimiento,
+                    activo=True,
+                )
+            )
+        await db.commit()
+
+    return ResultadoImportacion(
+        total=len(detalle),
+        importadas=len(validas),
+        con_error=len(detalle) - len(validas),
+        detalle=detalle,
     )

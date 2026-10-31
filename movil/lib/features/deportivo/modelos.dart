@@ -76,3 +76,74 @@ class Equipo {
     return luminancia > 0.65;
   }
 }
+
+/// Etiquetas en español de la posición de juego  —  CU-11.
+const Map<String, String> etiquetasPosicion = {
+  'ARQ': 'Arquero',
+  'DEF': 'Defensor',
+  'MED': 'Mediocampista',
+  'DEL': 'Delantero',
+};
+
+/// Etiquetas en español del pie hábil  —  CU-11.
+const Map<String, String> etiquetasPie = {
+  'IZQ': 'Izquierdo',
+  'DER': 'Derecho',
+  'AMBOS': 'Ambos',
+};
+
+class Jugador {
+  const Jugador({
+    required this.id,
+    required this.equipoId,
+    required this.nombre,
+    required this.apellido,
+    required this.dorsal,
+    required this.posicion,
+    required this.pieHabil,
+    required this.alturaCm,
+    required this.pesoKg,
+    required this.activo,
+  });
+
+  final int id;
+  final int equipoId;
+  final String nombre;
+  final String apellido;
+  final int dorsal;
+  final String posicion;
+  final String pieHabil;
+  final int alturaCm;
+  final double? pesoKg;
+  final bool activo;
+
+  String get nombreCompleto => '$nombre $apellido';
+  String get posicionLegible => etiquetasPosicion[posicion] ?? posicion;
+  String get pieLegible => etiquetasPie[pieHabil] ?? pieHabil;
+
+  factory Jugador.fromJson(Map<String, dynamic> json) => Jugador(
+        id: json['id'] as int? ?? 0,
+        equipoId: json['equipo_id'] as int? ?? 0,
+        nombre: json['nombre'] as String? ?? '',
+        apellido: json['apellido'] as String? ?? '',
+        dorsal: json['dorsal'] as int? ?? 0,
+        posicion: json['posicion'] as String? ?? 'MED',
+        pieHabil: json['pie_habil'] as String? ?? 'DER',
+        alturaCm: json['altura_cm'] as int? ?? 0,
+        pesoKg: (json['peso_kg'] as num?)?.toDouble(),
+        activo: json['activo'] as bool? ?? true,
+      );
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'equipo_id': equipoId,
+        'nombre': nombre,
+        'apellido': apellido,
+        'dorsal': dorsal,
+        'posicion': posicion,
+        'pie_habil': pieHabil,
+        'altura_cm': alturaCm,
+        'peso_kg': pesoKg,
+        'activo': activo,
+      };
+}

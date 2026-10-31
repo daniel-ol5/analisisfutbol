@@ -5,9 +5,43 @@ import 'package:areatecnica/features/deportivo/api.dart';
 import 'package:areatecnica/features/deportivo/modelos.dart';
 import 'package:areatecnica/features/deportivo/pagina.dart';
 import 'package:areatecnica/features/deportivo/widgets/tarjeta_equipo.dart';
+import 'package:areatecnica/features/deportivo/widgets/tarjeta_jugador.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+/// Simula en memoria el canal nativo de flutter_secure_storage, que no tiene
+/// implementación real al correr `flutter test` (sin dispositivo/emulador).
+const _canalAlmacenamientoSeguro =
+    MethodChannel('plugins.it_nomads.com/flutter_secure_storage');
+
+void _mockearAlmacenamientoSeguro(Map<String, String> valoresIniciales) {
+  final datos = Map<String, String>.of(valoresIniciales);
+  TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+      .setMockMethodCallHandler(_canalAlmacenamientoSeguro, (call) async {
+    switch (call.method) {
+      case 'write':
+        datos[call.arguments['key'] as String] =
+            call.arguments['value'] as String;
+        return null;
+      case 'read':
+        return datos[call.arguments['key'] as String];
+      case 'readAll':
+        return datos;
+      case 'delete':
+        datos.remove(call.arguments['key'] as String);
+        return null;
+      case 'deleteAll':
+        datos.clear();
+        return null;
+      case 'containsKey':
+        return datos.containsKey(call.arguments['key'] as String);
+      default:
+        return null;
+    }
+  });
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -166,9 +200,11 @@ void main() {
 
     testWidgets('DeportivoPagina renderiza lista, chips de filtrado y abre ficha en modal',
         (tester) async {
-      SharedPreferences.setMockInitialValues({
+      _mockearAlmacenamientoSeguro({
         'areatecnica.access_token': 'fake.token.jwt',
         'areatecnica.refresh_token': 'fake.refresh.jwt',
+      });
+      SharedPreferences.setMockInitialValues({
         'cache.deportivo.equipos': jsonEncode([
           {
             'id': 1,
@@ -246,6 +282,192 @@ void main() {
       await tester.tap(find.text('CERRAR FICHA'));
       await tester.pumpAndSettle();
       expect(find.text('CERRAR FICHA'), findsNothing);
+    });
+  });
+
+  group('T-045 · Modelo Jugador', () {
+    test('Serialización y deserialización correcta de Jugador (CU-11)', () {
+      final json = {
+        'id': 7,
+        'equipo_id': 1,
+        'nombre': 'Marcelo',
+        'apellido': 'Moreno',
+        'dorsal': 9,
+        'posicion': 'DEL',
+        'pie_habil': 'DER',
+        'altura_cm': 178,
+        'peso_kg': 75.5,
+        'activo': true,
+      };
+
+      final jugador = Jugador.fromJson(json);
+
+      expect(jugador.id, 7);
+      expect(jugador.equipoId, 1);
+      expect(jugador.nombreCompleto, 'Marcelo Moreno');
+      expect(jugador.dorsal, 9);
+      expect(jugador.posicionLegible, 'Delantero');
+      expect(jugador.pieLegible, 'Derecho');
+      expect(jugador.alturaCm, 178);
+      expect(jugador.pesoKg, 75.5);
+      expect(jugador.activo, isTrue);
+
+      final map = jugador.toJson();
+      expect(map['nombre'], 'Marcelo');
+      expect(map['dorsal'], 9);
+    });
+  });
+
+  group(
+      'T-045 · Criterio de Aceptación: datos disponibles sin conexión tras la primera sincronización',
+      () {
+    test('Carga instantánea del plantel desde caché local en < 100 ms', () async {
+      SharedPreferences.setMockInitialValues({
+        'cache.deportivo.jugadores.1': jsonEncode([
+          {
+            'id': 1,
+            'equipo_id': 1,
+            'nombre': 'Marcelo',
+            'apellido': 'Moreno',
+            'dorsal': 9,
+            'posicion': 'DEL',
+            'pie_habil': 'DER',
+            'altura_cm': 178,
+            'peso_kg': 75.5,
+            'activo': true,
+          },
+          {
+            'id': 2,
+            'equipo_id': 1,
+            'nombre': 'Carlos',
+            'apellido': 'Lampe',
+            'dorsal': 1,
+            'posicion': 'ARQ',
+            'pie_habil': 'DER',
+            'altura_cm': 188,
+            'peso_kg': 82.0,
+            'activo': true,
+          },
+        ]),
+      });
+
+      final cronometro = Stopwatch()..start();
+      final jugadores = await listarJugadores(1);
+      cronometro.stop();
+
+      expect(jugadores.length, 2);
+      expect(jugadores.first.nombreCompleto, 'Marcelo Moreno');
+      expect(cronometro.elapsedMilliseconds, lessThan(100));
+    });
+  });
+
+  group('T-045 · Interfaz de Usuario y Búsqueda del Plantel', () {
+    testWidgets('TarjetaJugador renderiza datos con alto contraste',
+        (tester) async {
+      const jugador = Jugador(
+        id: 1,
+        equipoId: 1,
+        nombre: 'Marcelo',
+        apellido: 'Moreno',
+        dorsal: 9,
+        posicion: 'DEL',
+        pieHabil: 'DER',
+        alturaCm: 178,
+        pesoKg: 75.5,
+        activo: true,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: temaClaro,
+          home: Scaffold(body: TarjetaJugador(jugador: jugador)),
+        ),
+      );
+
+      expect(find.text('9'), findsOneWidget);
+      expect(find.text('Marcelo Moreno'), findsOneWidget);
+      expect(find.text('Delantero · Pie Derecho · 178 cm'), findsOneWidget);
+      expect(find.text('BAJA'), findsNothing);
+    });
+
+    testWidgets(
+        'DeportivoPagina: pestaña Plantel carga desde caché y filtra por nombre o dorsal',
+        (tester) async {
+      _mockearAlmacenamientoSeguro({
+        'areatecnica.access_token': 'fake.token.jwt',
+        'areatecnica.refresh_token': 'fake.refresh.jwt',
+      });
+      SharedPreferences.setMockInitialValues({
+        'cache.deportivo.equipos': jsonEncode([
+          {
+            'id': 1,
+            'club_id': 1,
+            'nombre': 'Primera División',
+            'categoria': 'Primera',
+            'temporada': '2026',
+            'color_local': '#1E5AA8',
+            'color_visitante': '#FFFFFF',
+            'color_arquero': '#F2C200',
+            'activo': true,
+            'jugadores': 2,
+          },
+        ]),
+        'cache.deportivo.jugadores.1': jsonEncode([
+          {
+            'id': 1,
+            'equipo_id': 1,
+            'nombre': 'Marcelo',
+            'apellido': 'Moreno',
+            'dorsal': 9,
+            'posicion': 'DEL',
+            'pie_habil': 'DER',
+            'altura_cm': 178,
+            'peso_kg': 75.5,
+            'activo': true,
+          },
+          {
+            'id': 2,
+            'equipo_id': 1,
+            'nombre': 'Carlos',
+            'apellido': 'Lampe',
+            'dorsal': 1,
+            'posicion': 'ARQ',
+            'pie_habil': 'DER',
+            'altura_cm': 188,
+            'peso_kg': 82.0,
+            'activo': true,
+          },
+        ]),
+      });
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: temaClaro,
+          home: const DeportivoPagina(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Cambiamos a la pestaña Plantel
+      await tester.tap(find.text('Plantel'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Marcelo Moreno'), findsOneWidget);
+      expect(find.text('Carlos Lampe'), findsOneWidget);
+      expect(find.text('2 JUGADORES DEL PLANTEL'), findsOneWidget);
+
+      // Búsqueda por nombre
+      await tester.enterText(find.byType(TextField), 'Carlos');
+      await tester.pumpAndSettle();
+      expect(find.text('Carlos Lampe'), findsOneWidget);
+      expect(find.text('Marcelo Moreno'), findsNothing);
+      expect(find.text('1 JUGADOR DEL PLANTEL'), findsOneWidget);
+
+      // Búsqueda por dorsal
+      await tester.enterText(find.byType(TextField), '9');
+      await tester.pumpAndSettle();
+      expect(find.text('Marcelo Moreno'), findsOneWidget);
+      expect(find.text('Carlos Lampe'), findsNothing);
     });
   });
 }
