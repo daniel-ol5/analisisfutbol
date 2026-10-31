@@ -7,6 +7,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { EquiposView } from "../components/EquiposView";
+import { JugadoresView } from "../components/JugadoresView";
 
 const TABS = [
   {
@@ -125,9 +126,7 @@ export function DeportivoPage() {
                   fontFamily: "monospace",
                   padding: "1px 5px",
                   borderRadius: 3,
-                  backgroundColor: esActiva
-                    ? "rgba(11, 107, 69, 0.12)"
-                    : "var(--ground)",
+                  backgroundColor: esActiva ? "rgba(11, 107, 69, 0.12)" : "var(--ground)",
                   color: esActiva ? "var(--pitch)" : "var(--text-3)",
                   border: "1px solid var(--line)",
                 }}
@@ -142,36 +141,7 @@ export function DeportivoPage() {
       {/* Contenido según pestaña activa */}
       {tabActiva === "equipos" && <EquiposView />}
 
-      {tabActiva === "jugadores" && (
-        <div
-          style={{
-            padding: 32,
-            background: "var(--surface)",
-            border: "1px solid var(--line)",
-            borderRadius: 8,
-          }}
-        >
-          <span
-            style={{
-              fontSize: 11,
-              fontWeight: 700,
-              color: "var(--pitch)",
-              textTransform: "uppercase",
-              letterSpacing: "0.08em",
-            }}
-          >
-            Sprint 2 · Alex · CU-11, CU-12
-          </span>
-          <h3 style={{ margin: "6px 0 8px", fontSize: 18, color: "var(--text)" }}>
-            Gestión de Jugadores e Importación de Plantel
-          </h3>
-          <p style={{ margin: 0, fontSize: 13, color: "var(--text-2)", lineHeight: 1.6 }}>
-            Este módulo implementa el alta, edición, baja y consulta de la ficha médica/antropométrica
-            de jugadores (dorsal, pie hábil, estatura en cm para estimación del punto de apoyo en visión),
-            así como la importación masiva de planteles desde archivos CSV.
-          </p>
-        </div>
-      )}
+      {tabActiva === "jugadores" && <JugadoresView />}
 
       {tabActiva === "partidos" && (
         <div
@@ -197,8 +167,8 @@ export function DeportivoPage() {
             Competiciones y Agenda de Partidos
           </h3>
           <p style={{ margin: 0, fontSize: 13, color: "var(--text-2)", lineHeight: 1.6 }}>
-            Programación de encuentros oficiales y amistosos, definición de torneos, reprogramaciones
-            y cancelaciones de partidos.
+            Programación de encuentros oficiales y amistosos, definición de torneos,
+            reprogramaciones y cancelaciones de partidos.
           </p>
         </div>
       )}
@@ -227,8 +197,8 @@ export function DeportivoPage() {
             Alineación y Formación Táctica
           </h3>
           <p style={{ margin: 0, fontSize: 13, color: "var(--text-2)", lineHeight: 1.6 }}>
-            Pizarra táctica interactiva para definir el esquema inicial (4-3-3, 4-4-2, 4-2-3-1, 3-5-2),
-            titulares, suplentes y dirección de ataque en cada tiempo.
+            Pizarra táctica interactiva para definir el esquema inicial (4-3-3, 4-4-2, 4-2-3-1,
+            3-5-2), titulares, suplentes y dirección de ataque en cada tiempo.
           </p>
         </div>
       )}
