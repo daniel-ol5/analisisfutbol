@@ -405,6 +405,70 @@ async def baja_jugador(
 
 _COLUMNAS_CSV_REQUERIDAS = {"nombre", "apellido", "dorsal", "altura_cm"}
 _COLUMNAS_CSV_OPCIONALES = ("posicion", "pie_habil", "peso_kg", "fecha_nacimiento")
+_COLUMNAS_CSV_ORDEN = (
+    "nombre", "apellido", "dorsal", "altura_cm", "posicion", "pie_habil", "peso_kg", "fecha_nacimiento",
+)
+_FILA_EJEMPLO_CSV = {
+    "nombre": "Marcelo",
+    "apellido": "Moreno",
+    "dorsal": "9",
+    "altura_cm": "181",
+    "posicion": "DEL",
+    "pie_habil": "DER",
+    "peso_kg": "78",
+    "fecha_nacimiento": "1998-05-12",
+}
+
+
+def _detectar_delimitador(texto: str) -> str:
+    """Detecta si el CSV usa coma o punto y coma (Excel en español usa ';'
+    porque ',' es el separador decimal). Si no logra detectarlo, asume coma."""
+    primera_linea = texto.splitlines()[0] if texto.splitlines() else ""
+    try:
+        return csv.Sniffer().sniff(primera_linea, delimiters=",;").delimiter
+    except csv.Error:
+        return ","
+
+
+def generar_plantilla_csv_jugadores() -> str:
+    """CU-12: CSV de ejemplo con las columnas esperadas por `importar_plantel`,
+    para que el usuario lo complete y vuelva a subirlo. Se usa ';' como
+    separador porque es lo que Excel/Sheets en español esperan por defecto."""
+    buffer = io.StringIO()
+    escritor = csv.DictWriter(buffer, fieldnames=_COLUMNAS_CSV_ORDEN, delimiter=";")
+    escritor.writeheader()
+    escritor.writerow(_FILA_EJEMPLO_CSV)
+    return buffer.getvalue()
+
+
+async def exportar_jugadores_csv(
+    db: AsyncSession,
+    usuario: UsuarioActual,
+    equipo_id: int,
+    activos: bool = True,
+    orden: str = "dorsal",
+) -> str:
+    """CU-12: exporta el plantel actual a CSV con las mismas columnas que
+    `importar_plantel`, para respaldo o para editarlo y volver a subirlo. Se
+    usa ';' como separador porque es lo que Excel/Sheets en español esperan
+    por defecto."""
+    jugadores = await listar_jugadores(db, usuario, equipo_id, activos=activos, orden=orden)
+
+    buffer = io.StringIO()
+    escritor = csv.DictWriter(buffer, fieldnames=_COLUMNAS_CSV_ORDEN, delimiter=";")
+    escritor.writeheader()
+    for j in jugadores:
+        escritor.writerow({
+            "nombre": j.nombre,
+            "apellido": j.apellido,
+            "dorsal": j.dorsal,
+            "altura_cm": j.altura_cm,
+            "posicion": j.posicion.value,
+            "pie_habil": j.pie_habil.value,
+            "peso_kg": j.peso_kg if j.peso_kg is not None else "",
+            "fecha_nacimiento": j.fecha_nacimiento.isoformat() if j.fecha_nacimiento else "",
+        })
+    return buffer.getvalue()
 
 
 async def importar_plantel(
@@ -433,7 +497,8 @@ async def importar_plantel(
             "El archivo no es un CSV de texto válido (UTF-8).",
         ) from None
 
-    lector = csv.DictReader(io.StringIO(texto))
+    delimitador = _detectar_delimitador(texto)
+    lector = csv.DictReader(io.StringIO(texto), delimiter=delimitador)
     columnas = set(lector.fieldnames or [])
     if not columnas:
         raise HTTPException(

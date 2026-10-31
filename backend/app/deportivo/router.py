@@ -11,6 +11,7 @@ Responsables segun el Sprint Planning:
 """
 
 from fastapi import APIRouter, Query, UploadFile, status
+from fastapi.responses import Response
 
 from app.core.deps import Actual, Db
 from app.core.pendiente import RESPUESTA_501, pendiente
@@ -105,6 +106,31 @@ async def editar_jugador(jugador_id: int, datos: JugadorEditar, usuario: Actual,
 async def baja_jugador(jugador_id: int, usuario: Actual, db: Db) -> None:
     await service.baja_jugador(db, usuario, jugador_id)
     return None
+
+
+@router.get("/equipos/{equipo_id}/jugadores/plantilla",
+            summary="CU-12 · Descargar plantilla CSV para importar un plantel")
+async def descargar_plantilla_jugadores(equipo_id: int, usuario: Actual) -> Response:
+    contenido = service.generar_plantilla_csv_jugadores()
+    return Response(
+        content="﻿" + contenido,  # BOM: asi Excel/Sheets detectan UTF-8 en vez de leer Latin-1
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=plantilla_jugadores.csv"},
+    )
+
+
+@router.get("/equipos/{equipo_id}/jugadores/exportar",
+            summary="CU-12 · Exportar el plantel actual a CSV")
+async def exportar_jugadores_csv(equipo_id: int, usuario: Actual, db: Db,
+                                 activos: bool = True,
+                                 orden: str = Query("dorsal", pattern="^(dorsal|posicion|apellido)$"),
+                                 ) -> Response:
+    contenido = await service.exportar_jugadores_csv(db, usuario, equipo_id, activos=activos, orden=orden)
+    return Response(
+        content="﻿" + contenido,  # BOM: asi Excel/Sheets detectan UTF-8 en vez de leer Latin-1
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=plantel_equipo_{equipo_id}.csv"},
+    )
 
 
 @router.post("/equipos/{equipo_id}/jugadores/importar", response_model=ResultadoImportacion,

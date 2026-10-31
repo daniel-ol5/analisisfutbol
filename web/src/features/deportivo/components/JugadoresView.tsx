@@ -7,17 +7,31 @@ import {
   editarJugador,
   bajaJugador,
   importarPlantel,
+  exportarJugadoresCsv,
 } from "../api";
 import { JugadorCard } from "./JugadorCard";
 import { JugadorFormModal } from "./JugadorFormModal";
 import { ImportarCsvModal } from "./ImportarCsvModal";
-import type { Jugador, JugadorCrear, JugadorEditar, ResultadoImportacion } from "../types";
+import type {
+  Jugador,
+  JugadorCrear,
+  JugadorEditar,
+  OrdenJugadores,
+  ResultadoImportacion,
+} from "../types";
+
+const ETIQUETAS_ORDEN: Record<OrdenJugadores, string> = {
+  dorsal: "Dorsal",
+  posicion: "Posición",
+  apellido: "Apellido",
+};
 
 export function JugadoresView() {
   const queryClient = useQueryClient();
   const [equipoId, setEquipoId] = useState<number | null>(null);
   const [mostrarInactivos, setMostrarInactivos] = useState(false);
   const [busqueda, setBusqueda] = useState("");
+  const [orden, setOrden] = useState<OrdenJugadores>("dorsal");
 
   const [modalFormAbierto, setModalFormAbierto] = useState(false);
   const [jugadorAEditar, setJugadorAEditar] = useState<Jugador | null>(null);
@@ -26,6 +40,8 @@ export function JugadoresView() {
   const [archivoImportar, setArchivoImportar] = useState<File | null>(null);
   const [resultadoImportar, setResultadoImportar] = useState<ResultadoImportacion | null>(null);
   const [importado, setImportado] = useState(false);
+
+  const [exportando, setExportando] = useState(false);
 
   // Consulta de equipos del club para el selector de plantel
   const { data: equipos = [] } = useQuery({
@@ -49,8 +65,8 @@ export function JugadoresView() {
     error,
     refetch,
   } = useQuery({
-    queryKey: ["jugadores", equipoId, { activos: !mostrarInactivos }],
-    queryFn: () => listarJugadores(equipoId as number, !mostrarInactivos),
+    queryKey: ["jugadores", equipoId, { activos: !mostrarInactivos, orden }],
+    queryFn: () => listarJugadores(equipoId as number, !mostrarInactivos, orden),
     enabled: equipoId !== null,
     retry: 1,
   });
@@ -130,6 +146,22 @@ export function JugadoresView() {
 
   const handleConfirmarImportar = () => {
     if (archivoImportar) mutationConfirmarImportar.mutate(archivoImportar);
+  };
+
+  const handleExportarCsv = async () => {
+    if (equipoId === null) return;
+    setExportando(true);
+    try {
+      const blob = await exportarJugadoresCsv(equipoId, !mostrarInactivos, orden);
+      const url = URL.createObjectURL(blob);
+      const enlace = document.createElement("a");
+      enlace.href = url;
+      enlace.download = `plantel_equipo_${equipoId}.csv`;
+      enlace.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setExportando(false);
+    }
   };
 
   const handleCerrarImportar = () => {
@@ -280,9 +312,62 @@ export function JugadoresView() {
             />
             Ver inactivos
           </label>
+
+          <label
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              fontSize: 12.5,
+              color: "var(--text-2)",
+            }}
+          >
+            Ordenar por
+            <select
+              value={orden}
+              onChange={(e) => setOrden(e.target.value as OrdenJugadores)}
+              style={{
+                padding: "6px 10px",
+                fontSize: 12.5,
+                fontWeight: 600,
+                borderRadius: 6,
+                border: "1px solid var(--line)",
+                background: "var(--ground)",
+                color: "var(--text)",
+                outline: "none",
+              }}
+            >
+              {Object.entries(ETIQUETAS_ORDEN).map(([valor, etiqueta]) => (
+                <option key={valor} value={valor}>
+                  {etiqueta}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
 
         <div style={{ display: "flex", gap: 10 }}>
+          <button
+            type="button"
+            disabled={equipoId === null || exportando || jugadoresFiltrados.length === 0}
+            onClick={handleExportarCsv}
+            style={{
+              all: "unset",
+              cursor: exportando ? "wait" : "pointer",
+              padding: "9px 18px",
+              fontSize: 13,
+              fontWeight: 700,
+              color: "var(--text)",
+              background: "var(--ground)",
+              border: "1px solid var(--line)",
+              borderRadius: 6,
+              whiteSpace: "nowrap",
+              opacity: equipoId === null || jugadoresFiltrados.length === 0 ? 0.5 : 1,
+            }}
+          >
+            {exportando ? "Exportando…" : "Exportar CSV"}
+          </button>
+
           <button
             type="button"
             disabled={equipoId === null}
@@ -412,6 +497,7 @@ export function JugadoresView() {
       {/* Modal de importación CSV */}
       <ImportarCsvModal
         abierto={modalImportarAbierto}
+        equipoId={equipoId}
         resultado={resultadoImportar}
         importado={importado}
         cargandoPreview={mutationPreviewImportar.isPending}

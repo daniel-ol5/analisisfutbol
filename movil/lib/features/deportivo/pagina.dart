@@ -2,6 +2,10 @@
 ///
 /// T-044: Consulta de equipos en móvil (CU-09).
 /// Criterio de aceptación: Carga en menos de 2 segundos y es legible al sol.
+///
+/// T-045: Plantel y búsqueda en móvil (CU-11).
+/// Criterio de aceptación: los datos quedan disponibles sin conexión tras la
+/// primera sincronización.
 library;
 
 import 'package:flutter/material.dart';
@@ -10,8 +14,11 @@ import 'package:go_router/go_router.dart';
 import '../../app/tema.dart';
 import '../../shared/api/almacenamiento.dart';
 import 'api.dart';
+import 'datos/jugador_repository.dart';
 import 'modelos.dart';
+import 'widgets/formulario_jugador.dart';
 import 'widgets/tarjeta_equipo.dart';
+import 'widgets/tarjeta_jugador.dart';
 
 class DeportivoPagina extends StatefulWidget {
   const DeportivoPagina({super.key});
@@ -21,6 +28,8 @@ class DeportivoPagina extends StatefulWidget {
 }
 
 class _DeportivoPaginaState extends State<DeportivoPagina> {
+  final _jugadorRepository = const JugadorRepository();
+
   int _pestanaSeleccionada = 0;
 
   // Estados de la consulta de equipos (CU-09)
@@ -37,6 +46,17 @@ class _DeportivoPaginaState extends State<DeportivoPagina> {
 
   final TextEditingController _controladorBusqueda = TextEditingController();
 
+  // Estados del plantel de jugadores (CU-11 · T-045)
+  int? _equipoPlantelId;
+  List<Jugador> _jugadores = [];
+  bool _cargandoJugadores = false;
+  String? _errorJugadores;
+  String _busquedaJugadores = '';
+  bool _mostrarInactivosJugadores = false;
+
+  final TextEditingController _controladorBusquedaJugadores =
+      TextEditingController();
+
   @override
   void initState() {
     super.initState();
@@ -46,7 +66,99 @@ class _DeportivoPaginaState extends State<DeportivoPagina> {
   @override
   void dispose() {
     _controladorBusqueda.dispose();
+    _controladorBusquedaJugadores.dispose();
     super.dispose();
+  }
+
+  void _seleccionarPestana(int pestana) {
+    setState(() => _pestanaSeleccionada = pestana);
+    if (pestana == 1 && _equipoPlantelId == null && _equipos.isNotEmpty) {
+      _equipoPlantelId = _equipos.first.id;
+      _cargarJugadores();
+    }
+  }
+
+  Future<void> _cargarJugadores({bool forzarRed = false}) async {
+    final equipoId = _equipoPlantelId;
+    if (equipoId == null) return;
+
+    setState(() {
+      _cargandoJugadores = true;
+      _errorJugadores = null;
+    });
+
+    try {
+      final res = await _jugadorRepository.listar(
+        equipoId,
+        activos: !_mostrarInactivosJugadores,
+        forzarRed: forzarRed,
+      );
+      if (!mounted) return;
+      setState(() {
+        _jugadores = res;
+        _cargandoJugadores = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _errorJugadores = e.toString();
+        _cargandoJugadores = false;
+      });
+    }
+  }
+
+  void _abrirFormularioJugador() {
+    final equipoId = _equipoPlantelId;
+    if (equipoId == null) return;
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        final t = Theme.of(ctx);
+        final esOscuro = t.brightness == Brightness.dark;
+        final colorFondo =
+            esOscuro ? const Color(0xFF14221C) : const Color(0xFFFFFFFF);
+        final colorBorde =
+            esOscuro ? const Color(0xFF62756A) : const Color(0xFF1E2D24);
+
+        return Container(
+          decoration: BoxDecoration(
+            color: colorFondo,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+            border: Border.all(color: colorBorde, width: 2.0),
+          ),
+          child: FormularioJugador(
+            equipoId: equipoId,
+            onCreado: (jugador) {
+              setState(() => _jugadores = [..._jugadores, jugador]);
+            },
+          ),
+        );
+      },
+    );
+  }
+
+  void _seleccionarEquipoPlantel(int equipoId) {
+    if (equipoId == _equipoPlantelId) return;
+    setState(() {
+      _equipoPlantelId = equipoId;
+      _jugadores = [];
+    });
+    _cargarJugadores();
+  }
+
+  List<Jugador> get _jugadoresFiltrados {
+    return _jugadores.where((j) {
+      final coincideTexto = _busquedaJugadores.isEmpty ||
+          j.nombreCompleto.toLowerCase().contains(_busquedaJugadores.toLowerCase()) ||
+          j.dorsal.toString().contains(_busquedaJugadores);
+
+      final coincideActivo = _mostrarInactivosJugadores || j.activo;
+
+      return coincideTexto && coincideActivo;
+    }).toList();
   }
 
   Future<void> _cargarEquipos({bool forzarRed = false}) async {
@@ -279,7 +391,7 @@ class _DeportivoPaginaState extends State<DeportivoPagina> {
                   titulo: 'Plantel',
                   codigo: 'CU-11',
                   activo: _pestanaSeleccionada == 1,
-                  onTap: () => setState(() => _pestanaSeleccionada = 1),
+                  onTap: () => _seleccionarPestana(1),
                 ),
                 _PestanaBoton(
                   titulo: 'Partidos',
@@ -298,9 +410,20 @@ class _DeportivoPaginaState extends State<DeportivoPagina> {
           ),
         ),
       ),
-      body: _pestanaSeleccionada == 0
-          ? _construirVistaEquipos(t, esOscuro)
-          : _construirVistaCasosPendientes(_pestanaSeleccionada),
+      body: switch (_pestanaSeleccionada) {
+        0 => _construirVistaEquipos(t, esOscuro),
+        1 => _construirVistaPlantel(t, esOscuro),
+        _ => _construirVistaCasosPendientes(_pestanaSeleccionada),
+      },
+      floatingActionButton: _pestanaSeleccionada == 1 && _equipoPlantelId != null
+          ? FloatingActionButton.extended(
+              onPressed: _abrirFormularioJugador,
+              backgroundColor: verde,
+              foregroundColor: Colors.white,
+              icon: const Icon(Icons.person_add),
+              label: const Text('Nuevo jugador'),
+            )
+          : null,
     );
   }
 
@@ -483,12 +606,15 @@ class _DeportivoPaginaState extends State<DeportivoPagina> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                '${_equiposFiltrados.length} ${_equiposFiltrados.length == 1 ? "EQUIPO" : "EQUIPOS"} DEL CLUB',
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 0.8,
+              Expanded(
+                child: Text(
+                  '${_equiposFiltrados.length} ${_equiposFiltrados.length == 1 ? "EQUIPO" : "EQUIPOS"} DEL CLUB',
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0.8,
+                  ),
                 ),
               ),
               InkWell(
@@ -615,16 +741,315 @@ class _DeportivoPaginaState extends State<DeportivoPagina> {
     );
   }
 
+  Widget _construirVistaPlantel(ThemeData t, bool esOscuro) {
+    return RefreshIndicator(
+      onRefresh: () => _cargarJugadores(forzarRed: true),
+      color: verde,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+        children: [
+          // Banner de autenticación si no hay sesión
+          if (!_sesionIniciada) ...[
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: esOscuro
+                    ? const Color(0xFF1E3528)
+                    : const Color(0xFFE8F5E9),
+                border: Border.all(color: verde, width: 2.0),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'SESIÓN REQUERIDA (CU-11)',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w900,
+                      color: verde,
+                      letterSpacing: 0.8,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'Para consultar el plantel del equipo se requiere una sesión activa.',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 14),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      onPressed: _conectandoDemo ? null : _iniciarSesionDemo,
+                      style: FilledButton.styleFrom(
+                        backgroundColor: verde,
+                        foregroundColor: Colors.white,
+                      ),
+                      child: Text(
+                        _conectandoDemo
+                            ? 'CONECTANDO…'
+                            : '⚡ CONECTAR SESIÓN DEMO',
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+          ] else if (_equipos.isEmpty)
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
+              decoration: BoxDecoration(
+                color: t.colorScheme.surface,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: t.colorScheme.outlineVariant,
+                  width: 1.5,
+                ),
+              ),
+              child: Column(
+                children: [
+                  const Icon(Icons.shield_outlined,
+                      size: 48, color: Color(0xFF74847A)),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'No hay equipos disponibles',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Registra o sincroniza un equipo en la pestaña Equipos para ver su plantel.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 15,
+                      color: t.colorScheme.onSurfaceVariant,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else ...[
+            // Selector de equipo si hay más de uno disponible
+            if (_equipos.length > 1) ...[
+              Container(
+                decoration: BoxDecoration(
+                  color: t.colorScheme.surface,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: esOscuro
+                        ? const Color(0xFF62756A)
+                        : const Color(0xFF1E2D24),
+                    width: 1.8,
+                  ),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<int>(
+                    value: _equipoPlantelId ?? _equipos.first.id,
+                    isExpanded: true,
+                    style: const TextStyle(
+                        fontSize: 16, fontWeight: FontWeight.w700),
+                    items: [
+                      for (final eq in _equipos)
+                        DropdownMenuItem(value: eq.id, child: Text(eq.nombre)),
+                    ],
+                    onChanged: (val) {
+                      if (val != null) _seleccionarEquipoPlantel(val);
+                    },
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
+
+            // Buscador por nombre o dorsal
+            Container(
+              decoration: BoxDecoration(
+                color: t.colorScheme.surface,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: esOscuro
+                      ? const Color(0xFF62756A)
+                      : const Color(0xFF1E2D24),
+                  width: 1.8,
+                ),
+              ),
+              child: TextField(
+                controller: _controladorBusquedaJugadores,
+                onChanged: (val) =>
+                    setState(() => _busquedaJugadores = val),
+                style:
+                    const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+                decoration: InputDecoration(
+                  hintText: 'Buscar por nombre o dorsal…',
+                  hintStyle: TextStyle(
+                    fontSize: 16,
+                    color: t.colorScheme.outline,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  prefixIcon:
+                      const Icon(Icons.search, size: 24, color: verde),
+                  suffixIcon: _busquedaJugadores.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear),
+                          onPressed: () {
+                            _controladorBusquedaJugadores.clear();
+                            setState(() => _busquedaJugadores = '');
+                          },
+                        )
+                      : null,
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16, vertical: 14),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            // Cabecera con conteo de resultados
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    '${_jugadoresFiltrados.length} ${_jugadoresFiltrados.length == 1 ? "JUGADOR" : "JUGADORES"} DEL PLANTEL',
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 0.8,
+                    ),
+                  ),
+                ),
+                InkWell(
+                  onTap: () {
+                    setState(() => _mostrarInactivosJugadores =
+                        !_mostrarInactivosJugadores);
+                    _cargarJugadores();
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                        vertical: 4, horizontal: 4),
+                    child: Row(
+                      children: [
+                        Icon(
+                          _mostrarInactivosJugadores
+                              ? Icons.check_box
+                              : Icons.check_box_outline_blank,
+                          size: 20,
+                          color: verde,
+                        ),
+                        const SizedBox(width: 4),
+                        const Text(
+                          'Ver inactivos',
+                          style: TextStyle(
+                              fontSize: 14, fontWeight: FontWeight.w700),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+
+            // Estado de carga inicial
+            if (_cargandoJugadores && _jugadores.isEmpty)
+              const Center(
+                child: Padding(
+                  padding: EdgeInsets.symmetric(vertical: 48),
+                  child: Column(
+                    children: [
+                      CircularProgressIndicator(color: verde),
+                      SizedBox(height: 16),
+                      Text(
+                        'Cargando plantel…',
+                        style: TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.w700),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            else if (_errorJugadores != null && _jugadores.isEmpty)
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFA2372A).withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border:
+                      Border.all(color: const Color(0xFFA2372A), width: 1.8),
+                ),
+                child: Column(
+                  children: [
+                    const Icon(Icons.error_outline,
+                        size: 36, color: Color(0xFFA2372A)),
+                    const SizedBox(height: 10),
+                    Text(
+                      _errorJugadores!,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                          fontSize: 16, fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 14),
+                    FilledButton(
+                      onPressed: () => _cargarJugadores(forzarRed: true),
+                      style: FilledButton.styleFrom(backgroundColor: verde),
+                      child: const Text('REINTENTAR'),
+                    ),
+                  ],
+                ),
+              )
+            else if (_jugadoresFiltrados.isEmpty)
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
+                decoration: BoxDecoration(
+                  color: t.colorScheme.surface,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: t.colorScheme.outlineVariant,
+                    width: 1.5,
+                  ),
+                ),
+                child: Column(
+                  children: [
+                    const Icon(Icons.shield_outlined,
+                        size: 48, color: Color(0xFF74847A)),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'No se encontraron jugadores',
+                      style:
+                          TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      _busquedaJugadores.isNotEmpty
+                          ? 'Prueba modificando el texto de búsqueda.'
+                          : 'No hay jugadores registrados en este equipo.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 15,
+                        color: t.colorScheme.onSurfaceVariant,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            else
+              // Listado de jugadores de alta legibilidad
+              for (final j in _jugadoresFiltrados) TarjetaJugador(jugador: j),
+          ],
+        ],
+      ),
+    );
+  }
+
   Widget _construirVistaCasosPendientes(int pestana) {
     final t = Theme.of(context);
     final datos = switch (pestana) {
-      1 => (
-          paquete: 'P2 · CU-11, CU-12',
-          titulo: 'Consultar Plantel de Jugadores',
-          responsable: 'Alex · Sprint 2',
-          desc:
-              'Consulta y búsqueda rápida de jugadores por dorsal, posición, altura antropométrica y pie hábil en campo.'
-        ),
       2 => (
           paquete: 'P2 · CU-15',
           titulo: 'Agenda de Partidos',

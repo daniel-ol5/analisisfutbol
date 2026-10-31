@@ -7,10 +7,12 @@
  */
 import { useRef, useState } from "react";
 import type { ChangeEvent, CSSProperties } from "react";
+import { descargarPlantillaJugadores } from "../api";
 import type { ResultadoImportacion } from "../types";
 
 interface ImportarCsvModalProps {
   abierto: boolean;
+  equipoId: number | null;
   resultado: ResultadoImportacion | null;
   importado: boolean;
   cargandoPreview: boolean;
@@ -23,6 +25,7 @@ interface ImportarCsvModalProps {
 
 export function ImportarCsvModal({
   abierto,
+  equipoId,
   resultado,
   importado,
   cargandoPreview,
@@ -34,8 +37,25 @@ export function ImportarCsvModal({
 }: ImportarCsvModalProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [nombreArchivo, setNombreArchivo] = useState<string | null>(null);
+  const [descargando, setDescargando] = useState(false);
 
   if (!abierto) return null;
+
+  const handleDescargarPlantilla = async () => {
+    if (equipoId === null) return;
+    setDescargando(true);
+    try {
+      const blob = await descargarPlantillaJugadores(equipoId);
+      const url = URL.createObjectURL(blob);
+      const enlace = document.createElement("a");
+      enlace.href = url;
+      enlace.download = "plantilla_jugadores.csv";
+      enlace.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setDescargando(false);
+    }
+  };
 
   const handleArchivo = (e: ChangeEvent<HTMLInputElement>) => {
     const archivo = e.target.files?.[0];
@@ -138,9 +158,24 @@ export function ImportarCsvModal({
           }}
         >
           <p style={{ margin: 0, fontSize: 13, color: "var(--text-2)", lineHeight: 1.6 }}>
-            El archivo debe tener las columnas obligatorias <code>nombre</code>, <code>apellido</code>,{" "}
-            <code>dorsal</code> y <code>altura_cm</code>; opcionalmente <code>posicion</code>,{" "}
-            <code>pie_habil</code>, <code>peso_kg</code> y <code>fecha_nacimiento</code>.
+            El archivo debe tener las columnas obligatorias <code>nombre</code>,{" "}
+            <code>apellido</code>, <code>dorsal</code> y <code>altura_cm</code>; opcionalmente{" "}
+            <code>posicion</code>, <code>pie_habil</code>, <code>peso_kg</code> y{" "}
+            <code>fecha_nacimiento</code>.{" "}
+            <button
+              type="button"
+              disabled={descargando || equipoId === null}
+              onClick={handleDescargarPlantilla}
+              style={{
+                all: "unset",
+                cursor: descargando ? "wait" : "pointer",
+                color: "var(--pitch)",
+                fontWeight: 700,
+                textDecoration: "underline",
+              }}
+            >
+              {descargando ? "Descargando…" : "Descargar plantilla CSV"}
+            </button>
           </p>
 
           {error && (
@@ -306,7 +341,12 @@ export function ImportarCsvModal({
                         <td style={celdaCuerpo}>{fila.datos.nombre || "—"}</td>
                         <td style={celdaCuerpo}>{fila.datos.apellido || "—"}</td>
                         <td style={celdaCuerpo}>{fila.datos.dorsal || "—"}</td>
-                        <td style={{ ...celdaCuerpo, color: fila.error ? "var(--risk)" : "var(--ok)" }}>
+                        <td
+                          style={{
+                            ...celdaCuerpo,
+                            color: fila.error ? "var(--risk)" : "var(--ok)",
+                          }}
+                        >
                           {fila.error ?? "Válida"}
                         </td>
                       </tr>

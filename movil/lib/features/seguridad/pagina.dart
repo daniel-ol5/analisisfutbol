@@ -25,8 +25,8 @@ class _SeguridadPaginaState extends State<SeguridadPagina> {
   final _password = TextEditingController();
 
   bool _verificandoSesion = true;
-  bool _sesionActiva = false;
   bool _cargando = false;
+  bool _ocultarPassword = true;
   String? _error;
 
   @override
@@ -45,10 +45,11 @@ class _SeguridadPaginaState extends State<SeguridadPagina> {
   Future<void> _verificarSesion() async {
     final activa = await Almacenamiento.haySesion();
     if (!mounted) return;
-    setState(() {
-      _sesionActiva = activa;
-      _verificandoSesion = false;
-    });
+    if (activa) {
+      context.go('/');
+      return;
+    }
+    setState(() => _verificandoSesion = false);
   }
 
   Future<void> _iniciarSesion() async {
@@ -60,10 +61,7 @@ class _SeguridadPaginaState extends State<SeguridadPagina> {
     try {
       await seguridad_api.iniciarSesion(_email.text.trim(), _password.text);
       if (!mounted) return;
-      setState(() {
-        _sesionActiva = true;
-        _cargando = false;
-      });
+      context.go('/');
     } on ErrorApi catch (e) {
       if (!mounted) return;
       setState(() {
@@ -79,56 +77,33 @@ class _SeguridadPaginaState extends State<SeguridadPagina> {
     }
   }
 
-  Future<void> _cerrarSesion() async {
-    setState(() => _cargando = true);
-    try {
-      await seguridad_api.cerrarSesion();
-    } catch (_) {
-      // El token local ya se borra dentro de cerrarSesion() aunque falle la
-      // llamada al backend: no bloquear el cierre de sesión por eso.
-    }
-    if (!mounted) return;
-    setState(() {
-      _sesionActiva = false;
-      _cargando = false;
-      _password.clear();
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Seguridad y Administración', style: TextStyle(fontSize: 18)),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.go('/'),
-        ),
+      body: SafeArea(
+        child: _verificandoSesion
+            ? const Center(child: CircularProgressIndicator())
+            : _vistaLogin(t),
       ),
-      body: _verificandoSesion
-          ? const Center(child: CircularProgressIndicator())
-          : _sesionActiva
-              ? _vistaSesionActiva(t)
-              : _vistaLogin(t),
     );
   }
 
-  Widget _vistaSesionActiva(ThemeData t) => ListView(
-        padding: const EdgeInsets.fromLTRB(20, 18, 20, 32),
+  Widget _cabecera(ThemeData t, String etiqueta, List<TextSpan> titulo, String subtitulo) =>
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('P1',
-              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: verde)),
+          Text(etiqueta,
+              style: t.textTheme.bodySmall?.copyWith(
+                  fontSize: 11,
+                  letterSpacing: 1.6,
+                  fontWeight: FontWeight.w700,
+                  color: t.colorScheme.outline)),
           const SizedBox(height: 10),
-          Text('Sesión iniciada.', style: t.textTheme.bodyLarge),
-          const SizedBox(height: 20),
-          FilledButton(
-            onPressed: _cargando ? null : _cerrarSesion,
-            child: _cargando
-                ? const SizedBox(
-                    width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2))
-                : const Text('Cerrar sesión'),
-          ),
+          Text.rich(TextSpan(children: titulo), style: t.textTheme.titleLarge?.copyWith(fontSize: 30)),
+          const SizedBox(height: 6),
+          Text(subtitulo,
+              style: t.textTheme.bodyMedium?.copyWith(color: t.colorScheme.onSurfaceVariant)),
         ],
       );
 
@@ -137,37 +112,86 @@ class _SeguridadPaginaState extends State<SeguridadPagina> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(20, 18, 20, 32),
           children: [
-            const Text('P1',
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: verde)),
-            const SizedBox(height: 10),
-            Text('CU-02 · Iniciar sesión', style: t.textTheme.bodyLarge),
-            const SizedBox(height: 18),
-            TextFormField(
-              controller: _email,
-              keyboardType: TextInputType.emailAddress,
-              decoration: const InputDecoration(labelText: 'Correo electrónico'),
-              validator: (v) =>
-                  (v == null || v.trim().isEmpty) ? 'Ingresá tu correo' : null,
+            _cabecera(
+              t,
+              'P1 · SEGURIDAD Y ADMINISTRACIÓN',
+              [
+                const TextSpan(text: 'Iniciar '),
+                TextSpan(text: 'sesión', style: TextStyle(color: verde)),
+              ],
+              'CU-02 · Ingresá con tu correo y contraseña para continuar.',
             ),
-            const SizedBox(height: 14),
-            TextFormField(
-              controller: _password,
-              obscureText: true,
-              decoration: const InputDecoration(labelText: 'Contraseña'),
-              validator: (v) =>
-                  (v == null || v.isEmpty) ? 'Ingresá tu contraseña' : null,
+            const SizedBox(height: 22),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(18, 20, 18, 22),
+                child: Column(
+                  children: [
+                    TextFormField(
+                      controller: _email,
+                      keyboardType: TextInputType.emailAddress,
+                      textInputAction: TextInputAction.next,
+                      decoration: const InputDecoration(
+                        labelText: 'Correo electrónico',
+                        prefixIcon: Icon(Icons.person_outline),
+                      ),
+                      validator: (v) =>
+                          (v == null || v.trim().isEmpty) ? 'Ingresá tu correo' : null,
+                    ),
+                    const SizedBox(height: 14),
+                    TextFormField(
+                      controller: _password,
+                      obscureText: _ocultarPassword,
+                      textInputAction: TextInputAction.done,
+                      onFieldSubmitted: (_) => _cargando ? null : _iniciarSesion(),
+                      decoration: InputDecoration(
+                        labelText: 'Contraseña',
+                        prefixIcon: const Icon(Icons.lock_outline),
+                        suffixIcon: IconButton(
+                          icon: Icon(_ocultarPassword
+                              ? Icons.visibility_outlined
+                              : Icons.visibility_off_outlined),
+                          onPressed: () =>
+                              setState(() => _ocultarPassword = !_ocultarPassword),
+                        ),
+                      ),
+                      validator: (v) =>
+                          (v == null || v.isEmpty) ? 'Ingresá tu contraseña' : null,
+                    ),
+                  ],
+                ),
+              ),
             ),
             if (_error != null) ...[
-              const SizedBox(height: 14),
-              Text(_error!, style: const TextStyle(color: rojo)),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                decoration: BoxDecoration(
+                  border: Border.all(color: rojo),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.error_outline, color: rojo, size: 20),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(_error!,
+                          style: const TextStyle(color: rojo, fontWeight: FontWeight.w600)),
+                    ),
+                  ],
+                ),
+              ),
             ],
-            const SizedBox(height: 20),
-            FilledButton(
-              onPressed: _cargando ? null : _iniciarSesion,
-              child: _cargando
-                  ? const SizedBox(
-                      width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Text('Iniciar sesión'),
+            const SizedBox(height: 22),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: _cargando ? null : _iniciarSesion,
+                child: _cargando
+                    ? const SizedBox(
+                        width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Text('Iniciar sesión'),
+              ),
             ),
           ],
         ),

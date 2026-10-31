@@ -119,3 +119,24 @@ export async function importarPlantel(
   );
   return data;
 }
+
+/** CU-12: Descargar la plantilla CSV de ejemplo para importar un plantel. */
+export async function descargarPlantillaJugadores(equipoId: number): Promise<Blob> {
+  const { data } = await api.get(`/deportivo/equipos/${equipoId}/jugadores/plantilla`, {
+    responseType: "blob",
+  });
+  return data;
+}
+
+/** CU-12: Exportar a CSV el plantel actual de un equipo. */
+export async function exportarJugadoresCsv(
+  equipoId: number,
+  activos = true,
+  orden: OrdenJugadores = "dorsal",
+): Promise<Blob> {
+  const { data } = await api.get(`/deportivo/equipos/${equipoId}/jugadores/exportar`, {
+    params: { activos, orden },
+    responseType: "blob",
+  });
+  return data;
+}

@@ -13,9 +13,17 @@ import '../features/vision/pagina.dart';
 import '../features/partido/pagina.dart';
 import '../features/analisis/pagina.dart';
 import '../features/asistencia/pagina.dart';
+import '../shared/api/almacenamiento.dart';
 
 final router = GoRouter(
   initialLocation: '/',
+  // Sin sesión, cualquier ruta que no sea /seguridad redirige al login:
+  // ningún módulo (ni siquiera Inicio) se ve antes de autenticarse.
+  redirect: (context, state) async {
+    final autenticado = await Almacenamiento.haySesion();
+    if (!autenticado && state.matchedLocation != '/seguridad') return '/seguridad';
+    return null;
+  },
   routes: [
     GoRoute(path: '/', builder: (_, _) => const Inicio()),
     GoRoute(path: '/seguridad', builder: (_, _) => const SeguridadPagina()),

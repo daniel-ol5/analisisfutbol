@@ -24,10 +24,20 @@ Future<Map<String, dynamic>> iniciarSesion(String email, String password) async 
   return respuesta;
 }
 
-/// CU-03 · Cierra sesión en el backend y borra el token local.
+/// CU-03 · Invalida el refresh token en el servidor y borra el token local.
+///
+/// El refresh token se lee ANTES de borrar el almacenamiento y se envía en el
+/// body para que el backend lo agregue a la lista negra (`TokenRevocado`).
+/// Si la llamada falla (sin red, token ya vencido), igual se limpia el
+/// almacenamiento local: el usuario no debe quedar atrapado en una sesión
+/// que ya no puede cerrar.
 Future<void> cerrarSesion() async {
+  final refresco = await Almacenamiento.leerRefresco();
   try {
-    await cliente.post('/seguridad/logout');
+    await cliente.post(
+      '/seguridad/logout',
+      cuerpo: refresco == null ? null : {'refresh_token': refresco},
+    );
   } finally {
     await Almacenamiento.borrarToken();
   }
