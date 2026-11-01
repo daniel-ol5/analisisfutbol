@@ -1,10 +1,9 @@
 import { JerseyPreview } from "./JerseyPreview";
+import { calcularDistanciaHsv } from "../types";
 import type { Equipo } from "../types";
 
 interface EquipoCardProps {
   equipo: Equipo;
-  tieneConflictoConOtro?: boolean;
-  otroEquipoEnConflicto?: string;
   onEditar: (equipo: Equipo) => void;
   onVerificarRival: (equipo: Equipo) => void;
   onDesactivar: (equipo: Equipo) => void;
@@ -12,17 +11,19 @@ interface EquipoCardProps {
 
 export function EquipoCard({
   equipo,
-  tieneConflictoConOtro,
-  otroEquipoEnConflicto,
   onEditar,
   onVerificarRival,
   onDesactivar,
 }: EquipoCardProps) {
+  // Advertencia de contraste interno: Si la camiseta alternativa es casi idéntica a la titular
+  const distInterna = calcularDistanciaHsv(equipo.color_local, equipo.color_visitante);
+  const alertaAlternativaSimilar = distInterna !== null && distInterna < 40;
+
   return (
     <div
       style={{
         background: "var(--surface)",
-        border: tieneConflictoConOtro ? "1.5px solid var(--risk)" : "1px solid var(--line)",
+        border: "1px solid var(--line)",
         borderRadius: 8,
         padding: "18px 20px",
         display: "flex",
@@ -35,27 +36,27 @@ export function EquipoCard({
         opacity: equipo.activo ? 1 : 0.65,
       }}
     >
-      {/* Indicador de estado / advertencia de conflicto de color */}
-      {tieneConflictoConOtro && (
+      {/* Alerta de Contraste Interno (solo si la alternativa no contrasta con la titular) */}
+      {alertaAlternativaSimilar && (
         <div
-          title={`Color muy similar al de ${otroEquipoEnConflicto}`}
+          title="La indumentaria alternativa tiene un color muy próximo a la titular. En caso de conflicto óptico con un rival, ambas se confundirán."
           style={{
             position: "absolute",
             top: 12,
             right: 12,
-            background: "rgba(162, 55, 42, 0.12)",
-            color: "var(--risk)",
-            border: "1px solid var(--risk)",
+            background: "rgba(242, 194, 0, 0.12)",
+            color: "var(--text)",
+            border: "1px solid #F2C200",
             padding: "2px 8px",
             borderRadius: 12,
-            fontSize: 11,
+            fontSize: 10.5,
             fontWeight: 700,
             display: "flex",
             alignItems: "center",
             gap: 4,
           }}
         >
-          <span>⚠️</span> Conflicto Óptico
+          <span>⚡</span> Alternativa poco contrastante
         </div>
       )}
 
@@ -221,15 +222,19 @@ export function EquipoCard({
             all: "unset",
             cursor: "pointer",
             fontSize: 12,
-            fontWeight: 600,
+            fontWeight: 700,
             color: "var(--pitch)",
             background: "rgba(11, 107, 69, 0.08)",
-            padding: "5px 10px",
+            border: "1px solid rgba(11, 107, 69, 0.25)",
+            padding: "5px 12px",
             borderRadius: 4,
-            transition: "background 0.1s",
+            transition: "all 0.15s ease",
+            display: "flex",
+            alignItems: "center",
+            gap: 5,
           }}
         >
-          Probar Rival
+          <span>⚔️</span> Probar vs Rival
         </button>
 
         <div style={{ display: "flex", gap: 6 }}>
