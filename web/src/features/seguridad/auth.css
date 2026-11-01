@@ -1,16 +1,21 @@
-/* Estilos mínimos de login y registro. Usan las variables de index.css. */
+/* Estilos de login y registro con tarjeta limpia y paleta Teal/Slate. */
 
 .auth {
-  max-width: 420px;
-  margin: 0 auto;
-  padding: 56px 24px 80px;
+  max-width: 440px;
+  margin: 56px auto 80px;
+  padding: 36px 32px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
 }
 
 .auth h1 {
-  font-size: 30px;
+  font-size: 26px;
   font-weight: 800;
   letter-spacing: -0.02em;
   margin: 6px 0 24px;
+  color: var(--text);
 }
 
 .auth-campo {
@@ -22,22 +27,25 @@
   font-size: 13px;
   font-weight: 600;
   color: var(--text-2);
-  margin-bottom: 4px;
+  margin-bottom: 5px;
 }
 
 .auth-campo input {
   width: 100%;
-  padding: 9px 12px;
+  padding: 10px 12px;
   border: 1px solid var(--line);
-  border-radius: 3px;
-  background: var(--surface);
+  border-radius: var(--radius-sm);
+  background: var(--ground);
   color: var(--text);
   font: inherit;
+  transition: border-color 0.15s, background 0.15s;
 }
 
 .auth-campo input:focus-visible {
-  outline: 2px solid var(--pitch);
-  outline-offset: 1px;
+  background: var(--surface);
+  border-color: var(--pitch);
+  outline: 2px solid rgba(20, 184, 166, 0.25);
+  outline-offset: 0;
 }
 
 .auth-campo input[aria-invalid="true"] {
@@ -52,23 +60,31 @@
 
 .auth-error {
   margin: 0 0 16px;
-  padding: 9px 12px;
+  padding: 10px 12px;
   border: 1px solid var(--risk);
-  border-radius: 3px;
-  font-size: 14px;
+  border-radius: var(--radius-sm);
+  background: var(--risk-bg);
+  font-size: 13.5px;
   color: var(--risk);
 }
 
 .auth-boton {
   width: 100%;
-  padding: 10px 14px;
+  margin-top: 4px;
+  padding: 11px 16px;
   border: 1px solid var(--pitch);
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   background: var(--pitch);
-  color: var(--surface);
+  color: var(--on-pitch);
   font: inherit;
   font-weight: 700;
   cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.auth-boton:hover:not(:disabled) {
+  background: var(--pitch-hover);
+  border-color: var(--pitch-hover);
 }
 
 .auth-boton:disabled {
@@ -77,9 +93,12 @@
 }
 
 .auth-alterna {
-  margin-top: 20px;
-  font-size: 14px;
+  margin-top: 22px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+  font-size: 13.5px;
   color: var(--text-2);
+  text-align: center;
 }
 
 .auth-alterna a {

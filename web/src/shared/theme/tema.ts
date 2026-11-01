@@ -1,5 +1,5 @@
 /**
- * Tema claro/oscuro. El oscuro es el predeterminado; la elección se recuerda.
+ * Tema claro/oscuro. El claro es el predeterminado; la elección se recuerda.
  * El atributo data-theme de <html> lo fija también un script en index.html
  * antes de pintar, para evitar el parpadeo.
  */
@@ -7,11 +7,11 @@ import { useSyncExternalStore } from "react";
 
 export type Tema = "dark" | "light";
 
-const CLAVE_TEMA = "areatecnica.tema";
+const CLAVE_TEMA = "areatecnica.tema.v2";
 const oyentes = new Set<() => void>();
 
 export function obtenerTema(): Tema {
-  return document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
+  return document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light";
 }
 
 function guardar(tema: Tema): void {

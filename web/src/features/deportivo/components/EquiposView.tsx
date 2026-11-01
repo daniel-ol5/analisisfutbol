@@ -329,7 +329,7 @@ export function EquiposView() {
             color: "#ffffff",
             background: "var(--pitch)",
             borderRadius: 6,
-            boxShadow: "0 2px 6px rgba(11, 107, 69, 0.25)",
+            boxShadow: "0 2px 6px rgba(13, 148, 136, 0.25)",
             whiteSpace: "nowrap",
           }}
         >
