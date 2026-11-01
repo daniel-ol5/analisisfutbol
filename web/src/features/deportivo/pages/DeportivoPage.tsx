@@ -126,9 +126,9 @@ export function DeportivoPage() {
                   fontFamily: "monospace",
                   padding: "1px 5px",
                   borderRadius: 3,
-                  backgroundColor: esActiva ? "rgba(11, 107, 69, 0.12)" : "var(--ground)",
+                  backgroundColor: esActiva ? "var(--ok-bg)" : "var(--ground)",
                   color: esActiva ? "var(--pitch)" : "var(--text-3)",
-                  border: "1px solid var(--line)",
+                  border: esActiva ? "1px solid var(--pitch-border)" : "1px solid var(--line)",
                 }}
               >
                 {tab.cus}
