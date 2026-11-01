@@ -2,17 +2,39 @@
 
 Cliente Flutter para el DT y el asistente de campo.
 
-Flutter no está instalado en esta máquina, así que el proyecto todavía no está
-generado. Quien tome la app móvil en el Sprint 4 hace:
+## Puesta en marcha
 
 ```bash
-# 1. Instalar Flutter: https://docs.flutter.dev/get-started/install/windows
-flutter doctor
-
-# 2. Generar el proyecto DENTRO de esta carpeta
 cd movil
-flutter create --project-name areatecnica --org com.areatecnica .
+flutter pub get
+flutter run --dart-define=API_URL=http://10.0.2.2:8000/api
 ```
+
+`API_URL` por defecto apunta al emulador de Android hacia el backend local
+(`10.0.2.2` es el alias del emulador hacia el localhost de la máquina
+anfitriona). Para un dispositivo físico, usar la IP de la red local. Mientras
+un caso de uso siga devolviendo 501, se puede apuntar al mock en el puerto
+4010 en su lugar.
+
+## Estructura
+
+```
+lib/
+  app/            Entrada de la app: router (GoRouter), tema, pantalla de inicio
+  features/
+    <paquete>/     api.dart (llamadas HTTP) + pagina.dart (UI), uno por paquete
+                    de casos de uso: seguridad, deportivo, vision, partido,
+                    analisis, asistencia. Las features no se importan entre sí.
+  shared/
+    api/           cliente.dart (cliente HTTP único, adjunta el token) y
+                    almacenamiento.dart (sesión en flutter_secure_storage:
+                    Keystore en Android, Keychain en iOS)
+    ui/            Pendiente: placeholder para features aún no implementadas
+```
+
+Cada feature no implementada muestra `Pendiente` con sus casos de uso. El
+paquete de seguridad (P1) ya tiene CU-02 (iniciar sesión) y CU-03 (cerrar
+sesión) funcionando contra `/api/seguridad/login` y `/api/seguridad/logout`.
 
 ## Alcance
 

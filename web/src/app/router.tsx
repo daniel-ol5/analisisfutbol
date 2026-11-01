@@ -28,6 +28,8 @@ import {
   UsuariosPage,
 } from "@/features/seguridad";
 import { VisionPage } from "@/features/vision";
+import { LoginPage, PerfilPage, RegistroPage, UsuariosPage } from "@/features/seguridad";
+import { CalibracionPage, GuiaMontajePage, VisionPage } from "@/features/vision";
 
 export function Router() {
   return (
@@ -78,6 +80,22 @@ export function Router() {
             element={
               <RequiereRol ruta="/deportivo">
                 <DeportivoPage />
+              </RequiereRol>
+            }
+          />
+          <Route
+            path="/vision/guia-montaje"
+            element={
+              <RequiereRol ruta="/vision">
+                <GuiaMontajePage />
+              </RequiereRol>
+            }
+          />
+          <Route
+            path="/vision/calibracion"
+            element={
+              <RequiereRol ruta="/vision">
+                <CalibracionPage />
               </RequiereRol>
             }
           />

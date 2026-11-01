@@ -1,8 +1,6 @@
 /**
- * Normalización de errores del backend a mensajes legibles en español.
- *
- * FastAPI devuelve `{"detail": ...}` donde `detail` es un texto (errores de
- * negocio: 401, 403, 409, 501) o una lista `[{type, loc, msg, input}]` (422).
+ * Re-exporta el normalizador de errores compartido en `@/shared/lib/errors`
+ * para mantener intactas las importaciones internas de la feature `seguridad`.
  */
 import { isAxiosError } from "axios";
 

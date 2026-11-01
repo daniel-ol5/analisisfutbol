@@ -9,7 +9,6 @@ import {
 import { EquipoCard } from "./EquipoCard";
 import { EquipoFormModal } from "./EquipoFormModal";
 import { ColorVerificationModal } from "./ColorVerificationModal";
-import { calcularDistanciaHsv } from "../types";
 import type { Equipo, EquipoCrear, EquipoEditar } from "../types";
 
 export function EquiposView() {
@@ -66,42 +65,6 @@ export function EquiposView() {
     },
   });
 
-  // Detección de pares de equipos con colores demasiado similares en el club (Criterio T-041)
-  const colisionesClub = useMemo(() => {
-    const colisiones: Array<{
-      equipo1: Equipo;
-      equipo2: Equipo;
-      distancia: number;
-    }> = [];
-
-    const activos = equipos.filter((e) => e.activo);
-    for (let i = 0; i < activos.length; i++) {
-      for (let j = i + 1; j < activos.length; j++) {
-        const e1 = activos[i];
-        const e2 = activos[j];
-        const dist = calcularDistanciaHsv(e1.color_local, e2.color_local);
-        if (dist !== null && dist < 40) {
-          colisiones.push({
-            equipo1: e1,
-            equipo2: e2,
-            distancia: dist,
-          });
-        }
-      }
-    }
-    return colisiones;
-  }, [equipos]);
-
-  // Mapa de IDs de equipos en conflicto para resaltado rápido
-  const mapaConflictos = useMemo(() => {
-    const mapa = new Map<number, string>();
-    for (const c of colisionesClub) {
-      mapa.set(c.equipo1.id, c.equipo2.nombre);
-      mapa.set(c.equipo2.id, c.equipo1.nombre);
-    }
-    return mapa;
-  }, [colisionesClub]);
-
   // Categorías únicas para filtro
   const categorias = useMemo(() => {
     const set = new Set<string>();
@@ -149,7 +112,7 @@ export function EquiposView() {
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
       {/* Alerta si falla la carga */}
       {isError && (
         <div
@@ -193,115 +156,11 @@ export function EquiposView() {
         </div>
       )}
 
-      {/* Alerta Global de Colisión de Indumentaria en el Club (Criterio de Aceptación T-041) */}
-      {colisionesClub.length > 0 && (
-        <div
-          style={{
-            padding: "16px 20px",
-            borderRadius: 8,
-            background: "rgba(162, 55, 42, 0.08)",
-            border: "1.5px solid var(--risk)",
-            display: "flex",
-            flexDirection: "column",
-            gap: 10,
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span style={{ fontSize: 20 }}>⚠️</span>
-            <div>
-              <h4 style={{ margin: 0, fontSize: 14, fontWeight: 800, color: "var(--risk)" }}>
-                Advertencia de Similitud de Colores en el Club (T-041)
-              </h4>
-              <p style={{ margin: "2px 0 0", fontSize: 12, color: "var(--text-2)" }}>
-                Se detectaron equipos activos con indumentaria titular demasiado próxima en espacio HSV (distancia &lt; 40).
-              </p>
-            </div>
-          </div>
-
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            {colisionesClub.map(({ equipo1, equipo2, distancia }) => (
-              <div
-                key={`${equipo1.id}-${equipo2.id}`}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  padding: "8px 12px",
-                  background: "var(--surface)",
-                  borderRadius: 6,
-                  border: "1px solid var(--line)",
-                  fontSize: 12.5,
-                  flexWrap: "wrap",
-                  gap: 8,
-                }}
-              >
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <span
-                    style={{
-                      width: 14,
-                      height: 14,
-                      borderRadius: 3,
-                      backgroundColor: equipo1.color_local,
-                      border: "1px solid rgba(0,0,0,0.2)",
-                    }}
-                  />
-                  <strong>{equipo1.nombre}</strong> ({equipo1.color_local})
-                  <span style={{ color: "var(--text-3)", fontWeight: 700 }}>↔</span>
-                  <span
-                    style={{
-                      width: 14,
-                      height: 14,
-                      borderRadius: 3,
-                      backgroundColor: equipo2.color_local,
-                      border: "1px solid rgba(0,0,0,0.2)",
-                    }}
-                  />
-                  <strong>{equipo2.nombre}</strong> ({equipo2.color_local})
-                </div>
-
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <span
-                    style={{
-                      fontFamily: "monospace",
-                      fontWeight: 700,
-                      color: "var(--risk)",
-                      background: "rgba(162, 55, 42, 0.1)",
-                      padding: "2px 6px",
-                      borderRadius: 4,
-                      fontSize: 11,
-                    }}
-                  >
-                    Distancia HSV: {distancia.toFixed(1)} &lt; 40
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEquipoAEditar(equipo2);
-                      setModalFormAbierto(true);
-                    }}
-                    style={{
-                      all: "unset",
-                      cursor: "pointer",
-                      fontSize: 11.5,
-                      fontWeight: 600,
-                      color: "var(--pitch)",
-                      textDecoration: "underline",
-                    }}
-                  >
-                    Editar color de {equipo2.nombre}
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* Métricas y resumen superior */}
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
           gap: 12,
         }}
       >
@@ -346,24 +205,36 @@ export function EquiposView() {
           }}
         >
           <span style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", color: "var(--text-3)" }}>
-            Estado de Contraste Óptico
+            Categorías / Divisiones
+          </span>
+          <p style={{ margin: "4px 0 0", fontSize: 24, fontWeight: 800, color: "var(--text)" }}>
+            {categorias.length}
+          </p>
+        </div>
+
+        <div
+          style={{
+            padding: "14px 18px",
+            background: "var(--surface)",
+            border: "1px solid var(--line)",
+            borderRadius: 6,
+          }}
+        >
+          <span style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", color: "var(--text-3)" }}>
+            Pipeline Óptico (CU-10)
           </span>
           <p
             style={{
               margin: "4px 0 0",
-              fontSize: 15,
+              fontSize: 14,
               fontWeight: 800,
-              color: colisionesClub.length > 0 ? "var(--risk)" : "var(--pitch)",
+              color: "var(--pitch)",
               display: "flex",
               alignItems: "center",
               gap: 6,
             }}
           >
-            {colisionesClub.length > 0 ? (
-              <>⚠️ {colisionesClub.length} advertencia(s)</>
-            ) : (
-              <>✓ Óptimo para Visión</>
-            )}
+            ✓ Calibrado para Partidos
           </p>
         </div>
       </div>
@@ -522,8 +393,6 @@ export function EquiposView() {
             <EquipoCard
               key={equipo.id}
               equipo={equipo}
-              tieneConflictoConOtro={mapaConflictos.has(equipo.id)}
-              otroEquipoEnConflicto={mapaConflictos.get(equipo.id)}
               onEditar={(eq) => {
                 setEquipoAEditar(eq);
                 setModalFormAbierto(true);
@@ -538,8 +407,9 @@ export function EquiposView() {
         </div>
       )}
 
-      {/* Modal de Alta / Edición con selector de 3 colores y detección de colisión */}
+      {/* Modal de Alta / Edición con selector de ligas/divisiones y paleta */}
       <EquipoFormModal
+        key={equipoAEditar ? `edit-${equipoAEditar.id}` : "nuevo"}
         abierto={modalFormAbierto}
         equipoAEditar={equipoAEditar}
         otrosEquipos={equipos}

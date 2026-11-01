@@ -7,6 +7,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../features/seguridad/api.dart' as seguridad_api;
 import '../shared/api/cliente.dart';
 import 'tema.dart';
 
@@ -34,6 +35,7 @@ class _InicioState extends State<Inicio> {
   String _estado = 'Conectando con la API…';
   bool _ok = false;
   bool _error = false;
+  bool _cerrandoSesion = false;
 
   @override
   void initState() {
@@ -58,12 +60,41 @@ class _InicioState extends State<Inicio> {
     }
   }
 
+  // Inicio solo es alcanzable con sesión activa (ver el `redirect` en
+  // app/router.dart), así que cerrar sesión aquí no necesita verificar nada
+  // antes: siempre hay un token que invalidar.
+  Future<void> _cerrarSesion() async {
+    setState(() => _cerrandoSesion = true);
+    try {
+      await seguridad_api.cerrarSesion();
+    } catch (_) {
+      // El token local ya se borra dentro de cerrarSesion() aunque falle la
+      // llamada al backend: no bloquear el cierre de sesión por eso.
+    }
+    if (!mounted) return;
+    context.go('/seguridad');
+  }
+
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
     final colorEstado = _ok ? verde : (_error ? rojo : t.colorScheme.outline);
+    final modulos = paquetes.where((p) => p.id != 'P1');
 
     return Scaffold(
+      appBar: AppBar(
+        title: const Text('Inicio', style: TextStyle(fontSize: 18)),
+        actions: [
+          IconButton(
+            tooltip: 'Cerrar sesión',
+            icon: _cerrandoSesion
+                ? const SizedBox(
+                    width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                : const Icon(Icons.logout),
+            onPressed: _cerrandoSesion ? null : _cerrarSesion,
+          ),
+        ],
+      ),
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: _verificarSalud,
@@ -102,7 +133,7 @@ class _InicioState extends State<Inicio> {
                         color: colorEstado)),
               ),
               const SizedBox(height: 26),
-              for (final p in paquetes) ...[
+              for (final p in modulos) ...[
                 Card(
                   child: ListTile(
                     contentPadding:
