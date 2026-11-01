@@ -1075,6 +1075,137 @@
         }
       }
     },
+    "/api/deportivo/equipos/{equipo_id}/jugadores/plantilla": {
+      "get": {
+        "tags": [
+          "P2 · Gestión Deportiva"
+        ],
+        "summary": "CU-12 · Descargar plantilla CSV para importar un plantel",
+        "operationId": "descargar_plantilla_jugadores_api_deportivo_equipos__equipo_id__jugadores_plantilla_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "equipo_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Equipo Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "Declarado en el contrato, pendiente de implementacion",
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/deportivo/equipos/{equipo_id}/jugadores/exportar": {
+      "get": {
+        "tags": [
+          "P2 · Gestión Deportiva"
+        ],
+        "summary": "CU-12 · Exportar el plantel actual a CSV",
+        "operationId": "exportar_jugadores_csv_api_deportivo_equipos__equipo_id__jugadores_exportar_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "equipo_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Equipo Id"
+            }
+          },
+          {
+            "name": "activos",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": true,
+              "title": "Activos"
+            }
+          },
+          {
+            "name": "orden",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^(dorsal|posicion|apellido)$",
+              "default": "dorsal",
+              "title": "Orden"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "Declarado en el contrato, pendiente de implementacion",
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/deportivo/equipos/{equipo_id}/jugadores/importar": {
       "post": {
         "tags": [

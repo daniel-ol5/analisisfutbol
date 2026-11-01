@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Solo para builds debug: permite HTTP sin cifrar hacia el backend local
+     (http://localhost:8000 vía `adb reverse` o la IP de la red local). -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

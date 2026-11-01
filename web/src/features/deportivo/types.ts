@@ -37,6 +37,76 @@ export interface AvisoColores {
   mensaje: string;
 }
 
+export type Posicion = "ARQ" | "DEF" | "MED" | "DEL";
+export type PieHabil = "IZQ" | "DER" | "AMBOS";
+
+export const ETIQUETAS_POSICION: Record<Posicion, string> = {
+  ARQ: "Arquero",
+  DEF: "Defensor",
+  MED: "Mediocampista",
+  DEL: "Delantero",
+};
+
+export const ETIQUETAS_PIE: Record<PieHabil, string> = {
+  IZQ: "Izquierdo",
+  DER: "Derecho",
+  AMBOS: "Ambos",
+};
+
+export interface Jugador {
+  id: number;
+  equipo_id: number;
+  nombre: string;
+  apellido: string;
+  dorsal: number;
+  posicion: Posicion;
+  pie_habil: PieHabil;
+  altura_cm: number;
+  peso_kg: number | null;
+  fecha_nacimiento: string | null;
+  activo: boolean;
+}
+
+export interface JugadorCrear {
+  equipo_id: number;
+  nombre: string;
+  apellido: string;
+  dorsal: number;
+  posicion?: Posicion;
+  pie_habil?: PieHabil;
+  altura_cm: number;
+  peso_kg?: number | null;
+  fecha_nacimiento?: string | null;
+}
+
+export interface JugadorEditar {
+  nombre?: string;
+  apellido?: string;
+  dorsal?: number;
+  posicion?: Posicion;
+  pie_habil?: PieHabil;
+  altura_cm?: number;
+  peso_kg?: number | null;
+  fecha_nacimiento?: string | null;
+}
+
+export type OrdenJugadores = "dorsal" | "posicion" | "apellido";
+
+/** CU-12: resultado de validar o importar una fila del CSV de plantel. */
+export interface FilaImportacion {
+  fila: number;
+  datos: Record<string, string>;
+  error: string | null;
+}
+
+/** CU-12: resumen de la vista previa o la importación confirmada del plantel. */
+export interface ResultadoImportacion {
+  total: number;
+  importadas: number;
+  con_error: number;
+  detalle: FilaImportacion[];
+}
+
 /**
  * Convierte color hexadecimal #RRGGBB a HSV (H: 0..360, S: 0..100, V: 0..100).
  * Espejo del cálculo del backend para feedback en tiempo real en la UI.
@@ -95,9 +165,7 @@ export function calcularDistanciaHsv(hex1: string, hex2: string): number | null 
   const y2 = s2 * Math.sin(rad2);
   const z2 = v2;
 
-  const dist = Math.sqrt(
-    Math.pow(x1 - x2, 2) + Math.pow(y1 - y2, 2) + Math.pow(z1 - z2, 2)
-  );
+  const dist = Math.sqrt(Math.pow(x1 - x2, 2) + Math.pow(y1 - y2, 2) + Math.pow(z1 - z2, 2));
 
   return Math.round(dist * 100) / 100;
 }
