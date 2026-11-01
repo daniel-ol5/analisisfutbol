@@ -35,7 +35,12 @@ export function registrarAdaptadorAuth(nuevo: AdaptadorAuth): void {
  * Rutas donde un 401 significa «credenciales inválidas» y no «sesión caída»:
  * el error debe mostrarse en el formulario, no redirigir.
  */
-const RUTAS_PUBLICAS = ["/seguridad/login", "/seguridad/registro"];
+const RUTAS_PUBLICAS = [
+  "/seguridad/login",
+  "/seguridad/registro",
+  "/seguridad/password/olvido",
+  "/seguridad/password/restablecer",
+];
 
 function esRutaPublica(url: string | undefined): boolean {
   if (!url) return false;

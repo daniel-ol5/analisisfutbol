@@ -45,6 +45,9 @@ class Usuario(Base):
     apellido: Mapped[str] = mapped_column(String(80), default="")
     rol: Mapped[Rol] = mapped_column(String(20), default=Rol.ADMIN)
     activo: Mapped[bool] = mapped_column(default=True)
+    # CU-05: viaja en cada token como "ver". Cambiar la contraseña la sube y
+    # deja sin efecto todos los tokens emitidos antes, en cualquier dispositivo.
+    version_sesion: Mapped[int] = mapped_column(default=0, server_default="0")
     creado_en: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
@@ -69,3 +72,23 @@ class TokenRevocado(Base):
     )
 
     usuario: Mapped[Usuario] = relationship()
+
+
+class TokenRecuperacion(Base):
+    """Enlace de recuperación de contraseña (HU-52 / CU-06).
+
+    El JWT del enlace lleva el jti; esta fila es la que lo hace de un solo uso.
+    `usado_en` se completa al usarlo o al anularlo (pedido de un enlace nuevo).
+    El vencimiento lo controla el `exp` del JWT; `expira_en` queda como registro.
+    """
+
+    __tablename__ = "token_recuperacion"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    jti: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    usuario_id: Mapped[int] = mapped_column(ForeignKey("usuario.id"), index=True)
+    creado_en: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+    expira_en: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    usado_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)

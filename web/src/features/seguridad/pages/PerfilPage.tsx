@@ -14,7 +14,6 @@ export function PerfilPage() {
 
   return (
     <main className="perfil">
-      
       <h1>Mi perfil</h1>
 
       {perfil.isPending && <p className="perfil-estado">Cargando tu perfil…</p>}
@@ -35,6 +34,8 @@ export function PerfilPage() {
             <dl className="perfil-datos">
               <dt>Correo electrónico</dt>
               <dd>{perfil.data.email}</dd>
+              <dt>Club</dt>
+              <dd>{perfil.data.club_nombre}</dd>
               <dt>Rol</dt>
               <dd>
                 <Badge tono="info">{perfil.data.rol}</Badge>

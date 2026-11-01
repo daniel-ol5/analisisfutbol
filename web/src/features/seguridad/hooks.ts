@@ -9,7 +9,7 @@ import {
   listarUsuarios,
   obtenerPerfil,
 } from "./api";
-import { actualizarUsuario as guardarUsuarioEnSesion } from "./session";
+import { actualizarUsuario as guardarUsuarioEnSesion, iniciarSesion } from "./session";
 import type { ActualizarUsuario } from "./types";
 
 const CLAVE_USUARIOS = ["seguridad", "usuarios"] as const;
@@ -53,6 +53,7 @@ export function useEditarPerfil() {
   });
 }
 
+/** El token anterior ya no sirve: se guarda la sesión nueva para no caer al login. */
 export function useCambiarPassword() {
-  return useMutation({ mutationFn: cambiarPassword });
+  return useMutation({ mutationFn: cambiarPassword, onSuccess: iniciarSesion });
 }

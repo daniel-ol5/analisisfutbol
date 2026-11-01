@@ -31,20 +31,35 @@ def _crear_token(datos: dict[str, Any], expira: timedelta, tipo: str) -> str:
     return jwt.encode(payload, settings.secret_key, algorithm=settings.algoritmo)
 
 
-def token_acceso(usuario_id: int, club_id: int, rol: str) -> str:
+def token_acceso(usuario_id: int, club_id: int, rol: str, version: int = 0) -> str:
     return _crear_token(
-        {"sub": str(usuario_id), "club": club_id, "rol": rol},
+        {"sub": str(usuario_id), "club": club_id, "rol": rol, "ver": version},
         timedelta(minutes=settings.access_token_minutes),
         "acceso",
     )
 
 
-def token_refresco(usuario_id: int) -> str:
+def token_refresco(usuario_id: int, version: int = 0) -> str:
     return _crear_token(
-        {"sub": str(usuario_id)},
+        {"sub": str(usuario_id), "ver": version},
         timedelta(days=settings.refresh_token_days),
         "refresco",
     )
+
+
+def token_recuperacion(usuario_id: int) -> tuple[str, str]:
+    """HU-52: token del enlace para restablecer la contraseña. Devuelve (token, jti).
+
+    La firma garantiza que nadie lo fabrique; el jti, guardado en la tabla
+    token_recuperacion, es lo que lo hace de un solo uso.
+    """
+    jti = uuid.uuid4().hex
+    token = _crear_token(
+        {"sub": str(usuario_id), "jti": jti},
+        timedelta(minutes=settings.reset_token_minutes),
+        "recuperacion",
+    )
+    return token, jti
 
 
 def token_ingesta(club_id: int, partido_id: int) -> str:

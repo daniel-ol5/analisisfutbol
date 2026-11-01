@@ -6,8 +6,10 @@ Cualquier cambio posterior se acuerda con las dos parejas antes de mergear.
 
 from datetime import date, datetime
 from enum import StrEnum
+from typing import NoReturn
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic_core import PydanticCustomError
 
 
 class Posicion(StrEnum):
@@ -192,23 +194,72 @@ class Cancelacion(BaseModel):
 
 # ---------- CU-17 Alineacion ----------
 
+TITULARES = 11
+
+
 class JugadorAlineado(BaseModel):
+    """Coordenadas relativas, mismos ejes que el tracking (x largo, y ancho):
+    se pasan a metros con `pos_x / 100 * largo_m` de la calibración.
+    """
+
     jugador_id: int
     es_titular: bool = True
     es_capitan: bool = False
-    pos_x: float = Field(ge=0, le=100, description="Coordenada relativa en el plano, 0 a 100")
-    pos_y: float = Field(ge=0, le=100)
-    minuto_entra: int | None = None
-    minuto_sale: int | None = None
+    pos_x: float = Field(
+        ge=0, le=100,
+        description="Porcentaje del largo: 0 = arco propio, 100 = arco rival")
+    pos_y: float = Field(
+        ge=0, le=100,
+        description="Porcentaje del ancho: 0 = banda izquierda, 100 = banda derecha "
+                    "(mirando hacia el arco rival)")
+    minuto_entra: int | None = Field(default=None, ge=0, le=130)
+    minuto_sale: int | None = Field(default=None, ge=0, le=130)
 
 
 class AlineacionGuardar(BaseModel):
     formacion: Formacion = Formacion.F_433
     jugadores: list[JugadorAlineado] = Field(
-        description="Maximo 11 con es_titular=true")
+        description="Titulares y suplentes. Exactamente 11 con es_titular=true, uno "
+                    "solo de ellos arquero (posicion ARQ) y uno solo capitan.")
+
+    # HU-14 · Criterio 3. La regla del arquero necesita la posición registrada de
+    # cada jugador, así que se valida en el servicio.
+    @model_validator(mode="after")
+    def _reglas_de_la_alineacion(self) -> "AlineacionGuardar":
+        ids = [j.jugador_id for j in self.jugadores]
+        if len(ids) != len(set(ids)):
+            _rechazar("Un jugador aparece más de una vez en la alineación")
+
+        titulares = [j for j in self.jugadores if j.es_titular]
+        if len(titulares) != TITULARES:
+            _rechazar(f"Tiene que haber exactamente {TITULARES} titulares "
+                      f"(hay {len(titulares)})")
+
+        capitanes = [j for j in self.jugadores if j.es_capitan]
+        if len(capitanes) != 1:
+            _rechazar(f"Tiene que haber un solo capitán (hay {len(capitanes)})")
+        if not capitanes[0].es_titular:
+            _rechazar("El capitán tiene que ser titular")
+        return self
 
 
-class Alineacion(AlineacionGuardar):
-    model_config = ConfigDict(from_attributes=True)
+def _rechazar(mensaje: str) -> NoReturn:
+    # Sin el prefijo «Value error, » que agrega ValueError: la web muestra el texto tal cual.
+    raise PydanticCustomError("alineacion_invalida", mensaje)
+
+
+class JugadorAlineadoOut(JugadorAlineado):
+    """Con los datos del jugador, para dibujar la cancha sin pedir el plantel."""
+
+    nombre: str
+    apellido: str
+    dorsal: int
+    posicion: Posicion
+
+
+class Alineacion(BaseModel):
     id: int
     partido_id: int
+    formacion: Formacion
+    jugadores: list[JugadorAlineadoOut] = Field(
+        description="Primero los titulares y después los suplentes, cada grupo por dorsal")
