@@ -1,8 +1,9 @@
-/// Tarjeta de visualización de jugador de alto contraste para campo/sol  —  CU-11.
+/// Tarjeta de visualización de jugador de alto contraste  —  CU-11.
 library;
 
 import 'package:flutter/material.dart';
 
+import '../../../app/tema.dart';
 import '../modelos.dart';
 
 class TarjetaJugador extends StatelessWidget {
@@ -21,24 +22,23 @@ class TarjetaJugador extends StatelessWidget {
     final esOscuro = t.brightness == Brightness.dark;
 
     final colorBorde =
-        esOscuro ? const Color(0xFF62756A) : const Color(0xFF1E2D24);
-    final colorFondo =
-        esOscuro ? const Color(0xFF14221C) : const Color(0xFFFFFFFF);
+        esOscuro ? const Color(0xFF334155) : const Color(0xFFCBD5E1);
+    final colorFondo = esOscuro ? pizarra : Colors.white;
 
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.circular(10),
       child: Container(
         margin: const EdgeInsets.symmetric(vertical: 8),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: colorFondo,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: colorBorde, width: 2.0),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: colorBorde, width: 1.5),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: esOscuro ? 0.35 : 0.08),
-              blurRadius: 4,
+              color: Colors.black.withValues(alpha: esOscuro ? 0.3 : 0.05),
+              blurRadius: 8,
               offset: const Offset(0, 2),
             ),
           ],
@@ -46,14 +46,14 @@ class TarjetaJugador extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            // Dorsal en bloque de alto contraste
+            // Dorsal en bloque Teal de alto contraste
             Container(
               width: 48,
               height: 48,
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: const Color(0xFF0B6B45),
-                borderRadius: BorderRadius.circular(8),
+                color: verde,
+                borderRadius: BorderRadius.circular(10),
               ),
               child: Text(
                 '${jugador.dorsal}',
@@ -86,7 +86,7 @@ class TarjetaJugador extends StatelessWidget {
                           padding: const EdgeInsets.symmetric(
                               horizontal: 8, vertical: 3),
                           decoration: BoxDecoration(
-                            color: const Color(0xFFA2372A),
+                            color: rojo,
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: const Text(

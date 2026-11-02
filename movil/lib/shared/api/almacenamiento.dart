@@ -20,10 +20,6 @@ class Almacenamiento {
   static const _claveUsuario = 'areatecnica.usuario';
   static const _claveTema = 'areatecnica.tema';
 
-  static const _storage = FlutterSecureStorage(
-    aOptions: AndroidOptions(encryptedSharedPreferences: true),
-  );
-
   static Future<void> guardarSesion(String acceso, String refresco) async {
     await _seguro.write(key: _claveAcceso, value: acceso);
     await _seguro.write(key: _claveRefresco, value: refresco);

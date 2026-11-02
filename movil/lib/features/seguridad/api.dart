@@ -10,27 +10,6 @@ import 'modelos.dart';
 
 Future<dynamic> ping() => cliente.get('/seguridad/ping');
 
-/// CU-02 · Iniciar sesión y guardar los tokens en el dispositivo.
-Future<void> iniciarSesion(String email, String password) async {
-  final sesion = await cliente.post('/seguridad/login', cuerpo: {
-    'email': email,
-    'password': password,
-  }) as Map<String, dynamic>;
-  await _guardar(sesion);
-}
-
-/// CU-03 · Cerrar sesión. Aunque el servidor no responda, la sesión local se
-/// borra igual: el usuario pidió salir.
-Future<void> cerrarSesion() async {
-  try {
-    final refresco = await Almacenamiento.leerRefresco();
-    await cliente.post('/seguridad/logout', cuerpo: {'refresh_token': refresco});
-  } catch (_) {
-    // Sin conexión o sesión ya vencida: no hay nada más que revocar.
-import '../../shared/api/almacenamiento.dart';
-
-Future<dynamic> ping() => cliente.get('/seguridad/ping');
-
 /// CU-02 · Inicia sesión y guarda el token de forma segura.
 Future<Map<String, dynamic>> iniciarSesion(String email, String password) async {
   final respuesta = await cliente.post(
@@ -38,11 +17,7 @@ Future<Map<String, dynamic>> iniciarSesion(String email, String password) async 
     cuerpo: {'email': email, 'password': password},
   ) as Map<String, dynamic>;
 
-  await Almacenamiento.guardarSesion(
-    respuesta['access_token'] as String,
-    respuesta['refresh_token'] as String,
-  );
-
+  await _guardar(respuesta);
   return respuesta;
 }
 
@@ -60,6 +35,8 @@ Future<void> cerrarSesion() async {
       '/seguridad/logout',
       cuerpo: refresco == null ? null : {'refresh_token': refresco},
     );
+  } catch (_) {
+    // Sin conexión o sesión ya vencida: no hay nada más que revocar.
   } finally {
     await Almacenamiento.borrarToken();
   }
