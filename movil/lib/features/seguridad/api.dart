@@ -10,23 +10,31 @@ import 'modelos.dart';
 
 Future<dynamic> ping() => cliente.get('/seguridad/ping');
 
-/// CU-02 · Iniciar sesión y guardar los tokens en el dispositivo.
-/// Devuelve la respuesta del servidor (con el usuario).
+/// CU-02 · Inicia sesión y guarda el token de forma segura.
 Future<Map<String, dynamic>> iniciarSesion(String email, String password) async {
-  final sesion = await cliente.post('/seguridad/login', cuerpo: {
-    'email': email,
-    'password': password,
-  }) as Map<String, dynamic>;
-  await _guardar(sesion);
-  return sesion;
+  final respuesta = await cliente.post(
+    '/seguridad/login',
+    cuerpo: {'email': email, 'password': password},
+  ) as Map<String, dynamic>;
+
+  await _guardar(respuesta);
+  return respuesta;
 }
 
-/// CU-03 · Cerrar sesión. Aunque el servidor no responda, la sesión local se
-/// borra igual: el usuario pidió salir.
+/// CU-03 · Invalida el refresh token en el servidor y borra el token local.
+///
+/// El refresh token se lee ANTES de borrar el almacenamiento y se envía en el
+/// body para que el backend lo agregue a la lista negra (`TokenRevocado`).
+/// Si la llamada falla (sin red, token ya vencido), igual se limpia el
+/// almacenamiento local: el usuario no debe quedar atrapado en una sesión
+/// que ya no puede cerrar.
 Future<void> cerrarSesion() async {
+  final refresco = await Almacenamiento.leerRefresco();
   try {
-    final refresco = await Almacenamiento.leerRefresco();
-    await cliente.post('/seguridad/logout', cuerpo: {'refresh_token': refresco});
+    await cliente.post(
+      '/seguridad/logout',
+      cuerpo: refresco == null ? null : {'refresh_token': refresco},
+    );
   } catch (_) {
     // Sin conexión o sesión ya vencida: no hay nada más que revocar.
   } finally {

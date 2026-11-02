@@ -68,12 +68,14 @@ class Cliente {
   static String? _json(Object? cuerpo) =>
       cuerpo == null ? null : jsonEncode(cuerpo);
 
+  static const _timeoutRed = Duration(seconds: 8);
+
   Future<dynamic> _enviar(
     String ruta,
     Future<http.Response> Function(Map<String, String> cabeceras) peticion,
   ) async {
     final token = await Almacenamiento.leerToken();
-    var r = await peticion(_cabeceras(token));
+    var r = await peticion(_cabeceras(token)).timeout(_timeoutRed);
 
     if (r.statusCode == 401 && !_esPublica(ruta) && token != null) {
       // Si otra petición ya renovó mientras esta viajaba, alcanza con reintentar.
@@ -83,7 +85,8 @@ class Cliente {
         await Almacenamiento.borrarToken();
         alSesionCaida?.call();
       } else {
-        r = await peticion(_cabeceras(await Almacenamiento.leerToken()));
+        r = await peticion(_cabeceras(await Almacenamiento.leerToken()))
+            .timeout(_timeoutRed);
       }
     }
     return _procesar(r);
