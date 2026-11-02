@@ -39,6 +39,13 @@ dependencies:
   flutter_secure_storage: ^9.2.4
   shared_preferences: ^2.3.3
 
+dependency_overrides:
+  # Evita que path_provider_android 2.3+ y shared_preferences_android 2.5+
+  # arrastren el paquete nativo C++ `jni`, que falla en Windows por bloqueo
+  # de archivos temporales (.cxx / CMake).
+  path_provider_android: 2.2.22
+  shared_preferences_android: 2.4.23
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

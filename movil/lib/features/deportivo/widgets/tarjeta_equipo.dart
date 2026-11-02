@@ -1,8 +1,9 @@
-/// Tarjeta de visualización de equipo de alto contraste para campo/sol  —  CU-09.
+/// Tarjeta de visualización de equipo de alto contraste  —  CU-09.
 library;
 
 import 'package:flutter/material.dart';
 
+import '../../../app/tema.dart';
 import '../modelos.dart';
 
 class TarjetaEquipo extends StatelessWidget {
@@ -20,28 +21,24 @@ class TarjetaEquipo extends StatelessWidget {
     final t = Theme.of(context);
     final esOscuro = t.brightness == Brightness.dark;
 
-    // Colores de borde y superficie con alto contraste para legibilidad al sol
-    final colorBorde = esOscuro
-        ? const Color(0xFF62756A)
-        : const Color(0xFF1E2D24);
-    final colorFondo = esOscuro
-        ? const Color(0xFF14221C)
-        : const Color(0xFFFFFFFF);
+    final colorBorde =
+        esOscuro ? const Color(0xFF334155) : const Color(0xFFCBD5E1);
+    final colorFondo = esOscuro ? pizarra : Colors.white;
 
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.circular(10),
       child: Container(
         margin: const EdgeInsets.symmetric(vertical: 8),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: colorFondo,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: colorBorde, width: 2.0),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: colorBorde, width: 1.5),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: esOscuro ? 0.35 : 0.08),
-              blurRadius: 4,
+              color: Colors.black.withValues(alpha: esOscuro ? 0.3 : 0.05),
+              blurRadius: 8,
               offset: const Offset(0, 2),
             ),
           ],
@@ -69,7 +66,7 @@ class TarjetaEquipo extends StatelessWidget {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFA2372A),
+                      color: rojo,
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: const Text(
@@ -172,21 +169,21 @@ class _BadgeInfo extends StatelessWidget {
     final esOscuro = t.brightness == Brightness.dark;
 
     final fondo = destacado
-        ? (esOscuro ? const Color(0xFF1E4633) : const Color(0xFFE2F0E8))
-        : (esOscuro ? const Color(0xFF26342D) : const Color(0xFFEBEFEB));
+        ? (esOscuro ? verdeClaro.withValues(alpha: 0.16) : mentaSuave)
+        : (esOscuro ? const Color(0xFF283548) : const Color(0xFFF1F5F9));
     final textoColor = destacado
-        ? (esOscuro ? const Color(0xFF7DE1B0) : const Color(0xFF0B6B45))
-        : (esOscuro ? Colors.white : const Color(0xFF16211C));
+        ? (esOscuro ? verdeClaro : verde)
+        : (esOscuro ? Colors.white : pizarra);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
         color: fondo,
-        borderRadius: BorderRadius.circular(4),
+        borderRadius: BorderRadius.circular(6),
         border: Border.all(
           color: destacado
-              ? const Color(0xFF0B6B45)
-              : (esOscuro ? const Color(0xFF4C5C51) : const Color(0xFFCCD5CE)),
+              ? (esOscuro ? verdeClaro : mentaBorde)
+              : (esOscuro ? const Color(0xFF475569) : const Color(0xFFCBD5E1)),
           width: 1.2,
         ),
       ),
@@ -230,15 +227,15 @@ class _ChipCamiseta extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
       decoration: BoxDecoration(
         color: color,
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(
-          color: esClaro ? const Color(0xFF222222) : const Color(0xFFEEEEEE),
-          width: 1.8,
+          color: esClaro ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+          width: 1.6,
         ),
         boxShadow: const [
           BoxShadow(
-            color: Colors.black26,
-            blurRadius: 2,
+            color: Colors.black12,
+            blurRadius: 3,
             offset: Offset(0, 1),
           ),
         ],

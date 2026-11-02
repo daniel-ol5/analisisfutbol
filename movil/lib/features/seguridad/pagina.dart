@@ -1,8 +1,9 @@
 /// Seguridad y Administración  —  P1
 ///
-/// CU-02 Iniciar sesión / CU-03 Cerrar sesión. El resto de los casos de uso
-/// de este paquete (CU-01, CU-04, CU-05) siguen pendientes.
+/// CU-02 Iniciar sesión / CU-03 Cerrar sesión.
 library;
+
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -11,6 +12,7 @@ import '../../app/tema.dart';
 import '../../shared/api/almacenamiento.dart';
 import '../../shared/api/cliente.dart';
 import 'api.dart' as seguridad_api;
+import 'validacion.dart';
 
 class SeguridadPagina extends StatefulWidget {
   const SeguridadPagina({super.key});
@@ -43,13 +45,17 @@ class _SeguridadPaginaState extends State<SeguridadPagina> {
   }
 
   Future<void> _verificarSesion() async {
-    final activa = await Almacenamiento.haySesion();
-    if (!mounted) return;
-    if (activa) {
-      context.go('/');
-      return;
+    try {
+      final activa = await Almacenamiento.haySesion();
+      if (!mounted) return;
+      if (activa) {
+        context.go('/');
+        return;
+      }
+    } catch (_) {}
+    if (mounted) {
+      setState(() => _verificandoSesion = false);
     }
-    setState(() => _verificandoSesion = false);
   }
 
   Future<void> _iniciarSesion() async {
@@ -59,21 +65,39 @@ class _SeguridadPaginaState extends State<SeguridadPagina> {
       _error = null;
     });
     try {
-      await seguridad_api.iniciarSesion(_email.text.trim(), _password.text);
+      await seguridad_api.iniciarSesion(
+        _email.text.trim().toLowerCase(),
+        _password.text,
+      );
       if (!mounted) return;
       context.go('/');
     } on ErrorApi catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = e.pendiente ? 'Caso de uso aún no disponible: ${e.detalle}' : e.detalle;
-        _cargando = false;
+        _error = switch (e.codigo) {
+          401 => 'Correo o contraseña incorrectos.',
+          403 => 'La cuenta está desactivada.',
+          422 => 'Ingresa un correo electrónico con formato válido.',
+          501 => 'Caso de uso aún no disponible: ${e.detalle}',
+          _ => e.detalle,
+        };
+      });
+    } on TimeoutException {
+      if (!mounted) return;
+      setState(() {
+        _error =
+            'Tiempo de espera agotado. Verifica que el backend esté activo en el puerto 8000.';
       });
     } catch (_) {
       if (!mounted) return;
       setState(() {
-        _error = 'No se pudo conectar con el servidor.';
-        _cargando = false;
+        _error =
+            'No se pudo conectar con el servidor. Verifica que el backend esté activo.';
       });
+    } finally {
+      if (mounted) {
+        setState(() => _cargando = false);
+      }
     }
   }
 
@@ -84,42 +108,89 @@ class _SeguridadPaginaState extends State<SeguridadPagina> {
       body: SafeArea(
         child: _verificandoSesion
             ? const Center(child: CircularProgressIndicator())
-            : _vistaLogin(t),
+            : Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 440),
+                  child: _vistaLogin(t),
+                ),
+              ),
       ),
     );
   }
 
-  Widget _cabecera(ThemeData t, String etiqueta, List<TextSpan> titulo, String subtitulo) =>
+  Widget _cabecera(
+    ThemeData t,
+    String etiqueta,
+    List<TextSpan> titulo,
+    String subtitulo,
+  ) =>
       Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(etiqueta,
-              style: t.textTheme.bodySmall?.copyWith(
+          Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [verde, verdeClaro],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(
+                  Icons.sports_soccer,
+                  color: Colors.white,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                etiqueta,
+                style: t.textTheme.bodySmall?.copyWith(
                   fontSize: 11,
-                  letterSpacing: 1.6,
-                  fontWeight: FontWeight.w700,
-                  color: t.colorScheme.outline)),
-          const SizedBox(height: 10),
-          Text.rich(TextSpan(children: titulo), style: t.textTheme.titleLarge?.copyWith(fontSize: 30)),
+                  letterSpacing: 1.2,
+                  fontWeight: FontWeight.w800,
+                  color: verde,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Text.rich(
+            TextSpan(children: titulo),
+            style: t.textTheme.titleLarge?.copyWith(
+              fontSize: 30,
+              fontWeight: FontWeight.w900,
+              letterSpacing: -0.4,
+            ),
+          ),
           const SizedBox(height: 6),
-          Text(subtitulo,
-              style: t.textTheme.bodyMedium?.copyWith(color: t.colorScheme.onSurfaceVariant)),
+          Text(
+            subtitulo,
+            style: t.textTheme.bodyMedium?.copyWith(
+              color: t.colorScheme.onSurfaceVariant,
+            ),
+          ),
         ],
       );
 
   Widget _vistaLogin(ThemeData t) => Form(
         key: _formKey,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 18, 20, 32),
+          shrinkWrap: true,
+          padding: const EdgeInsets.fromLTRB(20, 24, 20, 32),
           children: [
             _cabecera(
               t,
-              'P1 · SEGURIDAD Y ADMINISTRACIÓN',
+              'ÁREA TÉCNICA · ACCESO',
               [
                 const TextSpan(text: 'Iniciar '),
-                TextSpan(text: 'sesión', style: TextStyle(color: verde)),
+                const TextSpan(text: 'sesión', style: TextStyle(color: verde)),
               ],
-              'CU-02 · Ingresá con tu correo y contraseña para continuar.',
+              'Ingresa con tu correo y contraseña del club para continuar.',
             ),
             const SizedBox(height: 22),
             Card(
@@ -135,28 +206,30 @@ class _SeguridadPaginaState extends State<SeguridadPagina> {
                         labelText: 'Correo electrónico',
                         prefixIcon: Icon(Icons.person_outline),
                       ),
-                      validator: (v) =>
-                          (v == null || v.trim().isEmpty) ? 'Ingresá tu correo' : null,
+                      validator: validarEmail,
                     ),
                     const SizedBox(height: 14),
                     TextFormField(
                       controller: _password,
                       obscureText: _ocultarPassword,
                       textInputAction: TextInputAction.done,
-                      onFieldSubmitted: (_) => _cargando ? null : _iniciarSesion(),
+                      onFieldSubmitted: (_) =>
+                          _cargando ? null : _iniciarSesion(),
                       decoration: InputDecoration(
                         labelText: 'Contraseña',
                         prefixIcon: const Icon(Icons.lock_outline),
                         suffixIcon: IconButton(
-                          icon: Icon(_ocultarPassword
-                              ? Icons.visibility_outlined
-                              : Icons.visibility_off_outlined),
-                          onPressed: () =>
-                              setState(() => _ocultarPassword = !_ocultarPassword),
+                          icon: Icon(
+                            _ocultarPassword
+                                ? Icons.visibility_outlined
+                                : Icons.visibility_off_outlined,
+                          ),
+                          onPressed: () => setState(
+                            () => _ocultarPassword = !_ocultarPassword,
+                          ),
                         ),
                       ),
-                      validator: (v) =>
-                          (v == null || v.isEmpty) ? 'Ingresá tu contraseña' : null,
+                      validator: validarRequerida,
                     ),
                   ],
                 ),
@@ -165,18 +238,26 @@ class _SeguridadPaginaState extends State<SeguridadPagina> {
             if (_error != null) ...[
               const SizedBox(height: 16),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                 decoration: BoxDecoration(
+                  color: rojo.withValues(alpha: 0.08),
                   border: Border.all(color: rojo),
-                  borderRadius: BorderRadius.circular(4),
+                  borderRadius: BorderRadius.circular(8),
                 ),
                 child: Row(
                   children: [
                     const Icon(Icons.error_outline, color: rojo, size: 20),
                     const SizedBox(width: 10),
                     Expanded(
-                      child: Text(_error!,
-                          style: const TextStyle(color: rojo, fontWeight: FontWeight.w600)),
+                      child: Text(
+                        _error!,
+                        style: const TextStyle(
+                          color: rojo,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
                     ),
                   ],
                 ),
@@ -189,7 +270,13 @@ class _SeguridadPaginaState extends State<SeguridadPagina> {
                 onPressed: _cargando ? null : _iniciarSesion,
                 child: _cargando
                     ? const SizedBox(
-                        width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2))
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.5,
+                          color: Colors.white,
+                        ),
+                      )
                     : const Text('Iniciar sesión'),
               ),
             ),

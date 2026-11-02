@@ -27,8 +27,6 @@ import {
   RestablecerPage,
   UsuariosPage,
 } from "@/features/seguridad";
-import { VisionPage } from "@/features/vision";
-import { LoginPage, PerfilPage, RegistroPage, UsuariosPage } from "@/features/seguridad";
 import { CalibracionPage, GuiaMontajePage, VisionPage } from "@/features/vision";
 
 export function Router() {

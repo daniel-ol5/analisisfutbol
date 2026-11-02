@@ -2,7 +2,7 @@
 ///
 /// Muestra los datos del usuario (también sin conexión, desde la caché),
 /// permite editar nombre y apellido, cambiar la contraseña y elegir el tema
-/// de pantalla para uso al sol (T-023).
+/// de pantalla para uso al sol (T-023) dentro de tarjetas bien estructuradas.
 library;
 
 import 'package:flutter/material.dart';
@@ -72,52 +72,86 @@ class _PerfilPaginaState extends State<PerfilPagina> {
   Widget build(BuildContext context) {
     final perfil = _perfil;
     return Scaffold(
-      appBar: AppBar(title: const Text('Mi perfil')),
+      appBar: AppBar(
+        title: const Text('Mi perfil'),
+        actions: [
+          IconButton(
+            onPressed: _cargando ? null : _cargar,
+            tooltip: 'Sincronizar perfil',
+            icon: const Icon(Icons.refresh_rounded),
+          ),
+        ],
+      ),
       body: RefreshIndicator(
         onRefresh: _cargar,
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
-          children: [
-            if (_cargando && perfil == null)
-              const Padding(
-                padding: EdgeInsets.all(32),
-                child: Center(child: CircularProgressIndicator()),
-              ),
-            if (_desdeCache) ...[
-              const Aviso(
-                  texto: 'Sin conexión: se muestran los últimos datos guardados.'),
-              const SizedBox(height: 16),
-            ],
-            if (_error != null) ...[
-              Aviso(texto: _error!),
-              const SizedBox(height: 12),
-              OutlinedButton(onPressed: _cargar, child: const Text('Reintentar')),
-              const SizedBox(height: 16),
-            ],
-            if (perfil != null) ...[
-              _Datos(perfil: perfil),
-              const SizedBox(height: 24),
-              _Seccion(
-                titulo: 'Editar mis datos',
-                child: _FormularioDatos(
-                  // La clave reinicia el formulario cuando llegan datos nuevos.
-                  key: ValueKey('${perfil.nombre}|${perfil.apellido}'),
-                  perfil: perfil,
-                  alGuardar: (nuevo) => setState(() => _perfil = nuevo),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 680),
+            child: ListView(
+              cacheExtent: 0,
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 36),
+              children: [
+                if (_cargando && perfil == null)
+                  const Padding(
+                    padding: EdgeInsets.all(32),
+                    child: Center(child: CircularProgressIndicator()),
+                  ),
+                if (_desdeCache) ...[
+                  const Aviso(
+                    texto:
+                        'Sin conexión: se muestran los últimos datos guardados.',
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                if (_error != null) ...[
+                  Aviso(texto: _error!),
+                  const SizedBox(height: 10),
+                  OutlinedButton.icon(
+                    onPressed: _cargar,
+                    icon: const Icon(Icons.refresh_rounded),
+                    label: const Text('Reintentar'),
+                  ),
+                  const SizedBox(height: 14),
+                ],
+                if (perfil != null) ...[
+                  _Datos(perfil: perfil),
+                  const SizedBox(height: 24),
+                  _Seccion(
+                    icono: Icons.badge_outlined,
+                    titulo: 'Editar mis datos',
+                    subtitulo:
+                        'Nombre visible en reportes, bitácoras y alineaciones.',
+                    child: _FormularioDatos(
+                      // La clave reinicia el formulario cuando llegan datos nuevos.
+                      key: ValueKey('${perfil.nombre}|${perfil.apellido}'),
+                      perfil: perfil,
+                      alGuardar: (nuevo) => setState(() => _perfil = nuevo),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 24),
+                const _Seccion(
+                  icono: Icons.contrast_rounded,
+                  titulo: 'Pantalla',
+                  subtitulo:
+                      'Ajusta el contraste según la iluminación del campo (T-023).',
+                  child: _SelectorTema(),
                 ),
-              ),
-              const SizedBox(height: 24),
-              const _Seccion(titulo: 'Contraseña', child: _FormularioPassword()),
-            ],
-            const SizedBox(height: 24),
-            const _Seccion(titulo: 'Pantalla', child: _SelectorTema()),
-            const SizedBox(height: 24),
-            OutlinedButton.icon(
-              onPressed: _salir,
-              icon: const Icon(Icons.logout),
-              label: const Text('Cerrar sesión'),
+                if (perfil != null) ...[
+                  const SizedBox(height: 24),
+                  const _Seccion(
+                    icono: Icons.lock_outline_rounded,
+                    titulo: 'Contraseña',
+                    subtitulo:
+                        'Al actualizarla se cerrarán tus sesiones en otros dispositivos.',
+                    child: _FormularioPassword(),
+                  ),
+                ],
+                const SizedBox(height: 24),
+                _TarjetaCerrarSesion(alSalir: _salir),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -125,20 +159,69 @@ class _PerfilPaginaState extends State<PerfilPagina> {
 }
 
 class _Seccion extends StatelessWidget {
-  const _Seccion({required this.titulo, required this.child});
+  const _Seccion({
+    required this.icono,
+    required this.titulo,
+    required this.subtitulo,
+    required this.child,
+  });
+
+  final IconData icono;
   final String titulo;
+  final String subtitulo;
   final Widget child;
 
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text(titulo, style: t.textTheme.titleMedium),
-        const SizedBox(height: 12),
-        child,
-      ],
+    final cs = t.colorScheme;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    color: cs.secondaryContainer,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    icono,
+                    color: cs.primary,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(titulo, style: t.textTheme.titleMedium),
+                      Text(
+                        subtitulo,
+                        style: t.textTheme.bodySmall?.copyWith(
+                          fontSize: 16,
+                          color: cs.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Divider(height: 1, color: cs.outlineVariant),
+            const SizedBox(height: 14),
+            child,
+          ],
+        ),
+      ),
     );
   }
 }
@@ -148,54 +231,199 @@ class _Datos extends StatelessWidget {
   const _Datos({required this.perfil});
   final Perfil perfil;
 
-  @override
-  Widget build(BuildContext context) {
-    final t = Theme.of(context);
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(perfil.nombreCompleto,
-                style: t.textTheme.titleLarge, key: const Key('perfil-nombre')),
-            const SizedBox(height: 14),
-            _Dato(etiqueta: 'Correo', valor: perfil.email),
-            _Dato(etiqueta: 'Club', valor: perfil.clubNombre),
-            _Dato(etiqueta: 'Rol', valor: perfil.rolLegible),
-          ],
-        ),
-      ),
-    );
+  String get _iniciales {
+    final n = perfil.nombre.trim();
+    final a = perfil.apellido.trim();
+    final i1 = n.isNotEmpty ? n[0] : '';
+    final i2 = a.isNotEmpty ? a[0] : '';
+    final res = '$i1$i2'.toUpperCase();
+    return res.isEmpty ? 'AT' : res;
   }
-}
-
-class _Dato extends StatelessWidget {
-  const _Dato({required this.etiqueta, required this.valor});
-  final String etiqueta;
-  final String valor;
 
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
+    final cs = t.colorScheme;
+
+    return Card(
+      clipBehavior: Clip.antiAlias,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(etiqueta,
-              style: t.textTheme.bodySmall?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  color: t.colorScheme.onSurfaceVariant)),
-          Text(valor, style: t.textTheme.bodyLarge),
+          // Franja superior con avatar, nombre y rol
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: BoxDecoration(
+              color: cs.secondaryContainer.withValues(alpha: 0.55),
+              border: Border(
+                bottom: BorderSide(color: cs.outlineVariant, width: 1),
+              ),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [verde, verdeClaro],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    _iniciales,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        perfil.nombreCompleto,
+                        style: t.textTheme.titleLarge,
+                        key: const Key('perfil-nombre'),
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.verified_user_outlined,
+                            size: 16,
+                            color: cs.primary,
+                          ),
+                          const SizedBox(width: 5),
+                          Flexible(
+                            child: Text(
+                              perfil.rolLegible,
+                              style: t.textTheme.bodySmall?.copyWith(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                color: cs.onSurface,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Metadatos del usuario (Correo y Club)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                if (constraints.maxWidth >= 420) {
+                  return Row(
+                    children: [
+                      Expanded(
+                        child: _Dato(
+                          icono: Icons.mail_outline_rounded,
+                          etiqueta: 'Correo',
+                          valor: perfil.email,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _Dato(
+                          icono: Icons.shield_outlined,
+                          etiqueta: 'Club',
+                          valor: perfil.clubNombre,
+                        ),
+                      ),
+                    ],
+                  );
+                }
+                return Column(
+                  children: [
+                    _Dato(
+                      icono: Icons.mail_outline_rounded,
+                      etiqueta: 'Correo',
+                      valor: perfil.email,
+                    ),
+                    Divider(height: 14, color: cs.outlineVariant),
+                    _Dato(
+                      icono: Icons.shield_outlined,
+                      etiqueta: 'Club',
+                      valor: perfil.clubNombre,
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
         ],
       ),
     );
   }
 }
 
+class _Dato extends StatelessWidget {
+  const _Dato({
+    required this.icono,
+    required this.etiqueta,
+    required this.valor,
+  });
+
+  final IconData icono;
+  final String etiqueta;
+  final String valor;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    final cs = t.colorScheme;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Icon(icono, size: 19, color: cs.onSurfaceVariant),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                etiqueta,
+                style: t.textTheme.bodySmall?.copyWith(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: cs.onSurfaceVariant,
+                ),
+              ),
+              Text(
+                valor,
+                style: t.textTheme.bodyLarge?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _FormularioDatos extends StatefulWidget {
-  const _FormularioDatos({super.key, required this.perfil, required this.alGuardar});
+  const _FormularioDatos({
+    super.key,
+    required this.perfil,
+    required this.alGuardar,
+  });
+
   final Perfil perfil;
   final ValueChanged<Perfil> alGuardar;
 
@@ -251,26 +479,36 @@ class _FormularioDatosState extends State<_FormularioDatos> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (_error != null) ...[Aviso(texto: _error!), const SizedBox(height: 12)],
+          if (_error != null) ...[
+            Aviso(texto: _error!),
+            const SizedBox(height: 12),
+          ],
           TextFormField(
             controller: _nombre,
-            decoration: const InputDecoration(labelText: 'Nombre'),
+            decoration: const InputDecoration(
+              labelText: 'Nombre',
+              prefixIcon: Icon(Icons.person_outline_rounded),
+            ),
             textCapitalization: TextCapitalization.words,
             autofillHints: const [AutofillHints.givenName],
             validator: (v) => validarNombre(v, 'El nombre'),
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 12),
           TextFormField(
             controller: _apellido,
-            decoration: const InputDecoration(labelText: 'Apellido'),
+            decoration: const InputDecoration(
+              labelText: 'Apellido',
+              prefixIcon: Icon(Icons.badge_outlined),
+            ),
             textCapitalization: TextCapitalization.words,
             autofillHints: const [AutofillHints.familyName],
             validator: (v) => validarNombre(v, 'El apellido'),
           ),
-          const SizedBox(height: 16),
-          FilledButton(
+          const SizedBox(height: 14),
+          FilledButton.icon(
             onPressed: _enviando ? null : _guardar,
-            child: Text(_enviando ? 'Guardando…' : 'Guardar cambios'),
+            icon: const Icon(Icons.check_rounded, size: 20),
+            label: Text(_enviando ? 'Guardando…' : 'Guardar cambios'),
           ),
         ],
       ),
@@ -293,6 +531,10 @@ class _FormularioPasswordState extends State<_FormularioPassword> {
   bool _enviando = false;
   String? _error;
   bool _cambiada = false;
+
+  bool _ocultarActual = true;
+  bool _ocultarNueva = true;
+  bool _ocultarConfirmacion = true;
 
   @override
   void dispose() {
@@ -317,8 +559,9 @@ class _FormularioPasswordState extends State<_FormularioPassword> {
       if (mounted) setState(() => _cambiada = true);
     } on ErrorApi catch (e) {
       if (mounted) {
-        setState(() => _error =
-            e.codigo == 403 ? 'La contraseña actual es incorrecta.' : e.detalle);
+        setState(() => _error = e.codigo == 403
+            ? 'La contraseña actual es incorrecta.'
+            : e.detalle);
       }
     } catch (_) {
       if (mounted) {
@@ -336,7 +579,10 @@ class _FormularioPasswordState extends State<_FormularioPassword> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (_error != null) ...[Aviso(texto: _error!), const SizedBox(height: 12)],
+          if (_error != null) ...[
+            Aviso(texto: _error!),
+            const SizedBox(height: 12),
+          ],
           if (_cambiada) ...[
             const Aviso(
               exito: true,
@@ -347,33 +593,67 @@ class _FormularioPasswordState extends State<_FormularioPassword> {
           ],
           TextFormField(
             controller: _actual,
-            decoration: const InputDecoration(labelText: 'Contraseña actual'),
-            obscureText: true,
+            decoration: InputDecoration(
+              labelText: 'Contraseña actual',
+              prefixIcon: const Icon(Icons.lock_outline_rounded),
+              suffixIcon: IconButton(
+                onPressed: () =>
+                    setState(() => _ocultarActual = !_ocultarActual),
+                icon: Icon(
+                  _ocultarActual
+                      ? Icons.visibility_outlined
+                      : Icons.visibility_off_outlined,
+                ),
+              ),
+            ),
+            obscureText: _ocultarActual,
             autofillHints: const [AutofillHints.password],
             validator: (v) =>
                 (v ?? '').isEmpty ? 'Ingresa tu contraseña actual.' : null,
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 16),
           TextFormField(
             controller: _nueva,
-            decoration: const InputDecoration(
+            decoration: InputDecoration(
               labelText: 'Nueva contraseña',
               helperText: 'De 8 a 72 caracteres.',
+              prefixIcon: const Icon(Icons.key_rounded),
+              suffixIcon: IconButton(
+                onPressed: () =>
+                    setState(() => _ocultarNueva = !_ocultarNueva),
+                icon: Icon(
+                  _ocultarNueva
+                      ? Icons.visibility_outlined
+                      : Icons.visibility_off_outlined,
+                ),
+              ),
             ),
-            obscureText: true,
+            obscureText: _ocultarNueva,
             autofillHints: const [AutofillHints.newPassword],
             validator: (v) => validarPasswordNueva(_actual.text, v),
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 16),
           TextFormField(
             controller: _confirmacion,
-            decoration:
-                const InputDecoration(labelText: 'Confirmar nueva contraseña'),
-            obscureText: true,
+            decoration: InputDecoration(
+              labelText: 'Confirmar nueva contraseña',
+              prefixIcon: const Icon(Icons.verified_outlined),
+              suffixIcon: IconButton(
+                onPressed: () => setState(
+                  () => _ocultarConfirmacion = !_ocultarConfirmacion,
+                ),
+                icon: Icon(
+                  _ocultarConfirmacion
+                      ? Icons.visibility_outlined
+                      : Icons.visibility_off_outlined,
+                ),
+              ),
+            ),
+            obscureText: _ocultarConfirmacion,
             autofillHints: const [AutofillHints.newPassword],
             validator: (v) => validarConfirmacion(_nueva.text, v),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 18),
           FilledButton(
             onPressed: _enviando ? null : _cambiar,
             child: Text(_enviando ? 'Cambiando…' : 'Cambiar contraseña'),
@@ -385,36 +665,101 @@ class _FormularioPasswordState extends State<_FormularioPassword> {
 }
 
 /// T-023: el modo sol se activa con un toque y queda guardado (T-024).
+/// En móviles se organiza en una cuadrícula uniforme de 2×2 y en pantallas
+/// anchas en 4 columnas iguales.
 class _SelectorTema extends StatelessWidget {
   const _SelectorTema();
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    const opciones = ModoTema.values;
+
     return ValueListenableBuilder<ModoTema>(
       valueListenable: modoTema,
-      builder: (context, modo, _) => Wrap(
-        spacing: 10,
-        runSpacing: 10,
-        children: [
-          for (final opcion in ModoTema.values)
-            ChoiceChip(
-              label: Text(opcion.etiqueta),
-              avatar: Icon(_icono(opcion)),
-              selected: modo == opcion,
-              labelStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-              materialTapTargetSize: MaterialTapTargetSize.padded,
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-              onSelected: (_) => cambiarModoTema(opcion),
-            ),
-        ],
+      builder: (context, modo, _) => LayoutBuilder(
+        builder: (context, constraints) {
+          const separacion = 10.0;
+          final columnas = constraints.maxWidth >= 520 ? 4 : 2;
+          final anchoColumna =
+              (constraints.maxWidth - separacion * (columnas - 1)) / columnas;
+
+          return Wrap(
+            spacing: separacion,
+            runSpacing: separacion,
+            children: [
+              for (final opcion in opciones)
+                SizedBox(
+                  width: anchoColumna,
+                  child: ChoiceChip(
+                    showCheckmark: false,
+                    avatar: Icon(
+                      _icono(opcion),
+                      size: 20,
+                      color: modo == opcion ? cs.primary : cs.onSurfaceVariant,
+                    ),
+                    label: SizedBox(
+                      width: double.infinity,
+                      child: Text(
+                        opcion.etiqueta,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    selected: modo == opcion,
+                    selectedColor: cs.secondaryContainer,
+                    backgroundColor: cs.surface,
+                    side: BorderSide(
+                      color: modo == opcion ? cs.primary : cs.outlineVariant,
+                      width: modo == opcion ? 1.8 : 1,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    labelStyle: TextStyle(
+                      fontSize: 16,
+                      fontWeight:
+                          modo == opcion ? FontWeight.w800 : FontWeight.w600,
+                      color: cs.onSurface,
+                    ),
+                    materialTapTargetSize: MaterialTapTargetSize.padded,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 12,
+                    ),
+                    onSelected: (_) => cambiarModoTema(opcion),
+                  ),
+                ),
+            ],
+          );
+        },
       ),
     );
   }
 
   static IconData _icono(ModoTema modo) => switch (modo) {
-        ModoTema.sistema => Icons.brightness_auto,
+        ModoTema.sistema => Icons.brightness_auto_rounded,
         ModoTema.claro => Icons.light_mode_outlined,
         ModoTema.oscuro => Icons.dark_mode_outlined,
-        ModoTema.sol => Icons.wb_sunny,
+        ModoTema.sol => Icons.wb_sunny_rounded,
       };
+}
+
+class _TarjetaCerrarSesion extends StatelessWidget {
+  const _TarjetaCerrarSesion({required this.alSalir});
+  final VoidCallback alSalir;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return OutlinedButton.icon(
+      onPressed: alSalir,
+      style: OutlinedButton.styleFrom(
+        foregroundColor: cs.error,
+        side: BorderSide(color: cs.error.withValues(alpha: 0.6), width: 1.5),
+        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 18),
+      ),
+      icon: const Icon(Icons.logout_rounded),
+      label: const Text('Cerrar sesión'),
+    );
+  }
 }

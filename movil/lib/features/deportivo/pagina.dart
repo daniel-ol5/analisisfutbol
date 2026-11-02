@@ -119,9 +119,9 @@ class _DeportivoPaginaState extends State<DeportivoPagina> {
         final t = Theme.of(ctx);
         final esOscuro = t.brightness == Brightness.dark;
         final colorFondo =
-            esOscuro ? const Color(0xFF14221C) : const Color(0xFFFFFFFF);
+            esOscuro ? pizarra : const Color(0xFFFFFFFF);
         final colorBorde =
-            esOscuro ? const Color(0xFF62756A) : const Color(0xFF1E2D24);
+            esOscuro ? const Color(0xFF334155) : const Color(0xFFCBD5E1);
 
         return Container(
           decoration: BoxDecoration(
@@ -246,9 +246,9 @@ class _DeportivoPaginaState extends State<DeportivoPagina> {
         final t = Theme.of(ctx);
         final esOscuro = t.brightness == Brightness.dark;
         final colorFondo =
-            esOscuro ? const Color(0xFF14221C) : const Color(0xFFFFFFFF);
+            esOscuro ? pizarra : const Color(0xFFFFFFFF);
         final colorBorde =
-            esOscuro ? const Color(0xFF62756A) : const Color(0xFF1E2D24);
+            esOscuro ? const Color(0xFF334155) : const Color(0xFFCBD5E1);
 
         return Container(
           decoration: BoxDecoration(
@@ -440,8 +440,8 @@ class _DeportivoPaginaState extends State<DeportivoPagina> {
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: esOscuro
-                    ? const Color(0xFF1E3528)
-                    : const Color(0xFFE8F5E9),
+                    ? verdeClaro.withValues(alpha: 0.14)
+                    : mentaSuave,
                 border: Border.all(color: verde, width: 2.0),
                 borderRadius: BorderRadius.circular(8),
               ),
@@ -489,13 +489,13 @@ class _DeportivoPaginaState extends State<DeportivoPagina> {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
               color: esOscuro
-                  ? const Color(0xFF182A22)
-                  : const Color(0xFFF1F6F3),
-              borderRadius: BorderRadius.circular(6),
+                  ? verdeClaro.withValues(alpha: 0.12)
+                  : mentaSuave,
+              borderRadius: BorderRadius.circular(8),
               border: Border.all(
                 color: esOscuro
-                    ? const Color(0xFF384B40)
-                    : const Color(0xFFCCD7D0),
+                    ? const Color(0xFF334155)
+                    : mentaBorde,
               ),
             ),
             child: Row(
@@ -524,9 +524,9 @@ class _DeportivoPaginaState extends State<DeportivoPagina> {
               borderRadius: BorderRadius.circular(8),
               border: Border.all(
                 color: esOscuro
-                    ? const Color(0xFF62756A)
-                    : const Color(0xFF1E2D24),
-                width: 1.8,
+                    ? const Color(0xFF475569)
+                    : const Color(0xFFCBD5E1),
+                width: 1.5,
               ),
             ),
             child: TextField(
@@ -582,14 +582,14 @@ class _DeportivoPaginaState extends State<DeportivoPagina> {
                         selected: _categoriaSeleccionada == cat,
                         selectedColor: verde,
                         backgroundColor: esOscuro
-                            ? const Color(0xFF22332A)
-                            : const Color(0xFFE8ECE9),
+                            ? const Color(0xFF283548)
+                            : const Color(0xFFF1F5F9),
                         side: BorderSide(
                           color: _categoriaSeleccionada == cat
                               ? verde
                               : (esOscuro
-                                  ? const Color(0xFF4C5C51)
-                                  : const Color(0xFF9EACA2)),
+                                  ? const Color(0xFF475569)
+                                  : const Color(0xFFCBD5E1)),
                           width: 1.5,
                         ),
                         onSelected: (_) =>
@@ -754,8 +754,8 @@ class _DeportivoPaginaState extends State<DeportivoPagina> {
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: esOscuro
-                    ? const Color(0xFF1E3528)
-                    : const Color(0xFFE8F5E9),
+                    ? verdeClaro.withValues(alpha: 0.14)
+                    : mentaSuave,
                 border: Border.all(color: verde, width: 2.0),
                 borderRadius: BorderRadius.circular(8),
               ),
@@ -838,9 +838,9 @@ class _DeportivoPaginaState extends State<DeportivoPagina> {
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
                     color: esOscuro
-                        ? const Color(0xFF62756A)
-                        : const Color(0xFF1E2D24),
-                    width: 1.8,
+                        ? const Color(0xFF475569)
+                        : const Color(0xFFCBD5E1),
+                    width: 1.5,
                   ),
                 ),
                 padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -870,9 +870,9 @@ class _DeportivoPaginaState extends State<DeportivoPagina> {
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(
                   color: esOscuro
-                      ? const Color(0xFF62756A)
-                      : const Color(0xFF1E2D24),
-                  width: 1.8,
+                      ? const Color(0xFF475569)
+                      : const Color(0xFFCBD5E1),
+                  width: 1.5,
                 ),
               ),
               child: TextField(
