@@ -10,7 +10,7 @@ Responsables segun el Sprint Planning:
     CU-17         alineacion y formacion   · S2 · Araceli
 """
 
-from fastapi import APIRouter, Query,Depends, UploadFile, status
+from fastapi import APIRouter, Depends, Query, UploadFile, status
 from fastapi.responses import Response
 
 from app.core.deps import Actual, Db, requiere_rol
