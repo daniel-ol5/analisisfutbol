@@ -4,13 +4,11 @@
 /// las features no se importan entre sí.
 library;
 
-import 'package:flutter/widgets.dart';
 import 'package:go_router/go_router.dart';
 
 import 'inicio.dart';
 import 'marco.dart';
 import '../shared/api/almacenamiento.dart';
-import '../features/seguridad/login_pagina.dart';
 import '../features/seguridad/pagina.dart';
 import '../features/seguridad/perfil_pagina.dart';
 import '../features/deportivo/pagina.dart';
@@ -21,12 +19,19 @@ import '../features/partido/pagina.dart';
 import '../features/analisis/pagina.dart';
 import '../features/asistencia/pagina.dart';
 
+/// Pantalla de inicio de sesión (CU-02): la única ruta visible sin sesión.
+const rutaLogin = '/seguridad';
+
 final router = GoRouter(
   initialLocation: '/',
   // Sin sesión, cualquier ruta que no sea /seguridad ni /login redirige al login:
   // ningún módulo (ni siquiera Inicio) se ve antes de autenticarse.
   redirect: (context, state) async {
     final autenticado = await Almacenamiento.haySesion();
+    if (!autenticado && state.matchedLocation != rutaLogin) return rutaLogin;
+    return null;
+  },
+  routes: [
     final loc = state.matchedLocation;
     if (!autenticado &&
         loc != '/seguridad' &&
@@ -51,20 +56,11 @@ final router = GoRouter(
       builder: (_, _, child) => Marco(child: child),
       routes: [
         GoRoute(path: '/', builder: (_, _) => const Inicio()),
-        GoRoute(
-          path: '/perfil',
-          redirect: _requiereSesion,
-          builder: (_, _) => const PerfilPagina(),
-        ),
+        GoRoute(path: '/perfil', builder: (_, _) => const PerfilPagina()),
         // T-053. PROVISORIO hasta T-052: /partidos será la agenda.
-        GoRoute(
-          path: '/partidos',
-          redirect: _requiereSesion,
-          builder: (_, _) => const ElegirPartidoPagina(),
-        ),
+        GoRoute(path: '/partidos', builder: (_, _) => const ElegirPartidoPagina()),
         GoRoute(
           path: '/partidos/:id/alineacion',
-          redirect: _requiereSesion,
           builder: (_, estado) => AlineacionPagina(
             partidoId: int.parse(estado.pathParameters['id']!),
           ),
@@ -78,10 +74,3 @@ final router = GoRouter(
     ),
   ],
 );
-
-/// Sin sesión guardada, manda al login y vuelve a la ruta pedida al entrar.
-Future<String?> _requiereSesion(BuildContext _, GoRouterState estado) async {
-  if (await Almacenamiento.haySesion()) return null;
-  return Uri(path: '/login', queryParameters: {'desde': estado.uri.path})
-      .toString();
-}

@@ -28,12 +28,12 @@ from app.deportivo.schemas import (
     EquipoCrear,
     EquipoEditar,
     EstadoPartido,
-    JugadorAlineadoOut,
-    Posicion,
     FilaImportacion,
+    JugadorAlineadoOut,
     JugadorBase,
     JugadorCrear,
     JugadorEditar,
+    Posicion,
     ResultadoImportacion,
 )
 from app.deportivo.schemas import (

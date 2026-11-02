@@ -10,7 +10,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import 'almacenamiento.dart';
-import 'entorno.dart';
+import 'entorno.dart'; // urlApi: ver ENTORNO y API_URL en ese archivo
 
 /// Rutas donde un 401 significa «credenciales inválidas» y no «sesión caída»:
 /// no se intenta renovar ni se cierra la sesión.

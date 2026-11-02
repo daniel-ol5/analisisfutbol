@@ -15,7 +15,7 @@ Future<void> main() async {
   // Antes del primer cuadro, para no mostrar un tema y saltar a otro.
   await cargarModoTema();
   // T-026: si la sesión no se puede renovar, de vuelta al login.
-  cliente.alSesionCaida = () => router.go('/login');
+  cliente.alSesionCaida = () => router.go(rutaLogin);
   runApp(const AreaTecnica());
 }
 

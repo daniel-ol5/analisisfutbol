@@ -13,7 +13,9 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class Almacenamiento {
-  static const _seguro = FlutterSecureStorage();
+  static const _seguro = FlutterSecureStorage(
+    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+  );
 
   static const _claveAcceso = 'areatecnica.access_token';
   static const _claveRefresco = 'areatecnica.refresh_token';
