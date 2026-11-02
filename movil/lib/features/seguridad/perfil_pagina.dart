@@ -65,7 +65,7 @@ class _PerfilPaginaState extends State<PerfilPagina> {
 
   Future<void> _salir() async {
     await cerrarSesion();
-    if (mounted) context.go('/login');
+    if (mounted) context.go('/seguridad');
   }
 
   @override

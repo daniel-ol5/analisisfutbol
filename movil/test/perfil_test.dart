@@ -97,8 +97,10 @@ void main() {
       router.go('/perfil');
       await tester.pumpAndSettle();
 
-      expect(find.text('Iniciar sesión'), findsOneWidget);
-      expect(find.text('Ingresar'), findsOneWidget);
+      // El router manda a la pantalla de login (formulario de correo y contraseña).
+      expect(find.byType(PerfilPagina), findsNothing);
+      expect(find.byType(TextFormField), findsNWidgets(2));
+      expect(find.textContaining('Iniciar sesión'), findsWidgets);
     });
 
     testWidgets('muestra nombre, correo, club y rol desde la caché',
