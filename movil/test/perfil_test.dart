@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:areatecnica/app/router.dart';
 import 'package:areatecnica/app/tema.dart';
+import 'package:areatecnica/features/analisis/pagina.dart';
 import 'package:areatecnica/features/seguridad/modelos.dart';
 import 'package:areatecnica/features/seguridad/perfil_pagina.dart';
 import 'package:areatecnica/features/seguridad/validacion.dart';
@@ -92,13 +93,13 @@ void main() {
   });
 
   group('T-025 · Perfil propio en móvil', () {
-    testWidgets('sin sesión, ir al perfil lleva al login', (tester) async {
+    testWidgets('sin sesión, un módulo protegido lleva al login', (tester) async {
       await tester.pumpWidget(MaterialApp.router(routerConfig: router));
-      router.go('/perfil');
+      router.go('/analisis');
       await tester.pumpAndSettle();
 
       // El router manda a la pantalla de login (formulario de correo y contraseña).
-      expect(find.byType(PerfilPagina), findsNothing);
+      expect(find.byType(AnalisisPagina), findsNothing);
       expect(find.byType(TextFormField), findsNWidgets(2));
       expect(find.textContaining('Iniciar sesión'), findsWidgets);
     });

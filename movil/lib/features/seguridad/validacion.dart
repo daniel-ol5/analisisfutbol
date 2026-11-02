@@ -8,6 +8,18 @@ const _minPassword = 8;
 const _maxPassword = 72;
 const _maxNombre = 80;
 
+String? validarEmail(String? email) {
+  final valor = (email ?? '').trim();
+  if (valor.isEmpty) return 'Ingresa tu correo electrónico.';
+  if (!RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(valor)) {
+    return 'Ingresa un correo electrónico válido.';
+  }
+  return null;
+}
+
+String? validarRequerida(String? password) =>
+    (password ?? '').isEmpty ? 'Ingresa tu contraseña.' : null;
+
 /// Nombre y apellido: opcionales, máximo 80 caracteres.
 String? validarNombre(String? valor, String etiqueta) =>
     (valor ?? '').trim().runes.length > _maxNombre
