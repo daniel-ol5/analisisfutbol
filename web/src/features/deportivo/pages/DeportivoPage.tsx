@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { AlineacionView } from "../components/AlineacionView";
 import { EquiposView } from "../components/EquiposView";
 import { IndumentariaView } from "../components/IndumentariaView";
 import { JugadoresView } from "../components/JugadoresView";
@@ -152,17 +153,7 @@ export function DeportivoPage() {
         </div>
       )}
 
-      {seccionActiva === "alineacion" && (
-        <div className="placeholder-box">
-          <div className="tag">Araceli · Sprint 2</div>
-          <h3>CU-17 · Configurar Alineación y Formación Táctica</h3>
-          <p>
-            Pizarra interactiva de 11 titulares, suplentes, capitán y esquema de
-            juego (4-3-3, 4-4-2, 4-2-3-1, 3-5-2). En desarrollo dentro del
-            Sprint 2.
-          </p>
-        </div>
-      )}
+      {seccionActiva === "alineacion" && <AlineacionView />}
     </div>
   );
 }

@@ -3,8 +3,13 @@
  *
  * Endpoints bajo /api/deportivo.
  */
+import { isAxiosError } from "axios";
+
 import { api } from "@/shared/api/client";
+import { estadoHttp } from "@/shared/lib/errors";
 import type {
+  Alineacion,
+  AlineacionGuardar,
   AvisoColores,
   Equipo,
   EquipoCrear,
@@ -139,4 +144,44 @@ export async function exportarJugadoresCsv(
     responseType: "blob",
   });
   return data;
+}
+
+/** CU-17: alineación del partido, o null si todavía no tiene (404). */
+export async function obtenerAlineacion(partidoId: number): Promise<Alineacion | null> {
+  try {
+    const { data } = await api.get<Alineacion>(`/deportivo/partidos/${partidoId}/alineacion`);
+    return data;
+  } catch (error) {
+    if (estadoHttp(error) === 404 && esSinAlineacion(error)) return null;
+    throw error;
+  }
+}
+
+/**
+ * CU-17: guarda la alineación completa (reemplaza la anterior).
+ *
+ * 422 si no hay 11 titulares, un solo arquero titular y un solo capitán
+ * titular, o si un jugador no es del plantel activo. 409 si el partido ya no
+ * se puede editar o si otra persona guardó al mismo tiempo.
+ */
+export async function guardarAlineacion(
+  partidoId: number,
+  datos: AlineacionGuardar,
+): Promise<Alineacion> {
+  const { data } = await api.put<Alineacion>(`/deportivo/partidos/${partidoId}/alineacion`, datos);
+  return data;
+}
+
+/**
+ * El 404 de "partido sin alineación" se distingue del de "partido inexistente
+ * o de otro club" por el texto del backend: el primero abre una alineación
+ * vacía, el segundo es un error.
+ */
+function esSinAlineacion(error: unknown): boolean {
+  return (
+    isAxiosError(error) &&
+    /todavía no tiene alineación/i.test(
+      String((error.response?.data as { detail?: unknown } | undefined)?.detail ?? ""),
+    )
+  );
 }

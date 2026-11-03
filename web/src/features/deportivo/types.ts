@@ -171,3 +171,46 @@ export function calcularDistanciaHsv(hex1: string, hex2: string): number | null 
 
   return Math.round(dist * 100) / 100;
 }
+
+// ---------- CU-17 · Alineación y formación (T-051) ----------
+
+export type Formacion = "4-3-3" | "4-4-2" | "4-2-3-1" | "3-5-2";
+
+export const FORMACIONES: readonly Formacion[] = ["4-3-3", "4-4-2", "4-2-3-1", "3-5-2"];
+
+/**
+ * Coordenadas relativas, mismos ejes que el tracking: `pos_x` es el porcentaje
+ * del largo (0 = arco propio, 100 = arco rival) y `pos_y` el del ancho
+ * (0 = banda izquierda, 100 = banda derecha, mirando al arco rival).
+ */
+export interface JugadorAlineado {
+  jugador_id: number;
+  es_titular: boolean;
+  es_capitan: boolean;
+  pos_x: number;
+  pos_y: number;
+  minuto_entra?: number | null;
+  minuto_sale?: number | null;
+}
+
+/** Cuerpo de `PUT /deportivo/partidos/{id}/alineacion`. */
+export interface AlineacionGuardar {
+  formacion: Formacion;
+  jugadores: JugadorAlineado[];
+}
+
+export interface JugadorAlineadoOut extends JugadorAlineado {
+  nombre: string;
+  apellido: string;
+  dorsal: number;
+  posicion: Posicion;
+}
+
+/** Respuesta de `GET` y `PUT /deportivo/partidos/{id}/alineacion`. */
+export interface Alineacion {
+  id: number;
+  partido_id: number;
+  formacion: Formacion;
+  /** Primero los titulares y después los suplentes, cada grupo por dorsal. */
+  jugadores: JugadorAlineadoOut[];
+}
