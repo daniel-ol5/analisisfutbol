@@ -407,7 +407,7 @@ export function ColorPickerKit({
             lineHeight: 1.4,
           }}
         >
-          <strong>⚠️ Advertencia de Contraste Interno (Titular ↔ Alternativa):</strong> La indumentaria alternativa
+          <strong>Advertencia de contraste interno (Titular - Alternativa):</strong> La indumentaria alternativa
           ({colorVisitante}) es muy próxima a la titular ({colorLocal}) en espacio HSV (distancia {distLocalVisitante.toFixed(1)} &lt; 40).
           Si un equipo rival viste similar a la titular, tu indumentaria alternativa tampoco resolverá la confusión óptica.
         </div>
@@ -425,7 +425,7 @@ export function ColorPickerKit({
             lineHeight: 1.4,
           }}
         >
-          <strong>⚡ Contraste de Arquero:</strong> La indumentaria del guardameta ({colorArquero}) está cercana
+          <strong>Contraste de Arquero:</strong> La indumentaria del guardameta ({colorArquero}) está cercana
           al uniforme titular ({colorLocal}). El reglamento exige que el arquero se distinga claramente del resto del equipo.
         </div>
       )}

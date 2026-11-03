@@ -156,7 +156,7 @@ export function Inicio() {
             </div>
             <div className="paquete-pie">
               <span className="cus">{p.cus}</span>
-              <span className="paquete-flecha">Abrir módulo →</span>
+              <span className="paquete-flecha">Abrir módulo</span>
             </div>
           </Link>
         ))}

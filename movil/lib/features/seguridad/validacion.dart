@@ -8,6 +8,20 @@ const _minPassword = 8;
 const _maxPassword = 72;
 const _maxNombre = 80;
 
+final _regexEmail = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
+
+/// Correo electrónico requerido con formato básico usuario@dominio.tld.
+String? validarEmail(String? valor) {
+  final v = (valor ?? '').trim();
+  if (v.isEmpty) return 'Ingresa tu correo electrónico.';
+  if (!_regexEmail.hasMatch(v)) return 'Ingresa un correo electrónico válido.';
+  return null;
+}
+
+/// Contraseña requerida para el inicio de sesión (CU-02).
+String? validarRequerida(String? valor) =>
+    (valor ?? '').isEmpty ? 'Ingresa tu contraseña.' : null;
+
 /// Nombre y apellido: opcionales, máximo 80 caracteres.
 String? validarNombre(String? valor, String etiqueta) =>
     (valor ?? '').trim().runes.length > _maxNombre

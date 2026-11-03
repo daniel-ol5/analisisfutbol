@@ -24,7 +24,7 @@ const rutaLogin = '/seguridad';
 
 final router = GoRouter(
   initialLocation: '/',
-  // Sin sesión, cualquier ruta que no sea /seguridad ni /login redirige al login:
+  // Sin sesión, cualquier ruta que no sea /seguridad redirige al login:
   // ningún módulo (ni siquiera Inicio) se ve antes de autenticarse.
   redirect: (context, state) async {
     final autenticado = await Almacenamiento.haySesion();
@@ -32,22 +32,6 @@ final router = GoRouter(
     return null;
   },
   routes: [
-    final loc = state.matchedLocation;
-    if (!autenticado &&
-        loc != '/seguridad' &&
-        loc != '/login' &&
-        loc != '/perfil' &&
-        !loc.startsWith('/partidos')) {
-      return '/seguridad';
-    }
-    return null;
-  },
-  routes: [
-    GoRoute(
-      path: '/login',
-      builder: (_, estado) =>
-          LoginPagina(destino: estado.uri.queryParameters['desde'] ?? '/perfil'),
-    ),
     GoRoute(
       path: '/seguridad',
       builder: (_, _) => const SeguridadPagina(),
