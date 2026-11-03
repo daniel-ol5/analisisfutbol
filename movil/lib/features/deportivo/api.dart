@@ -94,6 +94,101 @@ Future<void> _actualizarCacheSilencioso(bool activos) async {
   }
 }
 
+/// CU-09: Crear un nuevo equipo en el club y sincronizar caché local.
+Future<Equipo> crearEquipo({
+  required String nombre,
+  String categoria = '',
+  String temporada = '2026',
+  String colorLocal = '#1E5AA8',
+  String colorVisitante = '#FFFFFF',
+  String colorArquero = '#F2C200',
+}) async {
+  final cuerpo = {
+    'nombre': nombre,
+    'categoria': categoria,
+    'temporada': temporada,
+    'color_local': colorLocal,
+    'color_visitante': colorVisitante,
+    'color_arquero': colorArquero,
+  };
+
+  final r = await cliente.post('/deportivo/equipos', cuerpo: cuerpo)
+      as Map<String, dynamic>;
+  final nuevo = Equipo.fromJson(r);
+
+  final prefs = await SharedPreferences.getInstance();
+  final cacheJson = prefs.getString(_claveCacheEquipos);
+  if (cacheJson != null && cacheJson.isNotEmpty) {
+    try {
+      final lista = (jsonDecode(cacheJson) as List<dynamic>)
+          .cast<Map<String, dynamic>>()
+        ..add(nuevo.toJson());
+      await prefs.setString(_claveCacheEquipos, jsonEncode(lista));
+    } catch (_) {}
+  }
+  return nuevo;
+}
+
+/// CU-09 / CU-10: Editar datos de un equipo o su indumentaria oficial.
+Future<Equipo> editarEquipo(
+  int equipoId, {
+  String? nombre,
+  String? categoria,
+  String? temporada,
+  String? colorLocal,
+  String? colorVisitante,
+  String? colorArquero,
+  bool? activo,
+}) async {
+  final cuerpo = <String, dynamic>{
+    'nombre': ?nombre,
+    'categoria': ?categoria,
+    'temporada': ?temporada,
+    'color_local': ?colorLocal,
+    'color_visitante': ?colorVisitante,
+    'color_arquero': ?colorArquero,
+    'activo': ?activo,
+  };
+
+  final r = await cliente.patch('/deportivo/equipos/$equipoId', cuerpo: cuerpo)
+      as Map<String, dynamic>;
+  final actualizado = Equipo.fromJson(r);
+
+  final prefs = await SharedPreferences.getInstance();
+  final cacheJson = prefs.getString(_claveCacheEquipos);
+  if (cacheJson != null && cacheJson.isNotEmpty) {
+    try {
+      final lista = (jsonDecode(cacheJson) as List<dynamic>)
+          .map((e) => e as Map<String, dynamic>)
+          .map((e) => e['id'] == equipoId ? actualizado.toJson() : e)
+          .toList();
+      await prefs.setString(_claveCacheEquipos, jsonEncode(lista));
+    } catch (_) {}
+  }
+  return actualizado;
+}
+
+/// CU-09: Desactivar equipo (baja lógica, conservando historial).
+Future<void> desactivarEquipo(int equipoId) async {
+  await cliente.delete('/deportivo/equipos/$equipoId');
+
+  final prefs = await SharedPreferences.getInstance();
+  final cacheJson = prefs.getString(_claveCacheEquipos);
+  if (cacheJson != null && cacheJson.isNotEmpty) {
+    try {
+      final lista = (jsonDecode(cacheJson) as List<dynamic>)
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .map((e) {
+        if (e['id'] == equipoId) {
+          e['activo'] = false;
+        }
+        return e;
+      }).toList();
+      await prefs.setString(_claveCacheEquipos, jsonEncode(lista));
+    } catch (_) {}
+  }
+}
+
 /// CU-11: Obtener el plantel de un equipo con la misma estrategia de caché
 /// que [listarEquipos], para que la búsqueda por nombre o dorsal funcione
 /// sin conexión en la cancha una vez sincronizado al menos una vez.
@@ -194,6 +289,72 @@ Future<Jugador> crearJugador(
   }
 
   return jugador;
+}
+
+/// CU-11: Editar datos antropométricos o tácticos de un jugador.
+Future<Jugador> editarJugador(
+  int jugadorId, {
+  required int equipoId,
+  String? nombre,
+  String? apellido,
+  int? dorsal,
+  String? posicion,
+  String? pieHabil,
+  int? alturaCm,
+  double? pesoKg,
+  bool? activo,
+}) async {
+  final pesoRedondeado = pesoKg?.round();
+  final cuerpo = <String, dynamic>{
+    'nombre': ?nombre,
+    'apellido': ?apellido,
+    'dorsal': ?dorsal,
+    'posicion': ?posicion,
+    'pie_habil': ?pieHabil,
+    'altura_cm': ?alturaCm,
+    'peso_kg': ?pesoRedondeado,
+    'activo': ?activo,
+  };
+
+  final r = await cliente.patch('/deportivo/jugadores/$jugadorId',
+      cuerpo: cuerpo) as Map<String, dynamic>;
+  final actualizado = Jugador.fromJson(r);
+
+  final prefs = await SharedPreferences.getInstance();
+  final clave = _claveCacheJugadores(equipoId);
+  final cacheJson = prefs.getString(clave);
+  if (cacheJson != null && cacheJson.isNotEmpty) {
+    try {
+      final lista = (jsonDecode(cacheJson) as List<dynamic>)
+          .map((e) => e as Map<String, dynamic>)
+          .map((e) => e['id'] == jugadorId ? actualizado.toJson() : e)
+          .toList();
+      await prefs.setString(clave, jsonEncode(lista));
+    } catch (_) {}
+  }
+  return actualizado;
+}
+
+/// CU-11: Dar de baja lógica a un jugador (conserva historial).
+Future<void> bajaJugador(int jugadorId, {required int equipoId}) async {
+  await cliente.delete('/deportivo/jugadores/$jugadorId');
+
+  final prefs = await SharedPreferences.getInstance();
+  final clave = _claveCacheJugadores(equipoId);
+  final cacheJson = prefs.getString(clave);
+  if (cacheJson != null && cacheJson.isNotEmpty) {
+    try {
+      final lista = (jsonDecode(cacheJson) as List<dynamic>)
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .map((e) {
+        if (e['id'] == jugadorId) {
+          e['activo'] = false;
+        }
+        return e;
+      }).toList();
+      await prefs.setString(clave, jsonEncode(lista));
+    } catch (_) {}
+  }
 }
 
 Future<void> _actualizarCacheJugadoresSilencioso(

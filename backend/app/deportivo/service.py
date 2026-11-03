@@ -218,6 +218,8 @@ async def editar_equipo(
         equipo.color_visitante = datos.color_visitante
     if datos.color_arquero is not None:
         equipo.color_arquero = datos.color_arquero
+    if datos.activo is not None:
+        equipo.activo = datos.activo
 
     await db.commit()
     await db.refresh(equipo)
@@ -534,6 +536,16 @@ async def editar_jugador(
         jugador.peso_kg = datos.peso_kg
     if datos.fecha_nacimiento is not None:
         jugador.fecha_nacimiento = datos.fecha_nacimiento
+    if datos.activo is not None:
+        if datos.activo and not jugador.activo:
+            await _validar_dorsal_disponible(
+                db,
+                usuario.club_id,
+                jugador.equipo_id,
+                datos.dorsal if datos.dorsal is not None else jugador.dorsal,
+                excluir_jugador_id=jugador.id,
+            )
+        jugador.activo = datos.activo
 
     await db.commit()
     await db.refresh(jugador)

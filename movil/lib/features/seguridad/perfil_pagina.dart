@@ -88,7 +88,6 @@ class _PerfilPaginaState extends State<PerfilPagina> {
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 680),
             child: ListView(
-              cacheExtent: 0,
               padding: const EdgeInsets.fromLTRB(16, 14, 16, 36),
               children: [
                 if (_cargando && perfil == null)
@@ -115,7 +114,17 @@ class _PerfilPaginaState extends State<PerfilPagina> {
                 ],
                 if (perfil != null) ...[
                   _Datos(perfil: perfil),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 14),
+                ],
+                const _Seccion(
+                  icono: Icons.contrast_rounded,
+                  titulo: 'Pantalla',
+                  subtitulo:
+                      'Ajusta el contraste según la iluminación del campo (T-023).',
+                  child: _SelectorTema(),
+                ),
+                if (perfil != null) ...[
+                  const SizedBox(height: 14),
                   _Seccion(
                     icono: Icons.badge_outlined,
                     titulo: 'Editar mis datos',
@@ -128,17 +137,7 @@ class _PerfilPaginaState extends State<PerfilPagina> {
                       alGuardar: (nuevo) => setState(() => _perfil = nuevo),
                     ),
                   ),
-                ],
-                const SizedBox(height: 24),
-                const _Seccion(
-                  icono: Icons.contrast_rounded,
-                  titulo: 'Pantalla',
-                  subtitulo:
-                      'Ajusta el contraste según la iluminación del campo (T-023).',
-                  child: _SelectorTema(),
-                ),
-                if (perfil != null) ...[
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 14),
                   const _Seccion(
                     icono: Icons.lock_outline_rounded,
                     titulo: 'Contraseña',
@@ -147,7 +146,7 @@ class _PerfilPaginaState extends State<PerfilPagina> {
                     child: _FormularioPassword(),
                   ),
                 ],
-                const SizedBox(height: 24),
+                const SizedBox(height: 18),
                 _TarjetaCerrarSesion(alSalir: _salir),
               ],
             ),

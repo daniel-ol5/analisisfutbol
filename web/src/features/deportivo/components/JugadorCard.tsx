@@ -3,11 +3,19 @@ import type { Jugador } from "../types";
 
 interface JugadorCardProps {
   jugador: Jugador;
+  onVer?: (jugador: Jugador) => void;
   onEditar: (jugador: Jugador) => void;
   onBaja: (jugador: Jugador) => void;
+  onReactivar?: (jugador: Jugador) => void;
 }
 
-export function JugadorCard({ jugador, onEditar, onBaja }: JugadorCardProps) {
+export function JugadorCard({
+  jugador,
+  onVer,
+  onEditar,
+  onBaja,
+  onReactivar,
+}: JugadorCardProps) {
   return (
     <div
       style={{
@@ -41,7 +49,7 @@ export function JugadorCard({ jugador, onEditar, onBaja }: JugadorCardProps) {
               fontSize: 13,
               fontWeight: 800,
               color: "var(--pitch)",
-              background: "rgba(11, 107, 69, 0.08)",
+              background: "rgba(13, 148, 136, 0.12)",
               padding: "2px 8px",
               borderRadius: 4,
             }}
@@ -80,12 +88,14 @@ export function JugadorCard({ jugador, onEditar, onBaja }: JugadorCardProps) {
         </div>
 
         <h3
+          onClick={() => onVer?.(jugador)}
           style={{
             margin: "4px 0 0",
             fontSize: 17,
             fontWeight: 800,
             color: "var(--text)",
             letterSpacing: "-0.01em",
+            cursor: onVer ? "pointer" : "default",
           }}
         >
           {jugador.nombre} {jugador.apellido}
@@ -97,53 +107,98 @@ export function JugadorCard({ jugador, onEditar, onBaja }: JugadorCardProps) {
         </p>
       </div>
 
-      {/* Botones de acción */}
+      {/* Botones de acción CRUD */}
       <div
         style={{
           display: "flex",
           alignItems: "center",
-          justifyContent: "flex-end",
+          justifyContent: "space-between",
           gap: 8,
           paddingTop: 10,
           borderTop: "1px solid var(--line)",
+          flexWrap: "wrap",
         }}
       >
-        <button
-          type="button"
-          onClick={() => onEditar(jugador)}
-          style={{
-            all: "unset",
-            cursor: "pointer",
-            fontSize: 12,
-            fontWeight: 600,
-            color: "var(--text-2)",
-            background: "var(--ground)",
-            border: "1px solid var(--line)",
-            padding: "5px 10px",
-            borderRadius: 4,
-          }}
-        >
-          Editar
-        </button>
-
-        {jugador.activo && (
+        {onVer && (
           <button
             type="button"
-            onClick={() => onBaja(jugador)}
-            title="Dar de baja lógica al jugador (conserva su historial)"
+            onClick={() => onVer(jugador)}
             style={{
               all: "unset",
               cursor: "pointer",
               fontSize: 12,
               fontWeight: 600,
-              color: "var(--risk)",
-              padding: "5px 8px",
+              color: "var(--text)",
+              background: "var(--ground)",
+              border: "1px solid var(--line)",
+              padding: "5px 10px",
               borderRadius: 4,
             }}
           >
-            Dar de baja
+            Ver ficha
           </button>
         )}
+
+        <div style={{ display: "flex", gap: 6, marginLeft: "auto" }}>
+          <button
+            type="button"
+            onClick={() => onEditar(jugador)}
+            style={{
+              all: "unset",
+              cursor: "pointer",
+              fontSize: 12,
+              fontWeight: 600,
+              color: "var(--text-2)",
+              background: "var(--ground)",
+              border: "1px solid var(--line)",
+              padding: "5px 10px",
+              borderRadius: 4,
+            }}
+          >
+            Editar
+          </button>
+
+          {jugador.activo ? (
+            <button
+              type="button"
+              onClick={() => onBaja(jugador)}
+              title="Dar de baja lógica al jugador (conserva su historial)"
+              style={{
+                all: "unset",
+                cursor: "pointer",
+                fontSize: 12,
+                fontWeight: 600,
+                color: "var(--risk)",
+                border: "1px solid rgba(224, 112, 92, 0.35)",
+                background: "rgba(224, 112, 92, 0.08)",
+                padding: "5px 10px",
+                borderRadius: 4,
+              }}
+            >
+              Dar de baja
+            </button>
+          ) : (
+            onReactivar && (
+              <button
+                type="button"
+                onClick={() => onReactivar(jugador)}
+                title="Reactivar jugador en el plantel"
+                style={{
+                  all: "unset",
+                  cursor: "pointer",
+                  fontSize: 12,
+                  fontWeight: 600,
+                  color: "#fff",
+                  background: "var(--pitch)",
+                  padding: "5px 10px",
+                  borderRadius: 4,
+                }}
+              >
+                Reactivar
+              </button>
+            )
+          )}
+        </div>
       </div>
     </div>
   );

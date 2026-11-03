@@ -29,6 +29,7 @@ export interface EquipoEditar {
   color_local?: string;
   color_visitante?: string;
   color_arquero?: string;
+  activo?: boolean;
 }
 
 export interface AvisoColores {
@@ -88,6 +89,7 @@ export interface JugadorEditar {
   altura_cm?: number;
   peso_kg?: number | null;
   fecha_nacimiento?: string | null;
+  activo?: boolean;
 }
 
 export type OrdenJugadores = "dorsal" | "posicion" | "apellido";

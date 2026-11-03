@@ -65,6 +65,9 @@ class Cliente {
       (cab) => _http.patch(Uri.parse('$urlApi$ruta'),
           headers: cab, body: _json(cuerpo)));
 
+  Future<dynamic> delete(String ruta) => _enviar(
+      ruta, (cab) => _http.delete(Uri.parse('$urlApi$ruta'), headers: cab));
+
   static String? _json(Object? cuerpo) =>
       cuerpo == null ? null : jsonEncode(cuerpo);
 

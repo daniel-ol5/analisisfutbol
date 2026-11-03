@@ -1,282 +1,323 @@
-import { JerseyPreview } from "./JerseyPreview";
-import { calcularDistanciaHsv } from "../types";
 import type { Equipo } from "../types";
 
 interface EquipoCardProps {
   equipo: Equipo;
+  onVer: (equipo: Equipo) => void;
   onEditar: (equipo: Equipo) => void;
-  onVerificarRival: (equipo: Equipo) => void;
   onDesactivar: (equipo: Equipo) => void;
+  onReactivar?: (equipo: Equipo) => void;
+  onIrIndumentaria?: (equipo: Equipo) => void;
 }
 
 export function EquipoCard({
   equipo,
+  onVer,
   onEditar,
-  onVerificarRival,
   onDesactivar,
+  onReactivar,
+  onIrIndumentaria,
 }: EquipoCardProps) {
-  // Advertencia de contraste interno: Si la camiseta alternativa es casi idéntica a la titular
-  const distInterna = calcularDistanciaHsv(equipo.color_local, equipo.color_visitante);
-  const alertaAlternativaSimilar = distInterna !== null && distInterna < 40;
-
   return (
-    <div
+    <article
+      className="equipo-card"
       style={{
         background: "var(--surface)",
         border: "1px solid var(--line)",
-        borderRadius: 8,
-        padding: "18px 20px",
+        borderRadius: 10,
+        padding: 20,
         display: "flex",
         flexDirection: "column",
-        justifyContent: "space-between",
-        gap: 16,
-        boxShadow: "0 2px 5px rgba(0,0,0,0.04)",
-        transition: "border-color 0.15s, transform 0.15s, box-shadow 0.15s",
+        gap: 14,
         position: "relative",
-        opacity: equipo.activo ? 1 : 0.65,
+        opacity: equipo.activo ? 1 : 0.72,
+        transition: "transform 0.15s ease, box-shadow 0.15s ease",
       }}
     >
-      {/* Alerta de Contraste Interno (solo si la alternativa no contrasta con la titular) */}
-      {alertaAlternativaSimilar && (
-        <div
-          title="La indumentaria alternativa tiene un color muy próximo a la titular. En caso de conflicto óptico con un rival, ambas se confundirán."
-          style={{
-            position: "absolute",
-            top: 12,
-            right: 12,
-            background: "rgba(242, 194, 0, 0.12)",
-            color: "var(--text)",
-            border: "1px solid #F2C200",
-            padding: "2px 8px",
-            borderRadius: 12,
-            fontSize: 10.5,
-            fontWeight: 700,
-            display: "flex",
-            alignItems: "center",
-            gap: 4,
-          }}
-        >
-          <span>⚡</span> Alternativa poco contrastante
-        </div>
-      )}
-
-      {/* Encabezado de la tarjeta */}
-      <div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 6 }}>
-          <span
-            style={{
-              fontFamily: "ui-monospace, monospace",
-              fontSize: 11,
-              fontWeight: 700,
-              color: "var(--pitch)",
-              background: "var(--ok-bg)",
-              border: "1px solid var(--pitch-border)",
-              padding: "2px 6px",
-              borderRadius: 4,
-            }}
-          >
-            EQ-{equipo.id.toString().padStart(2, "0")}
-          </span>
-
-          {equipo.categoria && (
-            <span
-              style={{
-                fontSize: 11,
-                fontWeight: 600,
-                color: "var(--text-3)",
-                background: "var(--ground)",
-                padding: "2px 7px",
-                borderRadius: 4,
-                border: "1px solid var(--line)",
-              }}
-            >
-              {equipo.categoria}
-            </span>
-          )}
-
-          {equipo.temporada && (
-            <span
-              style={{
-                fontSize: 11,
-                fontWeight: 600,
-                color: "var(--text-3)",
-                background: "var(--ground)",
-                padding: "2px 7px",
-                borderRadius: 4,
-                border: "1px solid var(--line)",
-              }}
-            >
-              {equipo.temporada}
-            </span>
-          )}
-
-          {!equipo.activo && (
-            <span
-              style={{
-                fontSize: 11,
-                fontWeight: 700,
-                color: "var(--risk)",
-                background: "rgba(162, 55, 42, 0.1)",
-                padding: "2px 6px",
-                borderRadius: 4,
-              }}
-            >
-              Inactivo
-            </span>
-          )}
-        </div>
-
-        <h3
-          style={{
-            margin: "4px 0 0",
-            fontSize: 17,
-            fontWeight: 800,
-            color: "var(--text)",
-            letterSpacing: "-0.01em",
-          }}
-        >
-          {equipo.nombre}
-        </h3>
-
-        <p style={{ margin: "4px 0 0", fontSize: 12, color: "var(--text-3)" }}>
-          {equipo.jugadores === 1
-            ? "1 jugador registrado"
-            : `${equipo.jugadores} jugadores registrados`}
-        </p>
-      </div>
-
-      {/* Visualización de la indumentaria (los 3 colores del equipo) */}
-      <div
-        style={{
-          background: "var(--ground)",
-          borderRadius: 6,
-          padding: "12px 14px",
-          border: "1px solid var(--line)",
-        }}
-      >
-        <span
-          style={{
-            display: "block",
-            fontSize: 11,
-            fontWeight: 700,
-            color: "var(--text-2)",
-            textTransform: "uppercase",
-            letterSpacing: "0.06em",
-            marginBottom: 8,
-          }}
-        >
-          Juegos de Indumentaria (CU-10)
-        </span>
-
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8, textAlign: "center" }}>
-          {/* Titular */}
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-            <JerseyPreview color={equipo.color_local} size="sm" />
-            <span style={{ fontSize: 10.5, fontWeight: 700, marginTop: 4, color: "var(--text)" }}>
-              Titular
-            </span>
-            <span style={{ fontSize: 9.5, fontFamily: "monospace", color: "var(--text-3)" }}>
-              {equipo.color_local}
-            </span>
-          </div>
-
-          {/* Alternativa */}
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-            <JerseyPreview color={equipo.color_visitante} size="sm" />
-            <span style={{ fontSize: 10.5, fontWeight: 700, marginTop: 4, color: "var(--text)" }}>
-              Alternativa
-            </span>
-            <span style={{ fontSize: 9.5, fontFamily: "monospace", color: "var(--text-3)" }}>
-              {equipo.color_visitante}
-            </span>
-          </div>
-
-          {/* Arquero */}
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-            <JerseyPreview color={equipo.color_arquero} size="sm" />
-            <span style={{ fontSize: 10.5, fontWeight: 700, marginTop: 4, color: "var(--text)" }}>
-              Arquero
-            </span>
-            <span style={{ fontSize: 9.5, fontFamily: "monospace", color: "var(--text-3)" }}>
-              {equipo.color_arquero}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* Botones de acción */}
+      {/* Cabecera del Equipo */}
       <div
         style={{
           display: "flex",
-          alignItems: "center",
           justifyContent: "space-between",
-          gap: 8,
-          paddingTop: 10,
+          alignItems: "flex-start",
+          gap: 10,
+        }}
+      >
+        <div>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              flexWrap: "wrap",
+            }}
+          >
+            <span
+              style={{
+                fontFamily: "var(--font-mono)",
+                fontSize: 11,
+                fontWeight: 700,
+                padding: "2px 7px",
+                borderRadius: 4,
+                background: "rgba(13, 148, 136, 0.12)",
+                color: "var(--pitch)",
+              }}
+            >
+              EQ-{String(equipo.id).padStart(2, "0")}
+            </span>
+            <span
+              style={{
+                fontSize: 10.5,
+                fontWeight: 800,
+                padding: "2px 8px",
+                borderRadius: 99,
+                background: equipo.activo
+                  ? "rgba(13, 148, 136, 0.14)"
+                  : "rgba(224, 112, 92, 0.15)",
+                color: equipo.activo ? "var(--pitch)" : "var(--risk)",
+                letterSpacing: "0.04em",
+              }}
+            >
+              {equipo.activo ? "ACTIVO" : "INACTIVO"}
+            </span>
+          </div>
+
+          <h3
+            onClick={() => onVer(equipo)}
+            style={{
+              margin: "8px 0 3px",
+              fontSize: 18,
+              fontWeight: 800,
+              color: "var(--text)",
+              cursor: "pointer",
+            }}
+            title="Haz clic para ver la ficha completa del equipo"
+          >
+            {equipo.nombre}
+          </h3>
+        </div>
+
+        {/* Mini indicador de colores (acceso rápido a CU-10 sin saturar la tarjeta) */}
+        <button
+          type="button"
+          onClick={() =>
+            onIrIndumentaria ? onIrIndumentaria(equipo) : onVer(equipo)
+          }
+          title="Ver / configurar indumentaria oficial (CU-10)"
+          style={{
+            all: "unset",
+            cursor: "pointer",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 4,
+            padding: "5px 8px",
+            borderRadius: 99,
+            background: "var(--ground)",
+            border: "1px solid var(--line)",
+          }}
+        >
+          {[equipo.color_local, equipo.color_visitante, equipo.color_arquero].map(
+            (hex, idx) => (
+              <span
+                key={idx}
+                style={{
+                  width: 11,
+                  height: 11,
+                  borderRadius: "50%",
+                  backgroundColor: hex,
+                  border: "1px solid rgba(0,0,0,0.28)",
+                }}
+              />
+            ),
+          )}
+          <span
+            style={{
+              fontSize: 10.5,
+              fontWeight: 700,
+              color: "var(--text-2)",
+              marginLeft: 2,
+            }}
+          >
+            Kits
+          </span>
+        </button>
+      </div>
+
+      {/* Datos principales del equipo (CU-09) */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr",
+          gap: 10,
+          padding: 12,
+          borderRadius: 8,
+          background: "var(--ground)",
+          border: "1px solid var(--line)",
+        }}
+      >
+        <div style={{ gridColumn: "1 / -1" }}>
+          <div
+            style={{
+              fontSize: 10.5,
+              fontWeight: 700,
+              color: "var(--text-3)",
+              textTransform: "uppercase",
+              letterSpacing: "0.04em",
+            }}
+          >
+            Categoría / División
+          </div>
+          <div
+            style={{
+              fontSize: 13.5,
+              fontWeight: 700,
+              color: "var(--text)",
+              marginTop: 2,
+            }}
+          >
+            {equipo.categoria || "Categoría General"}
+          </div>
+        </div>
+
+        <div>
+          <div
+            style={{
+              fontSize: 10.5,
+              fontWeight: 700,
+              color: "var(--text-3)",
+              textTransform: "uppercase",
+              letterSpacing: "0.04em",
+            }}
+          >
+            Temporada
+          </div>
+          <div
+            style={{
+              fontSize: 13,
+              fontWeight: 700,
+              color: "var(--text)",
+              marginTop: 2,
+              fontFamily: "var(--font-mono)",
+            }}
+          >
+            {equipo.temporada || "2026"}
+          </div>
+        </div>
+
+        <div>
+          <div
+            style={{
+              fontSize: 10.5,
+              fontWeight: 700,
+              color: "var(--text-3)",
+              textTransform: "uppercase",
+              letterSpacing: "0.04em",
+            }}
+          >
+            Plantel Activo
+          </div>
+          <div
+            style={{
+              fontSize: 13,
+              fontWeight: 800,
+              color: "var(--pitch)",
+              marginTop: 2,
+            }}
+          >
+            {equipo.jugadores}{" "}
+            {equipo.jugadores === 1 ? "jugador" : "jugadores"}
+          </div>
+        </div>
+      </div>
+
+      {/* Pie de acciones CRUD completas: Visualizar, Editar, Eliminar/Reactivar */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
           borderTop: "1px solid var(--line)",
+          paddingTop: 12,
+          marginTop: "auto",
+          gap: 8,
+          flexWrap: "wrap",
         }}
       >
         <button
           type="button"
-          onClick={() => onVerificarRival(equipo)}
-          title="Verificar contraste óptico contra uniforme rival"
+          onClick={() => onVer(equipo)}
           style={{
-            all: "unset",
-            cursor: "pointer",
+            padding: "6px 12px",
+            borderRadius: 6,
+            border: "1px solid var(--line)",
+            background: "var(--ground)",
+            color: "var(--text)",
             fontSize: 12,
-            fontWeight: 700,
-            color: "var(--pitch)",
-            background: "var(--ok-bg)",
-            border: "1px solid var(--pitch-border)",
-            padding: "5px 12px",
-            borderRadius: 4,
-            transition: "all 0.15s ease",
-            display: "flex",
-            alignItems: "center",
-            gap: 5,
+            fontWeight: 600,
+            cursor: "pointer",
           }}
         >
-          <span>⚔️</span> Probar vs Rival
+          Ver ficha
         </button>
 
-        <div style={{ display: "flex", gap: 6 }}>
+        <div style={{ display: "flex", gap: 6, marginLeft: "auto" }}>
           <button
             type="button"
             onClick={() => onEditar(equipo)}
             style={{
-              all: "unset",
-              cursor: "pointer",
+              padding: "6px 12px",
+              borderRadius: 6,
+              border: "1px solid var(--line)",
+              background: "var(--ground)",
+              color: "var(--text-2)",
               fontSize: 12,
               fontWeight: 600,
-              color: "var(--text-2)",
-              background: "var(--ground)",
-              border: "1px solid var(--line)",
-              padding: "5px 10px",
-              borderRadius: 4,
+              cursor: "pointer",
             }}
           >
             Editar
           </button>
 
-          {equipo.activo && (
+          {equipo.activo ? (
             <button
               type="button"
               onClick={() => onDesactivar(equipo)}
-              title="Dar de baja lógica al equipo"
+              title="Dar de baja lógica al equipo (conserva su historial)"
               style={{
-                all: "unset",
-                cursor: "pointer",
+                padding: "6px 10px",
+                borderRadius: 6,
+                border: "1px solid rgba(224, 112, 92, 0.35)",
+                background: "rgba(224, 112, 92, 0.08)",
+                color: "var(--risk)",
                 fontSize: 12,
                 fontWeight: 600,
-                color: "var(--risk)",
-                padding: "5px 8px",
-                borderRadius: 4,
+                cursor: "pointer",
               }}
             >
-              Desactivar
+              Dar de baja
             </button>
+          ) : (
+            onReactivar && (
+              <button
+                type="button"
+                onClick={() => onReactivar(equipo)}
+                title="Reactivar equipo en el club"
+                style={{
+                  padding: "6px 10px",
+                  borderRadius: 6,
+                  border: "1px solid var(--pitch)",
+                  background: "var(--pitch)",
+                  color: "#fff",
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                Reactivar
+              </button>
+            )
           )}
         </div>
       </div>
-    </div>
+    </article>
   );
 }

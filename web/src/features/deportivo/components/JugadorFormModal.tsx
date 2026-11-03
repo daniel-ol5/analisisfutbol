@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { ETIQUETAS_POSICION, ETIQUETAS_PIE } from "../types";
 import type { Jugador, JugadorCrear, JugadorEditar, Posicion, PieHabil } from "../types";
@@ -29,6 +29,29 @@ export function JugadorFormModal({
   const [pesoKg, setPesoKg] = useState(jugadorAEditar?.peso_kg?.toString() ?? "");
   const [fechaNacimiento, setFechaNacimiento] = useState(jugadorAEditar?.fecha_nacimiento ?? "");
   const [errorLocal, setErrorLocal] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (jugadorAEditar) {
+      setNombre(jugadorAEditar.nombre ?? "");
+      setApellido(jugadorAEditar.apellido ?? "");
+      setDorsal(jugadorAEditar.dorsal?.toString() ?? "");
+      setPosicion(jugadorAEditar.posicion ?? "MED");
+      setPieHabil(jugadorAEditar.pie_habil ?? "DER");
+      setAlturaCm(jugadorAEditar.altura_cm?.toString() ?? "");
+      setPesoKg(jugadorAEditar.peso_kg != null ? jugadorAEditar.peso_kg.toString() : "");
+      setFechaNacimiento(jugadorAEditar.fecha_nacimiento ?? "");
+    } else {
+      setNombre("");
+      setApellido("");
+      setDorsal("");
+      setPosicion("MED");
+      setPieHabil("DER");
+      setAlturaCm("");
+      setPesoKg("");
+      setFechaNacimiento("");
+    }
+    setErrorLocal(null);
+  }, [jugadorAEditar, abierto]);
 
   if (!abierto) return null;
 
