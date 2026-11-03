@@ -19,7 +19,7 @@ import '../features/partido/pagina.dart';
 import '../features/analisis/pagina.dart';
 import '../features/asistencia/pagina.dart';
 
-/// Pantalla de inicio de sesión (CU-02): la única ruta visible sin sesión.
+/// Pantalla de inicio de sesión (CU-02).
 const rutaLogin = '/seguridad';
 
 final router = GoRouter(
