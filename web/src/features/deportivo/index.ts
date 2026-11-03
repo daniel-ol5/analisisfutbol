@@ -6,4 +6,5 @@ export { JugadoresView } from "./components/JugadoresView";
 export { JugadorCard } from "./components/JugadorCard";
 export { JugadorFormModal } from "./components/JugadorFormModal";
 export { ImportarCsvModal } from "./components/ImportarCsvModal";
+export { AlineacionView } from "./components/AlineacionView";
 export * from "./types";
