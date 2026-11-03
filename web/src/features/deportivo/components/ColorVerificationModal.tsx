@@ -252,7 +252,6 @@ export function ColorVerificationModal({
             >
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <span style={{ fontSize: 18 }}>{analisisKits.hayRiesgoActivo ? "⚠️" : "✅"}</span>
                   <strong
                     style={{
                       fontSize: 14,
@@ -301,7 +300,7 @@ export function ColorVerificationModal({
                   }}
                 >
                   <span style={{ fontSize: 12, color: "var(--text)" }}>
-                    💡 <strong>Sugerencia:</strong> {!analisisKits.alternativaEnRiesgo
+                    <strong>Sugerencia:</strong> {!analisisKits.alternativaEnRiesgo
                       ? `La indumentaria alternativa (${equipo.color_visitante}) sí contrasta adecuadamente (distancia ${analisisKits.distAlternativa.toFixed(1)} ≥ 40).`
                       : "La indumentaria alternativa también presenta similitud. Conviene registrar o cambiar el color del rival."}
                   </span>
@@ -320,7 +319,7 @@ export function ColorVerificationModal({
                         borderRadius: 4,
                       }}
                     >
-                      Probar con Alternativa →
+                      Probar con Alternativa
                     </button>
                   )}
                 </div>

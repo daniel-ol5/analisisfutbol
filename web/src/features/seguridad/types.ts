@@ -36,6 +36,22 @@ export interface Credenciales {
 /** Roles asignables, en el orden en que se ofrecen en los formularios. */
 export const ROLES: readonly Rol[] = ["ADMIN", "DT", "ANALISTA", "ASISTENTE"];
 
+/** Etiquetas descriptivas de cada rol del club. */
+export const ETIQUETA_ROL: Record<Rol, string> = {
+  ADMIN: "Administrador",
+  DT: "Director Técnico",
+  ANALISTA: "Analista Táctico",
+  ASISTENTE: "Asistente de Campo",
+};
+
+/** Descripción de permisos asociados a cada rol. */
+export const DESCRIPCION_ROL: Record<Rol, string> = {
+  ADMIN: "Acceso total al sistema, gestión de usuarios, roles, planteles, visión y reportes.",
+  DT: "Gestión deportiva, alineaciones tácticas, operación de partido, análisis y reportes.",
+  ANALISTA: "Calibración de cámaras, visión computacional, operación de partido, análisis y reportes.",
+  ASISTENTE: "Consulta de planteles, operación de partido en campo y visualización de análisis.",
+};
+
 /** Cuerpo de POST /seguridad/usuarios (CU-04). */
 export interface NuevoUsuario {
   email: string;
@@ -46,12 +62,15 @@ export interface NuevoUsuario {
 }
 
 /**
- * Cuerpo de PATCH /seguridad/usuarios/{id} (CU-04). Al menos un campo.
- * PROPUESTO, NO ESTÁ EN EL CONTRATO.
+ * Cuerpo de PATCH /seguridad/usuarios/{id} (CU-04).
+ * Coincide con UsuarioEditar en backend/app/seguridad/schemas.py.
  */
 export interface ActualizarUsuario {
-  activo?: boolean;
+  nombre?: string;
+  apellido?: string;
   rol?: Rol;
+  activo?: boolean;
+  password?: string;
 }
 
 /** Respuesta de GET y PATCH /seguridad/yo (CU-05): el usuario y el nombre de su club. */

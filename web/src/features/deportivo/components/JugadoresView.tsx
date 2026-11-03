@@ -12,12 +12,14 @@ import {
 import { JugadorCard } from "./JugadorCard";
 import { JugadorFormModal } from "./JugadorFormModal";
 import { ImportarCsvModal } from "./ImportarCsvModal";
-import type {
-  Jugador,
-  JugadorCrear,
-  JugadorEditar,
-  OrdenJugadores,
-  ResultadoImportacion,
+import {
+  ETIQUETAS_PIE,
+  ETIQUETAS_POSICION,
+  type Jugador,
+  type JugadorCrear,
+  type JugadorEditar,
+  type OrdenJugadores,
+  type ResultadoImportacion,
 } from "../types";
 
 const ETIQUETAS_ORDEN: Record<OrdenJugadores, string> = {
@@ -35,6 +37,7 @@ export function JugadoresView() {
 
   const [modalFormAbierto, setModalFormAbierto] = useState(false);
   const [jugadorAEditar, setJugadorAEditar] = useState<Jugador | null>(null);
+  const [jugadorAVer, setJugadorAVer] = useState<Jugador | null>(null);
 
   const [modalImportarAbierto, setModalImportarAbierto] = useState(false);
   const [archivoImportar, setArchivoImportar] = useState<File | null>(null);
@@ -137,6 +140,10 @@ export function JugadoresView() {
     }
   };
 
+  const handleReactivar = async (jugador: Jugador) => {
+    await mutationEditar.mutateAsync({ id: jugador.id, datos: { activo: true } });
+  };
+
   const handleSeleccionarArchivoImportar = (archivo: File) => {
     setArchivoImportar(archivo);
     setImportado(false);
@@ -184,12 +191,11 @@ export function JugadoresView() {
           borderRadius: 8,
         }}
       >
-        <span style={{ fontSize: 36, display: "block", marginBottom: 8 }}>👟</span>
         <h4 style={{ margin: 0, fontSize: 16, color: "var(--text)" }}>
           Aún no hay equipos registrados en el club.
         </h4>
         <p style={{ margin: "6px 0 0", fontSize: 13, color: "var(--text-2)" }}>
-          Registra primero un equipo en la pestaña "Equipos e Indumentaria" para poder gestionar su
+          Registra primero un equipo en la pestaña "Gestionar Equipos (CU-09)" para poder gestionar su
           plantel.
         </p>
       </div>
@@ -428,7 +434,6 @@ export function JugadoresView() {
             borderRadius: 8,
           }}
         >
-          <span style={{ fontSize: 36, display: "block", marginBottom: 8 }}>👟</span>
           <h4 style={{ margin: 0, fontSize: 16, color: "var(--text)" }}>
             {busqueda
               ? "No se encontraron jugadores que coincidan con la búsqueda."
@@ -454,7 +459,7 @@ export function JugadoresView() {
               borderRadius: 6,
             }}
           >
-            + Registrar Primer Jugador
+            Registrar Primer Jugador
           </button>
         </div>
       ) : (
@@ -469,11 +474,13 @@ export function JugadoresView() {
             <JugadorCard
               key={jugador.id}
               jugador={jugador}
+              onVer={(j) => setJugadorAVer(j)}
               onEditar={(j) => {
                 setJugadorAEditar(j);
                 setModalFormAbierto(true);
               }}
               onBaja={handleBaja}
+              onReactivar={handleReactivar}
             />
           ))}
         </div>
@@ -482,6 +489,13 @@ export function JugadoresView() {
       {/* Modal de Alta / Edición de jugador */}
       {equipoId !== null && (
         <JugadorFormModal
+          key={
+            jugadorAEditar
+              ? `editar-${jugadorAEditar.id}`
+              : modalFormAbierto
+                ? "nuevo-abierto"
+                : "nuevo-cerrado"
+          }
           abierto={modalFormAbierto}
           equipoId={equipoId}
           jugadorAEditar={jugadorAEditar}
@@ -492,6 +506,199 @@ export function JugadoresView() {
           }}
           onGuardar={handleGuardarForm}
         />
+      )}
+
+      {/* Modal de Visualización / Ficha del Jugador */}
+      {jugadorAVer && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 55,
+            backgroundColor: "rgba(0, 0, 0, 0.65)",
+            backdropFilter: "blur(3px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16,
+          }}
+          onClick={() => setJugadorAVer(null)}
+        >
+          <div
+            style={{
+              background: "var(--surface)",
+              border: "1px solid var(--line)",
+              borderRadius: 10,
+              width: "100%",
+              maxWidth: 480,
+              padding: 24,
+              boxShadow: "0 20px 40px rgba(0,0,0,0.3)",
+              display: "flex",
+              flexDirection: "column",
+              gap: 16,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "flex-start",
+                borderBottom: "1px solid var(--line)",
+                paddingBottom: 14,
+              }}
+            >
+              <div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span
+                    style={{
+                      fontFamily: "var(--font-mono)",
+                      fontSize: 13,
+                      fontWeight: 800,
+                      padding: "2px 8px",
+                      borderRadius: 4,
+                      background: "rgba(13, 148, 136, 0.14)",
+                      color: "var(--pitch)",
+                    }}
+                  >
+                    #{jugadorAVer.dorsal}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 700,
+                      padding: "2px 8px",
+                      borderRadius: 99,
+                      background: jugadorAVer.activo
+                        ? "rgba(13, 148, 136, 0.14)"
+                        : "rgba(224, 112, 92, 0.14)",
+                      color: jugadorAVer.activo ? "var(--pitch)" : "var(--risk)",
+                    }}
+                  >
+                    {jugadorAVer.activo ? "ACTIVO" : "INACTIVO"}
+                  </span>
+                </div>
+                <h3 style={{ margin: "8px 0 0", fontSize: 20 }}>
+                  {jugadorAVer.nombre} {jugadorAVer.apellido}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setJugadorAVer(null)}
+                style={{
+                  all: "unset",
+                  cursor: "pointer",
+                  fontSize: 18,
+                  color: "var(--text-3)",
+                  padding: "4px 8px",
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr",
+                gap: 12,
+                padding: 14,
+                borderRadius: 8,
+                background: "var(--ground)",
+                border: "1px solid var(--line)",
+              }}
+            >
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-3)" }}>
+                  POSICIÓN
+                </div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", marginTop: 2 }}>
+                  {ETIQUETAS_POSICION[jugadorAVer.posicion]} ({jugadorAVer.posicion})
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-3)" }}>
+                  PIE HÁBIL
+                </div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", marginTop: 2 }}>
+                  {ETIQUETAS_PIE[jugadorAVer.pie_habil]}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-3)" }}>
+                  ESTATURA
+                </div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", marginTop: 2 }}>
+                  {jugadorAVer.altura_cm} cm
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-3)" }}>
+                  PESO
+                </div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", marginTop: 2 }}>
+                  {jugadorAVer.peso_kg != null ? `${jugadorAVer.peso_kg} kg` : "No especificado"}
+                </div>
+              </div>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-3)" }}>
+                  FECHA DE NACIMIENTO
+                </div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", marginTop: 2 }}>
+                  {jugadorAVer.fecha_nacimiento || "No especificada"}
+                </div>
+              </div>
+            </div>
+
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "flex-end",
+                gap: 8,
+                borderTop: "1px solid var(--line)",
+                paddingTop: 14,
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => {
+                  const j = jugadorAVer;
+                  setJugadorAVer(null);
+                  setJugadorAEditar(j);
+                  setModalFormAbierto(true);
+                }}
+                style={{
+                  padding: "8px 16px",
+                  borderRadius: 6,
+                  border: "none",
+                  background: "var(--pitch)",
+                  color: "#fff",
+                  fontSize: 12.5,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                Editar jugador
+              </button>
+              <button
+                type="button"
+                onClick={() => setJugadorAVer(null)}
+                style={{
+                  padding: "8px 14px",
+                  borderRadius: 6,
+                  border: "1px solid var(--line)",
+                  background: "transparent",
+                  color: "var(--text-2)",
+                  fontSize: 12.5,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Modal de importación CSV */}

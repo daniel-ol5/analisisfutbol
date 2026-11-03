@@ -1,207 +1,168 @@
-/**
- * Gestión Deportiva  —  P2 · CU-09 … CU-17
- *
- * T-041 (Sprint 2 · Daniel): Pantalla de alta y edición de equipos con selector visual de tres colores.
- * Criterio de aceptación: Advierte cuando dos equipos usan colores demasiado similares.
- */
 import { useState } from "react";
-import { Link } from "react-router-dom";
 import { EquiposView } from "../components/EquiposView";
+import { IndumentariaView } from "../components/IndumentariaView";
 import { JugadoresView } from "../components/JugadoresView";
 
-const TABS = [
-  {
-    id: "equipos",
-    titulo: "Equipos e Indumentaria",
-    cus: "CU-09, CU-10",
-    responsable: "Daniel",
-    estado: "completado",
-  },
-  {
-    id: "jugadores",
-    titulo: "Plantel de Jugadores",
-    cus: "CU-11, CU-12",
-    responsable: "Alex",
-    estado: "pendiente",
-  },
-  {
-    id: "partidos",
-    titulo: "Competiciones y Calendario",
-    cus: "CU-13 … CU-16",
-    responsable: "Susana",
-    estado: "pendiente",
-  },
-  {
-    id: "alineacion",
-    titulo: "Alineaciones y Pizarra",
-    cus: "CU-17",
-    responsable: "Araceli",
-    estado: "pendiente",
-  },
-];
+type SeccionDeportivo =
+  | "equipos"
+  | "indumentaria"
+  | "jugadores"
+  | "partidos"
+  | "alineacion";
 
 export function DeportivoPage() {
-  const [tabActiva, setTabActiva] = useState<string>("equipos");
+  const [seccionActiva, setSeccionActiva] =
+    useState<SeccionDeportivo>("equipos");
+  const [equipoIndumentariaId, setEquipoIndumentariaId] = useState<
+    number | null
+  >(null);
+
+  const handleIrIndumentaria = (equipoId?: number) => {
+    setEquipoIndumentariaId(equipoId ?? null);
+    setSeccionActiva("indumentaria");
+  };
 
   return (
-    <main
-      style={{
-        maxWidth: 1100,
-        margin: "0 auto",
-        padding: "48px 24px 80px",
-      }}
-    >
-      {/* Navegación de retorno */}
-      <div style={{ marginBottom: 16 }}>
-        <Link
-          to="/"
+    <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
+      {/* Cabecera del Módulo Deportivo */}
+      <header className="page-head" style={{ marginBottom: 0 }}>
+        <span className="kicker">P2 · GESTIÓN DEPORTIVA (CU-09 … CU-17)</span>
+        <h2 style={{ margin: "4px 0 6px" }}>
+          Equipos, Indumentaria, Plantel y Calendario
+        </h2>
+        <p
           style={{
-            fontSize: 13,
-            fontWeight: 600,
-            color: "var(--text-3)",
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 4,
+            margin: 0,
+            color: "var(--text-2)",
+            fontSize: 13.5,
+            maxWidth: 740,
           }}
         >
-          ← Volver al Inicio
-        </Link>
-      </div>
-
-      {/* Encabezado principal */}
-      <header style={{ marginBottom: 28 }}>
-        <p className="kicker">Paquete P2 · Sprint 2</p>
-        <h1
-          style={{
-            fontSize: "clamp(28px, 4vw, 38px)",
-            fontWeight: 800,
-            letterSpacing: "-0.02em",
-            margin: "8px 0 6px",
-          }}
-        >
-          Gestión <em>Deportiva</em>
-        </h1>
-        <p className="dek" style={{ margin: 0 }}>
-          Administración de planteles, indumentaria para visión artificial y calendario deportivo.
+          Administra de forma organizada las divisiones y planteles del club (
+          <strong>CU-09</strong>), registra y valida ópticamente la indumentaria
+          oficial en espacio HSV (<strong>CU-10</strong>) y gestiona las fichas
+          antropométricas de los futbolistas (<strong>CU-11, CU-12</strong>).
         </p>
       </header>
 
-      {/* Selector de sub-módulos (Pestañas) */}
-      <nav
+      {/* Navegación de Secciones del Módulo Deportivo */}
+      <div
         style={{
           display: "flex",
-          gap: 8,
+          gap: 6,
           borderBottom: "1px solid var(--line)",
-          marginBottom: 28,
+          paddingBottom: 0,
           overflowX: "auto",
         }}
       >
-        {TABS.map((tab) => {
-          const esActiva = tabActiva === tab.id;
+        {(
+          [
+            {
+              id: "equipos",
+              label: "Gestionar Equipos",
+              cu: "CU-09",
+            },
+            {
+              id: "indumentaria",
+              label: "Indumentaria de Equipo",
+              cu: "CU-10",
+            },
+            {
+              id: "jugadores",
+              label: "Plantel de Jugadores",
+              cu: "CU-11, CU-12",
+            },
+            {
+              id: "partidos",
+              label: "Competiciones y Calendario",
+              cu: "CU-13 … CU-16",
+            },
+            {
+              id: "alineacion",
+              label: "Alineaciones y Pizarra",
+              cu: "CU-17",
+            },
+          ] as const
+        ).map((tab) => {
+          const activa = seccionActiva === tab.id;
           return (
             <button
               key={tab.id}
               type="button"
-              onClick={() => setTabActiva(tab.id)}
+              onClick={() => {
+                if (tab.id !== "indumentaria") {
+                  setEquipoIndumentariaId(null);
+                }
+                setSeccionActiva(tab.id);
+              }}
               style={{
                 all: "unset",
                 cursor: "pointer",
                 padding: "10px 16px",
-                fontSize: 13,
-                fontWeight: esActiva ? 700 : 500,
-                color: esActiva ? "var(--pitch)" : "var(--text-2)",
-                borderBottom: esActiva ? "2px solid var(--pitch)" : "2px solid transparent",
-                marginBottom: -1,
-                display: "flex",
+                borderBottom: activa
+                  ? "2.5px solid var(--pitch)"
+                  : "2.5px solid transparent",
+                color: activa ? "var(--text)" : "var(--text-3)",
+                fontWeight: activa ? 700 : 500,
+                fontSize: 13.5,
+                display: "inline-flex",
                 alignItems: "center",
                 gap: 8,
                 whiteSpace: "nowrap",
-                transition: "all 0.15s ease",
+                transition: "color 0.15s ease, border-color 0.15s ease",
               }}
             >
-              <span>{tab.titulo}</span>
+              <span>{tab.label}</span>
               <span
                 style={{
-                  fontSize: 10,
-                  fontFamily: "monospace",
-                  padding: "1px 5px",
-                  borderRadius: 3,
-                  backgroundColor: esActiva ? "var(--ok-bg)" : "var(--ground)",
-                  color: esActiva ? "var(--pitch)" : "var(--text-3)",
-                  border: esActiva ? "1px solid var(--pitch-border)" : "1px solid var(--line)",
+                  fontSize: 10.5,
+                  fontFamily: "var(--font-mono)",
+                  padding: "2px 6px",
+                  borderRadius: 4,
+                  background: activa
+                    ? "rgba(13, 148, 136, 0.14)"
+                    : "var(--ground)",
+                  color: activa ? "var(--pitch)" : "var(--text-3)",
                 }}
               >
-                {tab.cus}
+                {tab.cu}
               </span>
             </button>
           );
         })}
-      </nav>
+      </div>
 
-      {/* Contenido según pestaña activa */}
-      {tabActiva === "equipos" && <EquiposView />}
+      {/* Renderizado de la Sección Activa */}
+      {seccionActiva === "equipos" && (
+        <EquiposView onIrIndumentaria={handleIrIndumentaria} />
+      )}
+      {seccionActiva === "indumentaria" && (
+        <IndumentariaView equipoInicialId={equipoIndumentariaId} />
+      )}
+      {seccionActiva === "jugadores" && <JugadoresView />}
 
-      {tabActiva === "jugadores" && <JugadoresView />}
-
-      {tabActiva === "partidos" && (
-        <div
-          style={{
-            padding: 32,
-            background: "var(--surface)",
-            border: "1px solid var(--line)",
-            borderRadius: 8,
-          }}
-        >
-          <span
-            style={{
-              fontSize: 11,
-              fontWeight: 700,
-              color: "var(--pitch)",
-              textTransform: "uppercase",
-              letterSpacing: "0.08em",
-            }}
-          >
-            Sprint 2 · Susana · CU-13 … CU-16
-          </span>
-          <h3 style={{ margin: "6px 0 8px", fontSize: 18, color: "var(--text)" }}>
-            Competiciones y Agenda de Partidos
-          </h3>
-          <p style={{ margin: 0, fontSize: 13, color: "var(--text-2)", lineHeight: 1.6 }}>
-            Programación de encuentros oficiales y amistosos, definición de torneos,
-            reprogramaciones y cancelaciones de partidos.
+      {seccionActiva === "partidos" && (
+        <div className="placeholder-box">
+          <div className="tag">Susana · Sprint 2</div>
+          <h3>CU-13 a CU-16 · Competiciones y Calendario de Partidos</h3>
+          <p>
+            Programación, reprogramación y cancelación de partidos oficiales y
+            amistosos del club. En desarrollo dentro del Sprint 2.
           </p>
         </div>
       )}
 
-      {tabActiva === "alineacion" && (
-        <div
-          style={{
-            padding: 32,
-            background: "var(--surface)",
-            border: "1px solid var(--line)",
-            borderRadius: 8,
-          }}
-        >
-          <span
-            style={{
-              fontSize: 11,
-              fontWeight: 700,
-              color: "var(--pitch)",
-              textTransform: "uppercase",
-              letterSpacing: "0.08em",
-            }}
-          >
-            Sprint 2 · Araceli · CU-17
-          </span>
-          <h3 style={{ margin: "6px 0 8px", fontSize: 18, color: "var(--text)" }}>
-            Alineación y Formación Táctica
-          </h3>
-          <p style={{ margin: 0, fontSize: 13, color: "var(--text-2)", lineHeight: 1.6 }}>
-            Pizarra táctica interactiva para definir el esquema inicial (4-3-3, 4-4-2, 4-2-3-1,
-            3-5-2), titulares, suplentes y dirección de ataque en cada tiempo.
+      {seccionActiva === "alineacion" && (
+        <div className="placeholder-box">
+          <div className="tag">Araceli · Sprint 2</div>
+          <h3>CU-17 · Configurar Alineación y Formación Táctica</h3>
+          <p>
+            Pizarra interactiva de 11 titulares, suplentes, capitán y esquema de
+            juego (4-3-3, 4-4-2, 4-2-3-1, 3-5-2). En desarrollo dentro del
+            Sprint 2.
           </p>
         </div>
       )}
-    </main>
+    </div>
   );
 }

@@ -4,7 +4,7 @@ import { Alert, Button, Input, Select } from "@/shared/ui";
 
 import { MENSAJE_EMAIL_DUPLICADO, estadoHttp, mensajeDeError } from "../errors";
 import { useCrearUsuario } from "../hooks";
-import { ROLES, type Rol } from "../types";
+import { ETIQUETA_ROL, ROLES, type Rol } from "../types";
 import {
   normalizarEmail,
   validarEmail,
@@ -77,10 +77,27 @@ export function FormularioUsuario({
   return (
     <form onSubmit={alEnviar} noValidate>
       {mensajeServidor && <Alert tono="error">{mensajeServidor}</Alert>}
+      <div className="usuarios-form-grid">
+        <Input
+          etiqueta="Nombre"
+          placeholder="Ej. Carlos"
+          value={nombre}
+          onChange={(e) => setNombre(e.target.value)}
+          error={errores.nombre}
+        />
+        <Input
+          etiqueta="Apellido"
+          placeholder="Ej. Mendoza"
+          value={apellido}
+          onChange={(e) => setApellido(e.target.value)}
+          error={errores.apellido}
+        />
+      </div>
       <Input
         etiqueta="Correo electrónico"
         type="email"
         autoComplete="off"
+        placeholder="usuario@club.com"
         value={email}
         onChange={(e) => setEmail(e.target.value)}
         error={errores.email}
@@ -94,20 +111,8 @@ export function FormularioUsuario({
         ayuda="De 8 a 72 caracteres."
         error={errores.password}
       />
-      <Input
-        etiqueta="Nombre (opcional)"
-        value={nombre}
-        onChange={(e) => setNombre(e.target.value)}
-        error={errores.nombre}
-      />
-      <Input
-        etiqueta="Apellido (opcional)"
-        value={apellido}
-        onChange={(e) => setApellido(e.target.value)}
-        error={errores.apellido}
-      />
       <Select
-        etiqueta="Rol"
+        etiqueta="Rol en el club"
         value={rol}
         onChange={(e) => setRol(e.target.value)}
         error={errores.rol}
@@ -115,7 +120,7 @@ export function FormularioUsuario({
         <option value="">Selecciona un rol</option>
         {ROLES.map((r) => (
           <option key={r} value={r}>
-            {r}
+            {r} — {ETIQUETA_ROL[r]}
           </option>
         ))}
       </Select>

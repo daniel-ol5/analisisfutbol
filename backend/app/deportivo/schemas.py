@@ -68,6 +68,7 @@ class EquipoEditar(BaseModel):
     color_local: str | None = None
     color_visitante: str | None = None
     color_arquero: str | None = None
+    activo: bool | None = None
 
 
 class Equipo(EquipoBase):
@@ -112,6 +113,7 @@ class JugadorEditar(BaseModel):
     altura_cm: int | None = None
     peso_kg: int | None = None
     fecha_nacimiento: date | None = None
+    activo: bool | None = None
 
 
 class Jugador(JugadorBase):

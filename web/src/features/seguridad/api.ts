@@ -51,7 +51,7 @@ export async function restablecerPassword(datos: RestablecerPassword): Promise<S
   return data;
 }
 
-/** CU-03 · Cerrar sesión en el servidor (hoy no invalida el refresh token). */
+/** CU-03 · Cerrar sesión en el servidor. */
 export async function logout(): Promise<void> {
   await api.post("/seguridad/logout");
 }
@@ -62,10 +62,27 @@ export async function listarUsuarios(): Promise<Usuario[]> {
   return data;
 }
 
+/** CU-04 · Consultar el detalle de un usuario del club. */
+export async function obtenerUsuario(id: number): Promise<Usuario> {
+  const { data } = await api.get<Usuario>(`/seguridad/usuarios/${id}`);
+  return data;
+}
+
 /** CU-04 · Crear un usuario del club. */
 export async function crearUsuario(datos: NuevoUsuario): Promise<Usuario> {
   const { data } = await api.post<Usuario>("/seguridad/usuarios", datos);
   return data;
+}
+
+/** CU-04 · Editar datos, rol, contraseña o estado de un usuario del club. */
+export async function actualizarUsuario(id: number, cambios: ActualizarUsuario): Promise<Usuario> {
+  const { data } = await api.patch<Usuario>(`/seguridad/usuarios/${id}`, cambios);
+  return data;
+}
+
+/** CU-04 · Dar de baja (baja lógica) a un usuario del club. */
+export async function eliminarUsuario(id: number): Promise<void> {
+  await api.delete(`/seguridad/usuarios/${id}`);
 }
 
 /** CU-05 · Datos del usuario autenticado, con el nombre de su club. */
@@ -88,16 +105,5 @@ export async function editarPerfil(cambios: ActualizarPerfil): Promise<Perfil> {
  */
 export async function cambiarPassword(datos: CambioPassword): Promise<Sesion> {
   const { data } = await api.post<Sesion>("/seguridad/yo/password", datos);
-  return data;
-}
-
-/**
- * CU-04 · Desactivar, reactivar o cambiar el rol de un usuario.
- *
- * PROPUESTO, NO ESTÁ EN EL CONTRATO: PATCH /seguridad/usuarios/{id}. Ver
- * HABILITAR_EDICION_USUARIOS en config.ts.
- */
-export async function actualizarUsuario(id: number, cambios: ActualizarUsuario): Promise<Usuario> {
-  const { data } = await api.patch<Usuario>(`/seguridad/usuarios/${id}`, cambios);
   return data;
 }
