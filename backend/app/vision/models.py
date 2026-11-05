@@ -8,7 +8,7 @@ clubes (Pb-03), salvo las que cuelgan de otra que ya lo tenga.
 
 from datetime import UTC, datetime
 
-from sqlalchemy import JSON, DateTime, Float, ForeignKey, Integer, UniqueConstraint
+from sqlalchemy import JSON, DateTime, Float, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -52,5 +52,39 @@ class Calibracion(Base):
     )
 
     creada_en: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+
+
+class ModeloML(Base):
+    """Versión entrenada de un modelo YOLO (CU-29).
+
+    Cada `POST /modelos` registra una versión ya entrenada (con sus métricas),
+    nunca entrena nada aquí. `activo` marca cuál usa el worker en el próximo
+    procesamiento (T-059); `activar_modelo` en `service.py` garantiza que haya
+    como máximo una activa por club, lo que permite "volver atrás" a una
+    versión anterior sin reentrenar: activarla de nuevo alcanza.
+    """
+
+    __tablename__ = "modelo_ml"
+    __table_args__ = (
+        UniqueConstraint("club_id", "nombre", "version", name="uq_modelo_club_nombre_version"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    club_id: Mapped[int] = mapped_column(ForeignKey("club.id"), index=True)
+
+    nombre: Mapped[str] = mapped_column(String(80))
+    version: Mapped[str] = mapped_column(String(20))
+    tipo: Mapped[str] = mapped_column(String(20))
+    archivo_url: Mapped[str] = mapped_column(String(400))
+
+    map50_jugador: Mapped[float | None] = mapped_column(Float, nullable=True)
+    map50_balon: Mapped[float | None] = mapped_column(Float, nullable=True)
+    idf1: Mapped[float | None] = mapped_column(Float, nullable=True)
+    notas: Mapped[str] = mapped_column(default="")
+
+    activo: Mapped[bool] = mapped_column(default=False, index=True)
+    entrenado_en: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
