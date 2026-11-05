@@ -1,0 +1,11 @@
+nombre;apellido;dorsal;altura_cm;posicion;pie_habil;peso_kg;fecha_nacimiento
+Juan;Perez;9;181;DEL;DER;78;1998-05-12
+Carlos;Gomez;1;185;ARQ;DER;82;1995-02-20
+Mario;Lopez;10;172;MED;IZQ;68;1994-11-03
+Pedro;Diaz;11;175;DEL;DER;74;1997-01-15
+Luis;Fernandez;4;178;DEF;DER;80;1993-07-30
+Andres;Torres;6;183;MED;AMBOS;75;1996-09-09
+Sergio;Rojas;2;180;DEF;DER;77;1999-04-18
+Diego;Flores;8;170;MED;IZQ;70;1998-12-01
+Oscar;Vargas;23;176;DEF;DER;73;2000-03-22
+Raul;Castro;5;174;MED;DER;71;1997-08-08
