@@ -3,20 +3,13 @@ import { AlineacionView } from "../components/AlineacionView";
 import { EquiposView } from "../components/EquiposView";
 import { IndumentariaView } from "../components/IndumentariaView";
 import { JugadoresView } from "../components/JugadoresView";
+import { PartidosView } from "../components/PartidosView";
 
-type SeccionDeportivo =
-  | "equipos"
-  | "indumentaria"
-  | "jugadores"
-  | "partidos"
-  | "alineacion";
+type SeccionDeportivo = "equipos" | "indumentaria" | "jugadores" | "partidos" | "alineacion";
 
 export function DeportivoPage() {
-  const [seccionActiva, setSeccionActiva] =
-    useState<SeccionDeportivo>("equipos");
-  const [equipoIndumentariaId, setEquipoIndumentariaId] = useState<
-    number | null
-  >(null);
+  const [seccionActiva, setSeccionActiva] = useState<SeccionDeportivo>("equipos");
+  const [equipoIndumentariaId, setEquipoIndumentariaId] = useState<number | null>(null);
 
   const handleIrIndumentaria = (equipoId?: number) => {
     setEquipoIndumentariaId(equipoId ?? null);
@@ -28,9 +21,7 @@ export function DeportivoPage() {
       {/* Cabecera del Módulo Deportivo */}
       <header className="page-head" style={{ marginBottom: 0 }}>
         <span className="kicker">P2 · GESTIÓN DEPORTIVA (CU-09 … CU-17)</span>
-        <h2 style={{ margin: "4px 0 6px" }}>
-          Equipos, Indumentaria, Plantel y Calendario
-        </h2>
+        <h2 style={{ margin: "4px 0 6px" }}>Equipos, Indumentaria, Plantel y Calendario</h2>
         <p
           style={{
             margin: 0,
@@ -39,10 +30,10 @@ export function DeportivoPage() {
             maxWidth: 740,
           }}
         >
-          Administra de forma organizada las divisiones y planteles del club (
-          <strong>CU-09</strong>), registra y valida ópticamente la indumentaria
-          oficial en espacio HSV (<strong>CU-10</strong>) y gestiona las fichas
-          antropométricas de los futbolistas (<strong>CU-11, CU-12</strong>).
+          Administra de forma organizada las divisiones y planteles del club (<strong>CU-09</strong>
+          ), registra y valida ópticamente la indumentaria oficial en espacio HSV (
+          <strong>CU-10</strong>) y gestiona las fichas antropométricas de los futbolistas (
+          <strong>CU-11, CU-12</strong>).
         </p>
       </header>
 
@@ -100,9 +91,7 @@ export function DeportivoPage() {
                 all: "unset",
                 cursor: "pointer",
                 padding: "10px 16px",
-                borderBottom: activa
-                  ? "2.5px solid var(--pitch)"
-                  : "2.5px solid transparent",
+                borderBottom: activa ? "2.5px solid var(--pitch)" : "2.5px solid transparent",
                 color: activa ? "var(--text)" : "var(--text-3)",
                 fontWeight: activa ? 700 : 500,
                 fontSize: 13.5,
@@ -120,9 +109,7 @@ export function DeportivoPage() {
                   fontFamily: "var(--font-mono)",
                   padding: "2px 6px",
                   borderRadius: 4,
-                  background: activa
-                    ? "rgba(13, 148, 136, 0.14)"
-                    : "var(--ground)",
+                  background: activa ? "rgba(13, 148, 136, 0.14)" : "var(--ground)",
                   color: activa ? "var(--pitch)" : "var(--text-3)",
                 }}
               >
@@ -134,24 +121,13 @@ export function DeportivoPage() {
       </div>
 
       {/* Renderizado de la Sección Activa */}
-      {seccionActiva === "equipos" && (
-        <EquiposView onIrIndumentaria={handleIrIndumentaria} />
-      )}
+      {seccionActiva === "equipos" && <EquiposView onIrIndumentaria={handleIrIndumentaria} />}
       {seccionActiva === "indumentaria" && (
         <IndumentariaView equipoInicialId={equipoIndumentariaId} />
       )}
       {seccionActiva === "jugadores" && <JugadoresView />}
 
-      {seccionActiva === "partidos" && (
-        <div className="placeholder-box">
-          <div className="tag">Susana · Sprint 2</div>
-          <h3>CU-13 a CU-16 · Competiciones y Calendario de Partidos</h3>
-          <p>
-            Programación, reprogramación y cancelación de partidos oficiales y
-            amistosos del club. En desarrollo dentro del Sprint 2.
-          </p>
-        </div>
-      )}
+      {seccionActiva === "partidos" && <PartidosView />}
 
       {seccionActiva === "alineacion" && <AlineacionView />}
     </div>

@@ -11,6 +11,7 @@ import type {
   Alineacion,
   AlineacionGuardar,
   AvisoColores,
+  Competicion,
   Equipo,
   EquipoCrear,
   EquipoEditar,
@@ -18,6 +19,8 @@ import type {
   JugadorCrear,
   JugadorEditar,
   OrdenJugadores,
+  Partido,
+  PartidoCrear,
   ResultadoImportacion,
 } from "./types";
 
@@ -143,6 +146,18 @@ export async function exportarJugadoresCsv(
     params: { activos, orden },
     responseType: "blob",
   });
+  return data;
+}
+
+/** CU-13: competiciones activas disponibles para programar partidos. */
+export async function listarCompeticiones(): Promise<Competicion[]> {
+  const { data } = await api.get<Competicion[]>("/deportivo/competiciones");
+  return data;
+}
+
+/** CU-14: programa un partido real en estado inicial PROGRAMADO. */
+export async function programarPartido(datos: PartidoCrear): Promise<Partido> {
+  const { data } = await api.post<Partido>("/deportivo/partidos", datos);
   return data;
 }
 

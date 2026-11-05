@@ -109,6 +109,45 @@ export interface ResultadoImportacion {
   detalle: FilaImportacion[];
 }
 
+// ---------- CU-13 a CU-16 · Competiciones y partidos ----------
+
+export interface Competicion {
+  id: number;
+  club_id: number;
+  nombre: string;
+  temporada: string;
+  fecha_inicio: string | null;
+  fecha_fin: string | null;
+}
+
+export type EstadoPartido =
+  "PROGRAMADO" | "EN_CURSO" | "FINALIZADO" | "PROCESANDO" | "ANALIZADO" | "CANCELADO";
+
+export interface Partido {
+  id: number;
+  equipo_id: number;
+  competicion_id: number | null;
+  rival: string;
+  es_local: boolean;
+  fecha_hora: string;
+  sede: string;
+  estado: EstadoPartido;
+  ataca_hacia: "IZQ" | "DER" | null;
+  goles_favor: number;
+  goles_contra: number;
+  parte: number;
+  minuto_actual: number;
+}
+
+export interface PartidoCrear {
+  equipo_id: number;
+  rival: string;
+  es_local: boolean;
+  fecha_hora: string;
+  sede: string;
+  competicion_id: number | null;
+}
+
 /**
  * Convierte color hexadecimal #RRGGBB a HSV (H: 0..360, S: 0..100, V: 0..100).
  * Espejo del cálculo del backend para feedback en tiempo real en la UI.
