@@ -5752,6 +5752,17 @@
               }
             ],
             "title": "Color Arquero"
+          },
+          "activo": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Activo"
           }
         },
         "type": "object",
@@ -6814,6 +6825,17 @@
               }
             ],
             "title": "Fecha Nacimiento"
+          },
+          "activo": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Activo"
           }
         },
         "type": "object",
@@ -7238,7 +7260,10 @@
           "archivo_url": {
             "type": "string",
             "maxLength": 400,
-            "title": "Archivo Url"
+            "title": "Archivo Url",
+            "examples": [
+              "https://cdn.club.com/modelos/futbol-v3.pt"
+            ]
           },
           "map50_jugador": {
             "anyOf": [
@@ -7343,7 +7368,10 @@
           "archivo_url": {
             "type": "string",
             "maxLength": 400,
-            "title": "Archivo Url"
+            "title": "Archivo Url",
+            "examples": [
+              "https://cdn.club.com/modelos/futbol-v3.pt"
+            ]
           },
           "map50_jugador": {
             "anyOf": [
