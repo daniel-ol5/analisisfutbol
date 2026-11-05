@@ -6,6 +6,7 @@ import { Alert, Button, Input, Select } from "@/shared/ui";
 
 import { useCompeticiones, useEquiposParaPartido, useProgramarPartido } from "../hooks";
 import type { Partido } from "../types";
+import { AgendaPartidos } from "./AgendaPartidos";
 import "./partidos.css";
 
 type CampoFormulario = "equipo" | "rival" | "fecha" | "hora" | "sede";
@@ -96,20 +97,7 @@ export function PartidosView() {
   const sinEquipos = !cargando && (equipos.data?.length ?? 0) === 0;
 
   if (!puedeProgramar) {
-    return (
-      <section className="partidos-vista" aria-labelledby="partidos-titulo">
-        <div className="partidos-cabecera">
-          <div>
-            <span className="kicker">CU-14 · PROGRAMACIÓN DE PARTIDOS</span>
-            <h3 id="partidos-titulo">Calendario deportivo</h3>
-          </div>
-        </div>
-        <Alert tono="info" titulo="Acceso de consulta">
-          Solo administradores y directores técnicos pueden programar partidos. La consulta de
-          agenda estará disponible en esta sección.
-        </Alert>
-      </section>
-    );
+    return <AgendaPartidos />;
   }
 
   return (
@@ -305,6 +293,7 @@ export function PartidosView() {
           </div>
         </aside>
       </div>
+      <AgendaPartidos />
     </section>
   );
 }

@@ -148,6 +148,14 @@ export interface PartidoCrear {
   competicion_id: number | null;
 }
 
+export interface FiltrosPartidos {
+  equipo_id?: number;
+  competicion_id?: number;
+  estado?: EstadoPartido;
+  desde?: string;
+  hasta?: string;
+}
+
 /**
  * Convierte color hexadecimal #RRGGBB a HSV (H: 0..360, S: 0..100, V: 0..100).
  * Espejo del cálculo del backend para feedback en tiempo real en la UI.
