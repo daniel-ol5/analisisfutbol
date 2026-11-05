@@ -5,10 +5,9 @@ lanza excepciones de dominio. Así se prueba sin levantar el servidor.
 """
 
 from fastapi import HTTPException, status
+from sqlalchemy import update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from sqlalchemy import update
 
 from app.core.deps import UsuarioActual
 from app.core.tenancy import del_club, verificar_pertenencia
