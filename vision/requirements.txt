@@ -7,6 +7,11 @@ numpy>=2.1
 websockets>=13.1        # emisor hacia el backend
 pyyaml>=6.0
 
-# Evaluación del modelo
+# Evaluación del modelo (Pb-17, ver vision/evaluacion/)
 pycocotools>=2.0.8
-motmetrics>=1.4         # IDF1 del seguimiento
+motmetrics>=1.4         # IDF1 del seguimiento — 1.4.0 usa np.asfarray (eliminado en
+                         # numpy>=2.0): evaluacion/idf1.py no llama a
+                         # motmetrics.distances.iou_matrix por eso, ver su docstring
+
+# Pruebas (no necesitan GPU ni torch/ultralytics instalados)
+pytest>=8.3
