@@ -7035,7 +7035,10 @@
           "archivo_url": {
             "type": "string",
             "maxLength": 400,
-            "title": "Archivo Url"
+            "title": "Archivo Url",
+            "examples": [
+              "https://cdn.club.com/modelos/futbol-v3.pt"
+            ]
           },
           "map50_jugador": {
             "anyOf": [
@@ -7140,7 +7143,10 @@
           "archivo_url": {
             "type": "string",
             "maxLength": 400,
-            "title": "Archivo Url"
+            "title": "Archivo Url",
+            "examples": [
+              "https://cdn.club.com/modelos/futbol-v3.pt"
+            ]
           },
           "map50_jugador": {
             "anyOf": [

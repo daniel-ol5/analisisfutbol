@@ -34,6 +34,11 @@ const ETIQUETAS_CAMPO: Record<string, string> = {
   puntos_imagen: "Puntos en la imagen",
   puntos_cancha: "Puntos en la cancha",
   coef_distorsion: "Coeficientes de distorsión",
+  version: "Versión",
+  archivo_url: "URL del archivo del modelo",
+  map50_jugador: "mAP@50 de jugador",
+  map50_balon: "mAP@50 de balón",
+  idf1: "IDF1",
 };
 
 function esRegistro(valor: unknown): valor is Record<string, unknown> {

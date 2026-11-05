@@ -9,7 +9,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Annotated, Self
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class TipoModelo(StrEnum):
@@ -98,11 +98,21 @@ class ModeloCrear(BaseModel):
     nombre: str = Field(max_length=80, examples=["futbol-propio"])
     version: str = Field(max_length=20, examples=["v3"])
     tipo: TipoModelo = TipoModelo.DETECCION
-    archivo_url: str = Field(max_length=400)
+    archivo_url: str = Field(max_length=400, examples=["https://cdn.club.com/modelos/futbol-v3.pt"])
     map50_jugador: float | None = Field(default=None, ge=0, le=1, examples=[0.87])
     map50_balon: float | None = Field(default=None, ge=0, le=1, examples=[0.64])
     idf1: float | None = Field(default=None, ge=0, le=1, examples=[0.72])
     notas: str = ""
+
+    @field_validator("archivo_url")
+    @classmethod
+    def _solo_https(cls, v: str) -> str:
+        # Criterio 3 de HU-26: el worker descarga el archivo del modelo sin
+        # autenticacion propia, asi que http (sin cifrar) o un esquema que no
+        # sea web (file://, s3://, ftp://...) no sirven en produccion.
+        if not v.lower().startswith("https://"):
+            raise ValueError("archivo_url debe ser una URL https")
+        return v
 
 
 class Modelo(ModeloCrear):
