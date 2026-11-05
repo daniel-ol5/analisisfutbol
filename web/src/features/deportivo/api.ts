@@ -15,6 +15,7 @@ import type {
   Equipo,
   EquipoCrear,
   EquipoEditar,
+  FiltrosPartidos,
   Jugador,
   JugadorCrear,
   JugadorEditar,
@@ -158,6 +159,14 @@ export async function listarCompeticiones(): Promise<Competicion[]> {
 /** CU-14: programa un partido real en estado inicial PROGRAMADO. */
 export async function programarPartido(datos: PartidoCrear): Promise<Partido> {
   const { data } = await api.post<Partido>("/deportivo/partidos", datos);
+  return data;
+}
+
+/** CU-15: obtiene la agenda cronológica aplicando filtros en el backend. */
+export async function listarPartidos(filtros: FiltrosPartidos = {}): Promise<Partido[]> {
+  const { data } = await api.get<Partido[]>("/deportivo/partidos", {
+    params: filtros,
+  });
   return data;
 }
 
