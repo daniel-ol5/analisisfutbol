@@ -531,3 +531,133 @@ async def test_importar_csv_aislamiento_entre_clubes(cliente):
         f"/api/deportivo/equipos/{eq_b}/jugadores/importar", headers=auth_a, files=_archivo_csv(texto),
     )
     assert r.status_code == 404
+
+
+# ---------------- T-046: CU-13 Competiciones y temporadas ----------------
+
+async def test_crear_y_listar_competiciones_del_club(cliente):
+    """HU-10: el administrador registra competiciones y consulta las de su club."""
+    sesion, auth = await _crear_sesion(cliente, "competencias")
+
+    r_crear = await cliente.post(
+        "/api/deportivo/competiciones",
+        headers=auth,
+        json={
+            "nombre": "  Torneo Apertura  ",
+            "temporada": " 2026 ",
+            "fecha_inicio": "2026-02-01",
+            "fecha_fin": "2026-06-30",
+        },
+    )
+    assert r_crear.status_code == 201, r_crear.text
+    creada = r_crear.json()
+    assert creada["id"] > 0
+    assert creada["club_id"] == sesion["usuario"]["club_id"]
+    assert creada["nombre"] == "Torneo Apertura"
+    assert creada["temporada"] == "2026"
+    assert creada["fecha_inicio"] == "2026-02-01"
+    assert creada["fecha_fin"] == "2026-06-30"
+
+    r_sin_fechas = await cliente.post(
+        "/api/deportivo/competiciones",
+        headers=auth,
+        json={"nombre": "Amistosos", "temporada": "2026"},
+    )
+    assert r_sin_fechas.status_code == 201, r_sin_fechas.text
+
+    r_listar = await cliente.get("/api/deportivo/competiciones", headers=auth)
+    assert r_listar.status_code == 200
+    competiciones = r_listar.json()
+    assert [item["nombre"] for item in competiciones] == [
+        "Torneo Apertura",
+        "Amistosos",
+    ]
+
+
+@pytest.mark.parametrize(
+    "fechas",
+    [
+        {"fecha_inicio": "2026-02-01"},
+        {"fecha_fin": "2026-06-30"},
+        {"fecha_inicio": "2026-07-01", "fecha_fin": "2026-06-30"},
+    ],
+)
+async def test_competicion_rechaza_rango_de_fechas_incoherente(cliente, fechas):
+    """HU-10: el rango debe estar completo y la fecha final no puede ser anterior."""
+    _, auth = await _crear_sesion(cliente, f"fechas_{len(fechas)}_{next(iter(fechas))}")
+    r = await cliente.post(
+        "/api/deportivo/competiciones",
+        headers=auth,
+        json={"nombre": "Torneo", "temporada": "2026", **fechas},
+    )
+    assert r.status_code == 422
+
+
+async def test_competicion_no_se_duplica_y_se_aisla_por_club(cliente):
+    """Pb-03: la unicidad se aplica dentro de cada club, sin filtrar datos."""
+    _, auth_a = await _crear_sesion(cliente, "competicion_a")
+    _, auth_b = await _crear_sesion(cliente, "competicion_b")
+    payload = {
+        "nombre": "Liga Municipal",
+        "temporada": "2026",
+        "fecha_inicio": "2026-03-01",
+        "fecha_fin": "2026-11-30",
+    }
+
+    r_a = await cliente.post(
+        "/api/deportivo/competiciones", headers=auth_a, json=payload
+    )
+    assert r_a.status_code == 201, r_a.text
+
+    duplicada = {**payload, "nombre": " Liga Municipal ", "temporada": " 2026 "}
+    r_duplicada = await cliente.post(
+        "/api/deportivo/competiciones", headers=auth_a, json=duplicada
+    )
+    assert r_duplicada.status_code == 409
+
+    r_b = await cliente.post(
+        "/api/deportivo/competiciones", headers=auth_b, json=payload
+    )
+    assert r_b.status_code == 201, r_b.text
+
+    listado_a = await cliente.get("/api/deportivo/competiciones", headers=auth_a)
+    listado_b = await cliente.get("/api/deportivo/competiciones", headers=auth_b)
+    assert [item["id"] for item in listado_a.json()] == [r_a.json()["id"]]
+    assert [item["id"] for item in listado_b.json()] == [r_b.json()["id"]]
+
+
+async def test_solo_admin_puede_crear_competiciones(cliente):
+    """HU-10 identifica al ADMIN como actor de la creación."""
+    _, auth_admin = await _crear_sesion(cliente, "rol_competicion")
+    email = "dt_competicion@test.com"
+    r_usuario = await cliente.post(
+        "/api/seguridad/usuarios",
+        headers=auth_admin,
+        json={"email": email, "password": "password123", "rol": "DT"},
+    )
+    assert r_usuario.status_code == 201, r_usuario.text
+
+    r_login = await cliente.post(
+        "/api/seguridad/login",
+        json={"email": email, "password": "password123"},
+    )
+    assert r_login.status_code == 200, r_login.text
+    auth_dt = {"Authorization": f"Bearer {r_login.json()['access_token']}"}
+
+    payload = {"nombre": "Torneo restringido", "temporada": "2026"}
+    r_crear = await cliente.post(
+        "/api/deportivo/competiciones", headers=auth_dt, json=payload
+    )
+    assert r_crear.status_code == 403
+
+    r_listar = await cliente.get("/api/deportivo/competiciones", headers=auth_dt)
+    assert r_listar.status_code == 200
+
+
+async def test_competiciones_exigen_autenticacion(cliente):
+    assert (await cliente.get("/api/deportivo/competiciones")).status_code == 401
+    r = await cliente.post(
+        "/api/deportivo/competiciones",
+        json={"nombre": "Torneo", "temporada": "2026"},
+    )
+    assert r.status_code == 401

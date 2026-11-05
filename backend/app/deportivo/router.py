@@ -1,7 +1,7 @@
 """Endpoints de Gestion Deportiva  —  CU-09 … CU-17.
 
-Contrato congelado en el Sprint 1. Los endpoints estan declarados con su forma
-de entrada y salida; devuelven 501 hasta que se implementen.
+Contrato congelado en el Sprint 1. Los endpoints mantienen la forma de entrada
+y salida acordada por Backend, Web y Movil.
 
 Responsables segun el Sprint Planning:
     CU-09, CU-10  equipos e indumentaria   · S2 · Daniel
@@ -14,7 +14,6 @@ from fastapi import APIRouter, Depends, Query, UploadFile, status
 from fastapi.responses import Response
 
 from app.core.deps import Actual, Db, requiere_rol
-from app.core.pendiente import RESPUESTA_501, pendiente
 from app.deportivo import service
 from app.deportivo.schemas import (
     Alineacion,
@@ -36,7 +35,7 @@ from app.deportivo.schemas import (
     ResultadoImportacion,
 )
 
-router = APIRouter(responses=RESPUESTA_501)
+router = APIRouter()
 
 
 # ---------------- CU-09, CU-10 · Equipos ----------------
@@ -146,13 +145,14 @@ async def importar_plantel(equipo_id: int, archivo: UploadFile, usuario: Actual,
 
 @router.get("/competiciones", response_model=list[Competicion], summary="CU-13 · Listar competiciones")
 async def listar_competiciones(usuario: Actual, db: Db) -> list[Competicion]:
-    pendiente("CU-13", "Sprint 2", "Susana")
+    return await service.listar_competiciones(db, usuario)
 
 
 @router.post("/competiciones", response_model=Competicion, status_code=status.HTTP_201_CREATED,
+             dependencies=[Depends(requiere_rol("ADMIN"))],
              summary="CU-13 · Crear competicion")
 async def crear_competicion(datos: CompeticionCrear, usuario: Actual, db: Db) -> Competicion:
-    pendiente("CU-13", "Sprint 2", "Susana")
+    return await service.crear_competicion(db, usuario, datos)
 
 
 # ---------------- CU-14, CU-15, CU-16 · Partidos ----------------
@@ -164,30 +164,41 @@ async def listar_partidos(usuario: Actual, db: Db,
                           estado: EstadoPartido | None = None,
                           desde: str | None = Query(None, description="Fecha ISO"),
                           hasta: str | None = None) -> list[Partido]:
-    pendiente("CU-15", "Sprint 2", "Susana")
+    return await service.listar_partidos(
+        db,
+        usuario,
+        equipo_id=equipo_id,
+        competicion_id=competicion_id,
+        estado=estado,
+        desde=desde,
+        hasta=hasta,
+    )
 
 
 @router.post("/partidos", response_model=Partido, status_code=status.HTTP_201_CREATED,
+             dependencies=[Depends(requiere_rol("ADMIN", "DT"))],
              summary="CU-14 · Programar partido")
 async def programar_partido(datos: PartidoCrear, usuario: Actual, db: Db) -> Partido:
-    pendiente("CU-14", "Sprint 2", "Susana")
+    return await service.programar_partido(db, usuario, datos)
 
 
 @router.get("/partidos/{partido_id}", response_model=Partido, summary="CU-15 · Ver partido")
 async def ver_partido(partido_id: int, usuario: Actual, db: Db) -> Partido:
-    pendiente("CU-15", "Sprint 2", "Susana")
+    return await service.ver_partido(db, usuario, partido_id)
 
 
 @router.patch("/partidos/{partido_id}", response_model=Partido,
+              dependencies=[Depends(requiere_rol("ADMIN"))],
               summary="CU-16 · Reprogramar partido (solo si esta PROGRAMADO)")
 async def reprogramar_partido(partido_id: int, datos: PartidoEditar, usuario: Actual, db: Db) -> Partido:
-    pendiente("CU-16", "Sprint 2", "Susana")
+    return await service.reprogramar_partido(db, usuario, partido_id, datos)
 
 
 @router.post("/partidos/{partido_id}/cancelar", response_model=Partido,
+             dependencies=[Depends(requiere_rol("ADMIN"))],
              summary="CU-16 · Cancelar partido")
 async def cancelar_partido(partido_id: int, datos: Cancelacion, usuario: Actual, db: Db) -> Partido:
-    pendiente("CU-16", "Sprint 2", "Susana")
+    return await service.cancelar_partido(db, usuario, partido_id, datos)
 
 
 # ---------------- CU-17 · Alineacion ----------------

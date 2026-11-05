@@ -8,6 +8,7 @@ import colorsys
 import csv
 import io
 import math
+from datetime import UTC, date, datetime, time
 
 from fastapi import HTTPException, status
 from pydantic import ValidationError
@@ -18,13 +19,22 @@ from sqlalchemy.orm import selectinload
 
 from app.core.deps import UsuarioActual
 from app.core.tenancy import del_club, verificar_pertenencia
-from app.deportivo.models import Alineacion, AlineacionJugador, Equipo, Jugador, Partido
+from app.deportivo.models import (
+    Alineacion,
+    AlineacionJugador,
+    Competicion,
+    Equipo,
+    Jugador,
+    Partido,
+)
 from app.deportivo.schemas import (
     Alineacion as AlineacionOut,
 )
 from app.deportivo.schemas import (
     AlineacionGuardar,
     AvisoColores,
+    Cancelacion,
+    CompeticionCrear,
     EquipoCrear,
     EquipoEditar,
     EstadoPartido,
@@ -33,14 +43,22 @@ from app.deportivo.schemas import (
     JugadorBase,
     JugadorCrear,
     JugadorEditar,
+    PartidoCrear,
+    PartidoEditar,
     Posicion,
     ResultadoImportacion,
+)
+from app.deportivo.schemas import (
+    Competicion as CompeticionOut,
 )
 from app.deportivo.schemas import (
     Equipo as EquipoOut,
 )
 from app.deportivo.schemas import (
     Jugador as JugadorOut,
+)
+from app.deportivo.schemas import (
+    Partido as PartidoOut,
 )
 
 _ORDEN_JUGADOR = {
@@ -283,17 +301,222 @@ async def verificar_colores_equipo(
     )
 
 
-# ---------------- CU-17 · Alineación y formación (T-048) ----------------
+# ---------------- CU-13 · Competiciones y temporadas (T-046) ----------------
 
-# Con el partido terminado, la alineación ya alimentó el análisis: no se toca.
-ESTADOS_ALINEACION_EDITABLE = {EstadoPartido.PROGRAMADO, EstadoPartido.EN_CURSO}
+async def listar_competiciones(
+    db: AsyncSession, usuario: UsuarioActual
+) -> list[CompeticionOut]:
+    """Lista las competiciones activas del club, sin exponer datos de otros clubes."""
+    stmt = (
+        del_club(Competicion, usuario)
+        .where(Competicion.activo)
+        .order_by(
+            Competicion.fecha_inicio.is_(None),
+            Competicion.fecha_inicio,
+            Competicion.nombre,
+        )
+    )
+    resultado = await db.execute(stmt)
+    return [CompeticionOut.model_validate(item) for item in resultado.scalars().all()]
+
+
+async def crear_competicion(
+    db: AsyncSession, usuario: UsuarioActual, datos: CompeticionCrear
+) -> CompeticionOut:
+    """Crea una competicion vinculada al club del usuario autenticado."""
+    competicion = Competicion(
+        club_id=usuario.club_id,
+        nombre=datos.nombre,
+        temporada=datos.temporada,
+        fecha_inicio=datos.fecha_inicio,
+        fecha_fin=datos.fecha_fin,
+        activo=True,
+    )
+    db.add(competicion)
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Ya existe una competicion con ese nombre y temporada en el club",
+        ) from None
+
+    await db.refresh(competicion)
+    return CompeticionOut.model_validate(competicion)
+
+
+# ---------------- CU-14, CU-15, CU-16 · Partidos (T-047) ----------------
+
+def _en_utc(fecha_hora: datetime) -> datetime:
+    """Normaliza fechas para comparar y persistir de forma consistente."""
+    if fecha_hora.tzinfo is None:
+        return fecha_hora.replace(tzinfo=UTC)
+    return fecha_hora.astimezone(UTC)
+
+
+def _validar_fecha_futura(fecha_hora: datetime) -> datetime:
+    normalizada = _en_utc(fecha_hora)
+    if normalizada <= datetime.now(UTC):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "La fecha y hora del partido debe ser futura",
+        )
+    return normalizada
+
+
+def _fecha_iso(valor: str | None, nombre: str) -> date | None:
+    if valor is None:
+        return None
+    try:
+        return date.fromisoformat(valor)
+    except ValueError:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            f"El filtro {nombre} debe tener formato AAAA-MM-DD",
+        ) from None
+
+
+async def _competicion_del_club(
+    db: AsyncSession, usuario: UsuarioActual, competicion_id: int
+) -> Competicion:
+    resultado = await db.execute(
+        del_club(Competicion, usuario).where(Competicion.id == competicion_id)
+    )
+    return verificar_pertenencia(resultado.scalar_one_or_none(), usuario)
 
 
 async def _partido_del_club(
     db: AsyncSession, usuario: UsuarioActual, partido_id: int
 ) -> Partido:
-    res = await db.execute(del_club(Partido, usuario).where(Partido.id == partido_id))
-    return verificar_pertenencia(res.scalar_one_or_none(), usuario)
+    resultado = await db.execute(
+        del_club(Partido, usuario).where(Partido.id == partido_id)
+    )
+    return verificar_pertenencia(resultado.scalar_one_or_none(), usuario)
+
+
+async def listar_partidos(
+    db: AsyncSession,
+    usuario: UsuarioActual,
+    equipo_id: int | None = None,
+    competicion_id: int | None = None,
+    estado: EstadoPartido | None = None,
+    desde: str | None = None,
+    hasta: str | None = None,
+) -> list[PartidoOut]:
+    """Devuelve la agenda cronologica del club con sus filtros opcionales."""
+    fecha_desde = _fecha_iso(desde, "desde")
+    fecha_hasta = _fecha_iso(hasta, "hasta")
+    if fecha_desde is not None and fecha_hasta is not None and fecha_desde > fecha_hasta:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "La fecha desde no puede ser posterior a la fecha hasta",
+        )
+
+    stmt = del_club(Partido, usuario)
+    if equipo_id is not None:
+        stmt = stmt.where(Partido.equipo_id == equipo_id)
+    if competicion_id is not None:
+        stmt = stmt.where(Partido.competicion_id == competicion_id)
+    if estado is not None:
+        stmt = stmt.where(Partido.estado == estado.value)
+    if fecha_desde is not None:
+        inicio = datetime.combine(fecha_desde, time.min, tzinfo=UTC)
+        stmt = stmt.where(Partido.fecha_hora >= inicio)
+    if fecha_hasta is not None:
+        fin_inclusivo = datetime.combine(fecha_hasta, time.max, tzinfo=UTC)
+        stmt = stmt.where(Partido.fecha_hora <= fin_inclusivo)
+
+    resultado = await db.execute(stmt.order_by(Partido.fecha_hora, Partido.id))
+    return [PartidoOut.model_validate(item) for item in resultado.scalars().all()]
+
+
+async def programar_partido(
+    db: AsyncSession, usuario: UsuarioActual, datos: PartidoCrear
+) -> PartidoOut:
+    """Programa un partido futuro del club en estado inicial PROGRAMADO."""
+    await _equipo_del_club(db, usuario, datos.equipo_id)
+    if datos.competicion_id is not None:
+        await _competicion_del_club(db, usuario, datos.competicion_id)
+
+    partido = Partido(
+        club_id=usuario.club_id,
+        equipo_id=datos.equipo_id,
+        competicion_id=datos.competicion_id,
+        rival=datos.rival,
+        es_local=datos.es_local,
+        fecha_hora=_validar_fecha_futura(datos.fecha_hora),
+        sede=datos.sede,
+        estado=EstadoPartido.PROGRAMADO.value,
+    )
+    db.add(partido)
+    await db.commit()
+    await db.refresh(partido)
+    return PartidoOut.model_validate(partido)
+
+
+async def ver_partido(
+    db: AsyncSession, usuario: UsuarioActual, partido_id: int
+) -> PartidoOut:
+    partido = await _partido_del_club(db, usuario, partido_id)
+    return PartidoOut.model_validate(partido)
+
+
+async def reprogramar_partido(
+    db: AsyncSession,
+    usuario: UsuarioActual,
+    partido_id: int,
+    datos: PartidoEditar,
+) -> PartidoOut:
+    partido = await _partido_del_club(db, usuario, partido_id)
+    if partido.estado != EstadoPartido.PROGRAMADO.value:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"No se puede reprogramar un partido en estado {partido.estado}",
+        )
+
+    if datos.rival is not None:
+        partido.rival = datos.rival
+    if datos.es_local is not None:
+        partido.es_local = datos.es_local
+    if datos.fecha_hora is not None:
+        partido.fecha_hora = _validar_fecha_futura(datos.fecha_hora)
+    if datos.sede is not None:
+        partido.sede = datos.sede
+    if "competicion_id" in datos.model_fields_set:
+        if datos.competicion_id is not None:
+            await _competicion_del_club(db, usuario, datos.competicion_id)
+        partido.competicion_id = datos.competicion_id
+
+    await db.commit()
+    await db.refresh(partido)
+    return PartidoOut.model_validate(partido)
+
+
+async def cancelar_partido(
+    db: AsyncSession,
+    usuario: UsuarioActual,
+    partido_id: int,
+    datos: Cancelacion,
+) -> PartidoOut:
+    partido = await _partido_del_club(db, usuario, partido_id)
+    if partido.estado != EstadoPartido.PROGRAMADO.value:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"No se puede cancelar un partido en estado {partido.estado}",
+        )
+
+    partido.estado = EstadoPartido.CANCELADO.value
+    partido.motivo_cancelacion = datos.motivo
+    await db.commit()
+    await db.refresh(partido)
+    return PartidoOut.model_validate(partido)
+
+
+# ---------------- CU-17 · Alineación y formación (T-048) ----------------
+
+# Con el partido terminado, la alineación ya alimentó el análisis: no se toca.
+ESTADOS_ALINEACION_EDITABLE = {EstadoPartido.PROGRAMADO, EstadoPartido.EN_CURSO}
 
 
 async def _alineacion_del_partido(db: AsyncSession, partido_id: int) -> Alineacion | None:
