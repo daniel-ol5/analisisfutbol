@@ -8,7 +8,17 @@ clubes (Pb-03), salvo las que cuelgan de otra que ya lo tenga.
 
 from datetime import UTC, date, datetime
 
-from sqlalchemy import Date, DateTime, Float, ForeignKey, Index, Integer, String, text
+from sqlalchemy import (
+    Date,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -73,6 +83,14 @@ class Jugador(Base):
 
 class Competicion(Base):
     __tablename__ = "competicion"
+    __table_args__ = (
+        UniqueConstraint(
+            "club_id",
+            "nombre",
+            "temporada",
+            name="uq_competicion_club_nombre_temporada",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     club_id: Mapped[int] = mapped_column(ForeignKey("club.id"), index=True)

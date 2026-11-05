@@ -629,16 +629,6 @@
               }
             }
           },
-          "501": {
-            "description": "Declarado en el contrato, pendiente de implementacion",
-            "content": {
-              "application/json": {
-                "example": {
-                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
-                }
-              }
-            }
-          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -679,16 +669,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Equipo"
-                }
-              }
-            }
-          },
-          "501": {
-            "description": "Declarado en el contrato, pendiente de implementacion",
-            "content": {
-              "application/json": {
-                "example": {
-                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
                 }
               }
             }
@@ -736,16 +716,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Equipo"
-                }
-              }
-            }
-          },
-          "501": {
-            "description": "Declarado en el contrato, pendiente de implementacion",
-            "content": {
-              "application/json": {
-                "example": {
-                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
                 }
               }
             }
@@ -805,16 +775,6 @@
               }
             }
           },
-          "501": {
-            "description": "Declarado en el contrato, pendiente de implementacion",
-            "content": {
-              "application/json": {
-                "example": {
-                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
-                }
-              }
-            }
-          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -852,16 +812,6 @@
         "responses": {
           "204": {
             "description": "Successful Response"
-          },
-          "501": {
-            "description": "Declarado en el contrato, pendiente de implementacion",
-            "content": {
-              "application/json": {
-                "example": {
-                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
-                }
-              }
-            }
           },
           "422": {
             "description": "Validation Error",
@@ -915,16 +865,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AvisoColores"
-                }
-              }
-            }
-          },
-          "501": {
-            "description": "Declarado en el contrato, pendiente de implementacion",
-            "content": {
-              "application/json": {
-                "example": {
-                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
                 }
               }
             }
@@ -1001,16 +941,6 @@
               }
             }
           },
-          "501": {
-            "description": "Declarado en el contrato, pendiente de implementacion",
-            "content": {
-              "application/json": {
-                "example": {
-                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
-                }
-              }
-            }
-          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -1048,16 +978,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Jugador"
-                }
-              }
-            }
-          },
-          "501": {
-            "description": "Declarado en el contrato, pendiente de implementacion",
-            "content": {
-              "application/json": {
-                "example": {
-                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
                 }
               }
             }
@@ -1110,16 +1030,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Jugador"
-                }
-              }
-            }
-          },
-          "501": {
-            "description": "Declarado en el contrato, pendiente de implementacion",
-            "content": {
-              "application/json": {
-                "example": {
-                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
                 }
               }
             }
@@ -1179,16 +1089,6 @@
               }
             }
           },
-          "501": {
-            "description": "Declarado en el contrato, pendiente de implementacion",
-            "content": {
-              "application/json": {
-                "example": {
-                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
-                }
-              }
-            }
-          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -1226,16 +1126,6 @@
         "responses": {
           "204": {
             "description": "Successful Response"
-          },
-          "501": {
-            "description": "Declarado en el contrato, pendiente de implementacion",
-            "content": {
-              "application/json": {
-                "example": {
-                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
-                }
-              }
-            }
           },
           "422": {
             "description": "Validation Error",
@@ -1279,16 +1169,6 @@
             "content": {
               "application/json": {
                 "schema": {}
-              }
-            }
-          },
-          "501": {
-            "description": "Declarado en el contrato, pendiente de implementacion",
-            "content": {
-              "application/json": {
-                "example": {
-                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
-                }
               }
             }
           },
@@ -1355,16 +1235,6 @@
             "content": {
               "application/json": {
                 "schema": {}
-              }
-            }
-          },
-          "501": {
-            "description": "Declarado en el contrato, pendiente de implementacion",
-            "content": {
-              "application/json": {
-                "example": {
-                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
-                }
               }
             }
           },
@@ -1437,16 +1307,6 @@
               }
             }
           },
-          "501": {
-            "description": "Declarado en el contrato, pendiente de implementacion",
-            "content": {
-              "application/json": {
-                "example": {
-                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
-                }
-              }
-            }
-          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -1481,16 +1341,6 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "Declarado en el contrato, pendiente de implementacion",
-            "content": {
-              "application/json": {
-                "example": {
-                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
-                }
-              }
-            }
           }
         },
         "security": [
@@ -1522,16 +1372,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Competicion"
-                }
-              }
-            }
-          },
-          "501": {
-            "description": "Declarado en el contrato, pendiente de implementacion",
-            "content": {
-              "application/json": {
-                "example": {
-                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
                 }
               }
             }
@@ -1665,16 +1505,6 @@
               }
             }
           },
-          "501": {
-            "description": "Declarado en el contrato, pendiente de implementacion",
-            "content": {
-              "application/json": {
-                "example": {
-                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
-                }
-              }
-            }
-          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -1715,16 +1545,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Partido"
-                }
-              }
-            }
-          },
-          "501": {
-            "description": "Declarado en el contrato, pendiente de implementacion",
-            "content": {
-              "application/json": {
-                "example": {
-                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
                 }
               }
             }
@@ -1772,16 +1592,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Partido"
-                }
-              }
-            }
-          },
-          "501": {
-            "description": "Declarado en el contrato, pendiente de implementacion",
-            "content": {
-              "application/json": {
-                "example": {
-                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
                 }
               }
             }
@@ -1837,16 +1647,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Partido"
-                }
-              }
-            }
-          },
-          "501": {
-            "description": "Declarado en el contrato, pendiente de implementacion",
-            "content": {
-              "application/json": {
-                "example": {
-                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
                 }
               }
             }
@@ -1908,16 +1708,6 @@
               }
             }
           },
-          "501": {
-            "description": "Declarado en el contrato, pendiente de implementacion",
-            "content": {
-              "application/json": {
-                "example": {
-                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
-                }
-              }
-            }
-          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -1962,16 +1752,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Alineacion"
-                }
-              }
-            }
-          },
-          "501": {
-            "description": "Declarado en el contrato, pendiente de implementacion",
-            "content": {
-              "application/json": {
-                "example": {
-                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
                 }
               }
             }
@@ -2028,16 +1808,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Alineacion"
-                }
-              }
-            }
-          },
-          "501": {
-            "description": "Declarado en el contrato, pendiente de implementacion",
-            "content": {
-              "application/json": {
-                "example": {
-                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
                 }
               }
             }
@@ -5294,6 +5064,7 @@
           "motivo": {
             "type": "string",
             "maxLength": 200,
+            "minLength": 1,
             "title": "Motivo",
             "examples": [
               "Suspendido por lluvia"
@@ -5372,6 +5143,7 @@
           "nombre": {
             "type": "string",
             "maxLength": 120,
+            "minLength": 1,
             "title": "Nombre",
             "examples": [
               "Torneo Apertura"
@@ -5380,6 +5152,7 @@
           "temporada": {
             "type": "string",
             "maxLength": 20,
+            "minLength": 1,
             "title": "Temporada",
             "examples": [
               "2026"
@@ -5432,6 +5205,7 @@
           "nombre": {
             "type": "string",
             "maxLength": 120,
+            "minLength": 1,
             "title": "Nombre",
             "examples": [
               "Torneo Apertura"
@@ -5440,6 +5214,7 @@
           "temporada": {
             "type": "string",
             "maxLength": 20,
+            "minLength": 1,
             "title": "Temporada",
             "examples": [
               "2026"
@@ -5752,6 +5527,17 @@
               }
             ],
             "title": "Color Arquero"
+          },
+          "activo": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Activo"
           }
         },
         "type": "object",
@@ -6814,6 +6600,17 @@
               }
             ],
             "title": "Fecha Nacimiento"
+          },
+          "activo": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Activo"
           }
         },
         "type": "object",
@@ -7573,6 +7370,7 @@
           "rival": {
             "type": "string",
             "maxLength": 120,
+            "minLength": 1,
             "title": "Rival",
             "examples": [
               "Club Atletico Rival"
@@ -7591,8 +7389,8 @@
           "sede": {
             "type": "string",
             "maxLength": 160,
+            "minLength": 1,
             "title": "Sede",
-            "default": "",
             "examples": [
               "Cancha municipal"
             ]
@@ -7613,7 +7411,8 @@
         "required": [
           "equipo_id",
           "rival",
-          "fecha_hora"
+          "fecha_hora",
+          "sede"
         ],
         "title": "PartidoCrear"
       },
@@ -7622,7 +7421,9 @@
           "rival": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 120,
+                "minLength": 1
               },
               {
                 "type": "null"
@@ -7656,7 +7457,9 @@
           "sede": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 160,
+                "minLength": 1
               },
               {
                 "type": "null"

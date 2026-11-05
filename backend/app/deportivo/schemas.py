@@ -4,11 +4,11 @@ Contrato congelado en el Sprint 1. Web y Movil generan sus mocks de aca.
 Cualquier cambio posterior se acuerda con las dos parejas antes de mergear.
 """
 
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from enum import StrEnum
 from typing import NoReturn
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from pydantic_core import PydanticCustomError
 
 
@@ -140,10 +140,30 @@ class ResultadoImportacion(BaseModel):
 # ---------- CU-13 Competiciones ----------
 
 class CompeticionCrear(BaseModel):
-    nombre: str = Field(max_length=120, examples=["Torneo Apertura"])
-    temporada: str = Field(max_length=20, examples=["2026"])
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    nombre: str = Field(min_length=1, max_length=120, examples=["Torneo Apertura"])
+    temporada: str = Field(min_length=1, max_length=20, examples=["2026"])
     fecha_inicio: date | None = None
     fecha_fin: date | None = None
+
+    @model_validator(mode="after")
+    def _validar_rango_fechas(self) -> "CompeticionCrear":
+        if (self.fecha_inicio is None) != (self.fecha_fin is None):
+            raise PydanticCustomError(
+                "rango_fechas_incompleto",
+                "La fecha de inicio y la fecha de finalizacion deben enviarse juntas",
+            )
+        if (
+            self.fecha_inicio is not None
+            and self.fecha_fin is not None
+            and self.fecha_fin < self.fecha_inicio
+        ):
+            raise PydanticCustomError(
+                "rango_fechas_invalido",
+                "La fecha de finalizacion no puede ser anterior a la fecha de inicio",
+            )
+        return self
 
 
 class Competicion(CompeticionCrear):
@@ -155,20 +175,47 @@ class Competicion(CompeticionCrear):
 # ---------- CU-14, CU-15, CU-16 Partidos ----------
 
 class PartidoCrear(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
     equipo_id: int
-    rival: str = Field(max_length=120, examples=["Club Atletico Rival"])
+    rival: str = Field(
+        min_length=1,
+        max_length=120,
+        examples=["Club Atletico Rival"],
+    )
     es_local: bool = True
     fecha_hora: datetime
-    sede: str = Field(default="", max_length=160, examples=["Cancha municipal"])
+    sede: str = Field(min_length=1, max_length=160, examples=["Cancha municipal"])
     competicion_id: int | None = None
 
 
 class PartidoEditar(BaseModel):
-    rival: str | None = None
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    rival: str | None = Field(default=None, min_length=1, max_length=120)
     es_local: bool | None = None
     fecha_hora: datetime | None = None
-    sede: str | None = None
+    sede: str | None = Field(default=None, min_length=1, max_length=160)
     competicion_id: int | None = None
+
+    @model_validator(mode="after")
+    def _al_menos_un_cambio(self) -> "PartidoEditar":
+        if not self.model_fields_set:
+            raise PydanticCustomError(
+                "partido_sin_cambios",
+                "Debe enviar al menos un campo para reprogramar el partido",
+            )
+        campos_nulos = [
+            campo
+            for campo in ("rival", "es_local", "fecha_hora", "sede")
+            if campo in self.model_fields_set and getattr(self, campo) is None
+        ]
+        if campos_nulos:
+            raise PydanticCustomError(
+                "partido_campo_nulo",
+                f"Estos campos no pueden ser null: {', '.join(campos_nulos)}",
+            )
+        return self
 
 
 class Partido(BaseModel):
@@ -189,9 +236,22 @@ class Partido(BaseModel):
     parte: int = Field(default=0, ge=0, le=2)
     minuto_actual: int = 0
 
+    @field_validator("fecha_hora", mode="after")
+    @classmethod
+    def _serializar_fecha_en_utc(cls, valor: datetime) -> datetime:
+        if valor.tzinfo is None:
+            return valor.replace(tzinfo=UTC)
+        return valor.astimezone(UTC)
+
 
 class Cancelacion(BaseModel):
-    motivo: str = Field(max_length=200, examples=["Suspendido por lluvia"])
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    motivo: str = Field(
+        min_length=1,
+        max_length=200,
+        examples=["Suspendido por lluvia"],
+    )
 
 
 # ---------- CU-17 Alineacion ----------
