@@ -103,6 +103,7 @@ class Jugador {
     required this.pieHabil,
     required this.alturaCm,
     required this.pesoKg,
+    this.fechaNacimiento,
     required this.activo,
   });
 
@@ -115,6 +116,7 @@ class Jugador {
   final String pieHabil;
   final int alturaCm;
   final double? pesoKg;
+  final String? fechaNacimiento;
   final bool activo;
 
   String get nombreCompleto => '$nombre $apellido';
@@ -131,6 +133,7 @@ class Jugador {
         pieHabil: json['pie_habil'] as String? ?? 'DER',
         alturaCm: json['altura_cm'] as int? ?? 0,
         pesoKg: (json['peso_kg'] as num?)?.toDouble(),
+        fechaNacimiento: json['fecha_nacimiento'] as String?,
         activo: json['activo'] as bool? ?? true,
       );
 
@@ -144,6 +147,7 @@ class Jugador {
         'pie_habil': pieHabil,
         'altura_cm': alturaCm,
         'peso_kg': pesoKg,
+        if (fechaNacimiento != null) 'fecha_nacimiento': fechaNacimiento,
         'activo': activo,
       };
 }

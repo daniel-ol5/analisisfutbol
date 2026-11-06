@@ -1,0 +1,1257 @@
+/**
+ * Estilos para Análisis Táctico  —  P5 · CU-40 (Panel en vivo) y CU-41 (Plano 2D).
+ *
+ * Diseño profesional de alto rendimiento y contraste adaptado para uso en banco de suplentes
+ * bajo diversas condiciones de luz. Totalmente responsive y acotado al contenedor principal.
+ */
+
+.analisis-pagina {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 1.5rem 1.5rem 80px;
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+/* Pestañas superiores del módulo */
+.analisis-tabs {
+  display: flex;
+  gap: 0.5rem;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 0;
+  overflow-x: auto;
+  min-width: 0;
+}
+
+.analisis-tab-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 0.5rem 0.875rem;
+  border: none;
+  background: transparent;
+  border-bottom: 2px solid transparent;
+  color: var(--text-2);
+  font-weight: 500;
+  font-size: 0.875rem;
+  cursor: pointer;
+  margin-bottom: -1px;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.analisis-tab-btn--activa {
+  border-bottom-color: var(--pitch);
+  color: var(--pitch);
+  font-weight: 700;
+}
+
+.analisis-tab-label {
+  font-size: 0.875rem;
+}
+
+.analisis-tab-cu {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  opacity: 0.8;
+  margin-top: 0.15rem;
+}
+
+/* Panel del partido en vivo (CU-40) */
+.panel-vivo {
+  display: flex;
+  flex-direction: column;
+  gap: 1.15rem;
+  width: 100%;
+  min-width: 0;
+  color: var(--text);
+}
+
+/* Modo alto contraste para banco de suplentes */
+.panel-vivo--alto-contraste {
+  background-color: #090d16;
+  color: #f8fafc;
+  border-radius: 0.75rem;
+  padding: 1.25rem;
+}
+
+/* Barra superior de control y selector de partido */
+.panel-vivo-barra-superior {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  min-width: 0;
+}
+
+.panel-vivo--alto-contraste .panel-vivo-barra-superior {
+  background-color: #111827;
+  border-color: #374151;
+}
+
+.panel-vivo-selector-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  flex: 1 1 auto;
+  max-width: 580px;
+}
+
+.panel-vivo-label {
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+
+.panel-vivo--alto-contraste .panel-vivo-label {
+  color: #94a3b8;
+}
+
+.panel-vivo-select {
+  flex: 1;
+  min-width: 0;
+  max-width: 100%;
+  padding: 0.4rem 0.65rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 0.375rem;
+  background-color: var(--surface);
+  color: var(--text);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  outline: none;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.panel-vivo--alto-contraste .panel-vivo-select {
+  background-color: #1e293b;
+  border-color: #475569;
+  color: #f8fafc;
+}
+
+.panel-vivo-input-grupo {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.panel-vivo-input {
+  width: 4.5rem;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 0.375rem;
+  font-size: 0.8125rem;
+}
+
+.panel-vivo--alto-contraste .panel-vivo-input {
+  background-color: #1e293b;
+  border-color: #475569;
+  color: #f8fafc;
+}
+
+/* Indicador de conexión */
+.panel-vivo-conexion {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem 0.65rem;
+  background-color: var(--surface-muted);
+  border-radius: 9999px;
+  flex-shrink: 0;
+}
+
+.panel-vivo--alto-contraste .panel-vivo-conexion {
+  background-color: #1e293b;
+}
+
+.panel-conexion-punto {
+  width: 0.625rem;
+  height: 0.625rem;
+  border-radius: 9999px;
+  background-color: #94a3b8;
+}
+
+.panel-conexion-punto--conectado {
+  background-color: #10b981;
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.6);
+  animation: pulso-conexion 2s infinite ease-in-out;
+}
+
+.panel-conexion-punto--conectando,
+.panel-conexion-punto--reconectando {
+  background-color: #f59e0b;
+  animation: parpadeo 1s infinite alternate;
+}
+
+.panel-conexion-punto--error {
+  background-color: #ef4444;
+}
+
+@keyframes pulso-conexion {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.2);
+    opacity: 0.8;
+  }
+}
+
+@keyframes parpadeo {
+  from { opacity: 0.3; }
+  to { opacity: 1; }
+}
+
+.panel-conexion-texto {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+/* Botones */
+.panel-vivo-btn-accion,
+.panel-vivo-btn-primario,
+.panel-vivo-btn-secundario {
+  padding: 0.35rem 0.65rem;
+  border-radius: 0.375rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.panel-vivo-btn-accion {
+  background-color: var(--pitch);
+  color: #ffffff;
+}
+
+.panel-vivo-btn-primario {
+  background-color: #10b981;
+  color: #ffffff;
+}
+
+.panel-vivo-btn-secundario {
+  background-color: transparent;
+  border-color: var(--line-strong);
+  color: var(--text-2);
+}
+
+.panel-vivo--alto-contraste .panel-vivo-btn-secundario {
+  border-color: #475569;
+  color: #cbd5e1;
+}
+
+.panel-vivo-btn-accion:hover,
+.panel-vivo-btn-primario:hover {
+  opacity: 0.9;
+}
+
+/* Alertas */
+.panel-vivo-alerta {
+  padding: 0.75rem 1rem;
+  border-radius: 0.5rem;
+  font-size: 0.8125rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.panel-vivo-alerta--error {
+  background-color: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+}
+
+.panel-vivo-alerta--aviso {
+  background-color: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fde68a;
+}
+
+.panel-vivo--alto-contraste .panel-vivo-alerta--error {
+  background-color: #450a0a;
+  color: #fca5a5;
+  border-color: #7f1d1d;
+}
+
+.panel-vivo--alto-contraste .panel-vivo-alerta--aviso {
+  background-color: #451a03;
+  color: #fcd34d;
+  border-color: #78350f;
+}
+
+/* Marcador y Cronómetro (CU-40) */
+.panel-vivo-marcador-seccion {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 1.25rem;
+  padding: 1rem 1.5rem;
+  background-color: var(--surface);
+  border-radius: 0.75rem;
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-sm);
+  min-width: 0;
+}
+
+.panel-vivo--alto-contraste .panel-vivo-marcador-seccion {
+  background-color: #111827;
+  border: 2px solid #374151;
+  box-shadow: none;
+}
+
+.panel-marcador-equipo {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.panel-marcador-equipo--local {
+  justify-content: flex-end;
+  text-align: right;
+}
+
+.panel-marcador-equipo--visitante {
+  justify-content: flex-start;
+  text-align: left;
+}
+
+.panel-marcador-nombre {
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 220px;
+}
+
+.panel-marcador-etiqueta-lado {
+  font-size: 0.625rem;
+  font-weight: 700;
+  padding: 0.15rem 0.35rem;
+  border-radius: 0.25rem;
+  background-color: var(--surface-muted);
+  color: var(--text-2);
+  letter-spacing: 0.05em;
+  flex-shrink: 0;
+}
+
+.panel-vivo--alto-contraste .panel-marcador-etiqueta-lado {
+  background-color: #1f2937;
+  color: #9ca3af;
+}
+
+.panel-marcador-goles {
+  font-size: 2.25rem;
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  padding: 0.2rem 0.6rem;
+  border-radius: 0.5rem;
+  background-color: var(--surface-muted);
+  color: var(--text);
+  min-width: 2.75rem;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.panel-vivo--alto-contraste .panel-marcador-goles {
+  background-color: #1f2937;
+  color: #ffffff;
+  border: 1px solid #4b5563;
+}
+
+/* Reloj del partido */
+.panel-marcador-reloj-bloque {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+  padding: 0 0.75rem;
+  flex-shrink: 0;
+}
+
+.panel-reloj-periodo {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text-3);
+  letter-spacing: 0.1em;
+}
+
+.panel-vivo--alto-contraste .panel-reloj-periodo {
+  color: #9ca3af;
+}
+
+.panel-reloj-tiempo {
+  font-size: 2rem;
+  font-weight: 800;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  letter-spacing: 0.05em;
+  color: var(--pitch);
+  font-variant-numeric: tabular-nums;
+}
+
+.panel-vivo--alto-contraste .panel-reloj-tiempo {
+  color: #38bdf8;
+}
+
+.panel-reloj-segundos-crudos {
+  font-size: 0.6875rem;
+  color: var(--text-3);
+  font-family: ui-monospace, monospace;
+}
+
+/* Sección de Posesión */
+.panel-posesion-seccion {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.75rem 1rem;
+  background-color: var(--surface);
+  border-radius: 0.5rem;
+  border: 1px solid var(--line);
+  min-width: 0;
+}
+
+.panel-vivo--alto-contraste .panel-posesion-seccion {
+  background-color: #111827;
+  border-color: #374151;
+}
+
+.panel-posesion-cabecera {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.panel-vivo--alto-contraste .panel-posesion-cabecera {
+  color: #cbd5e1;
+}
+
+.panel-posesion-valores {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-weight: 800;
+  font-size: 0.875rem;
+}
+
+.panel-posesion-val--local {
+  color: #1d4ed8;
+}
+
+.panel-vivo--alto-contraste .panel-posesion-val--local {
+  color: #38bdf8;
+}
+
+.panel-posesion-val--visitante {
+  color: #dc2626;
+}
+
+.panel-vivo--alto-contraste .panel-posesion-val--visitante {
+  color: #f87171;
+}
+
+.panel-posesion-separador {
+  color: var(--line-strong);
+}
+
+.panel-posesion-barra {
+  display: flex;
+  height: 0.65rem;
+  border-radius: 9999px;
+  overflow: hidden;
+  background-color: var(--line);
+}
+
+.panel-posesion-segmento {
+  height: 100%;
+  transition: width 0.4s ease-out;
+}
+
+.panel-posesion-segmento--local {
+  background-color: #1d4ed8;
+}
+
+.panel-vivo--alto-contraste .panel-posesion-segmento--local {
+  background-color: #0284c7;
+}
+
+.panel-posesion-segmento--visitante {
+  background-color: #dc2626;
+}
+
+.panel-vivo--alto-contraste .panel-posesion-segmento--visitante {
+  background-color: #ef4444;
+}
+
+/* Barra de controles del plano 2D */
+.panel-controles-plano {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+.panel-controles-grupo {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.panel-control-etiqueta {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.panel-control-select {
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 0.375rem;
+  font-size: 0.75rem;
+  background-color: var(--surface);
+  color: var(--text);
+}
+
+.panel-vivo--alto-contraste .panel-control-select {
+  background-color: #1e293b;
+  border-color: #475569;
+  color: #f8fafc;
+}
+
+.panel-toggle-btn {
+  padding: 0.3rem 0.6rem;
+  border: 1px solid var(--line-strong);
+  background-color: var(--surface);
+  color: var(--text-2);
+  border-radius: 0.375rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.panel-vivo--alto-contraste .panel-toggle-btn {
+  background-color: #1e293b;
+  border-color: #475569;
+  color: #cbd5e1;
+}
+
+.panel-toggle-btn--activo {
+  background-color: var(--pitch);
+  color: #ffffff;
+  border-color: var(--pitch);
+}
+
+.panel-vivo--alto-contraste .panel-toggle-btn--activo {
+  background-color: #0ea5e9;
+  color: #ffffff;
+  border-color: #0ea5e9;
+}
+
+/* Envoltorio del Plano 2D (CU-41) */
+.panel-vivo-cancha-wrapper {
+  background-color: var(--surface);
+  border-radius: 0.75rem;
+  padding: 0.75rem;
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-sm);
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.panel-vivo--alto-contraste .panel-vivo-cancha-wrapper {
+  background-color: #0b1329;
+  border-color: #1e293b;
+  box-shadow: none;
+}
+
+.panel-cancha-relativa {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+}
+
+.plano-cancha-contenedor {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  width: 100%;
+  min-width: 0;
+}
+
+.plano-cancha-svg {
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  aspect-ratio: 105 / 68;
+  display: block;
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
+
+.plano-jugador-grupo {
+  transition: transform 0.1s linear;
+}
+
+.plano-jugador-grupo:hover circle {
+  filter: brightness(1.2);
+}
+
+.plano-pie-info {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.75rem;
+  padding-top: 0.25rem;
+  min-width: 0;
+}
+
+.plano-leyenda {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+}
+
+.plano-leyenda-item {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-weight: 600;
+}
+
+.plano-leyenda-color {
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 9999px;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  display: inline-block;
+}
+
+.plano-leyenda-balon {
+  background-color: #ffffff;
+  border: 2px solid #0f172a;
+}
+
+.plano-orientacion-nota {
+  font-weight: 600;
+  color: var(--text-3);
+  letter-spacing: 0.02em;
+}
+
+.panel-vivo--alto-contraste .plano-orientacion-nota {
+  color: #94a3b8;
+}
+
+/* Overlay cuando está esperando el stream */
+.plano-esperando-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(2px);
+  border-radius: 0.5rem;
+  padding: 1rem;
+  pointer-events: none;
+}
+
+.plano-esperando-card {
+  background: #111827;
+  color: #f8fafc;
+  border: 1px solid #374151;
+  border-radius: 0.625rem;
+  padding: 1rem 1.5rem;
+  max-width: 480px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+}
+
+.plano-esperando-card strong {
+  font-size: 0.9375rem;
+  color: #ffffff;
+}
+
+.plano-esperando-card p {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: #94a3b8;
+  line-height: 1.4;
+}
+
+.plano-esperando-pulso {
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 9999px;
+  background-color: #10b981;
+  box-shadow: 0 0 12px #10b981;
+  animation: pulso-conexion 1.5s infinite ease-in-out;
+}
+
+/* Detalle del jugador seleccionado */
+.plano-detalle-seleccion {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: var(--surface-muted);
+  border: 1px solid var(--line-strong);
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.875rem;
+  min-width: 0;
+}
+
+.panel-vivo--alto-contraste .plano-detalle-seleccion {
+  background-color: #1e293b;
+  border-color: #475569;
+}
+
+.plano-detalle-contenido {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  font-size: 0.75rem;
+}
+
+.plano-detalle-cerrar {
+  background: transparent;
+  border: 1px solid var(--line-strong);
+  padding: 0.2rem 0.45rem;
+  border-radius: 0.25rem;
+  cursor: pointer;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.panel-vivo--alto-contraste .plano-detalle-cerrar {
+  border-color: #64748b;
+  color: #cbd5e1;
+}
+
+/* Telemetría y Calidad (CU-39) */
+.panel-telemetria-seccion {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 0.6rem;
+  width: 100%;
+  min-width: 0;
+}
+
+.panel-telemetria-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.75rem;
+  background-color: var(--surface);
+  border-radius: 0.5rem;
+  border: 1px solid var(--line);
+  min-width: 0;
+}
+
+.panel-vivo--alto-contraste .panel-telemetria-card {
+  background-color: #111827;
+  border-color: #374151;
+}
+
+.panel-telemetria-label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.panel-vivo--alto-contraste .panel-telemetria-label {
+  color: #94a3b8;
+}
+
+.panel-telemetria-valor {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.panel-vivo--alto-contraste .panel-telemetria-valor {
+  color: #f8fafc;
+}
+
+.panel-telemetria-meta {
+  font-size: 0.625rem;
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.texto-verde {
+  color: #10b981 !important;
+}
+
+.texto-amarillo {
+  color: #f59e0b !important;
+}
+
+.texto-rojo {
+  color: #ef4444 !important;
+}
+
+/* Responsividad */
+@media (max-width: 768px) {
+  .analisis-pagina {
+    padding: 1rem 0.75rem 60px;
+  }
+
+  .panel-vivo-marcador-seccion {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+    text-align: center;
+  }
+
+  .panel-marcador-equipo--local,
+  .panel-marcador-equipo--visitante {
+    justify-content: center;
+    text-align: center;
+  }
+
+  .panel-marcador-reloj-bloque {
+    order: -1;
+  }
+
+  .panel-marcador-nombre {
+    max-width: 140px;
+  }
+
+  .panel-vivo-barra-superior {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .panel-vivo-selector-wrap {
+    max-width: 100%;
+  }
+
+  .panel-vivo-conexion {
+    justify-content: space-between;
+  }
+}
+
+/* =====================================================================
+   CU-44 · Mapas de calor dinámicos (T-079)
+   ===================================================================== */
+
+.mapa-calor-contenedor {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  background-color: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg, 12px);
+  padding: 1.25rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.mapa-calor-contenedor--alto-contraste {
+  background-color: #030712;
+  border-color: #1f2937;
+  color: #f9fafb;
+}
+
+.mapa-calor-filtros-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 1rem;
+  background-color: var(--surface-2, #f8fafc);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.875rem 1rem;
+}
+
+.mapa-calor-contenedor--alto-contraste .mapa-calor-filtros-bar {
+  background-color: #111827;
+  border-color: #374151;
+}
+
+.mapa-calor-filtro-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 180px;
+  flex: 1 1 auto;
+}
+
+.mapa-calor-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-2);
+}
+
+.mapa-calor-contenedor--alto-contraste .mapa-calor-label {
+  color: #9ca3af;
+}
+
+.mapa-calor-btn-grupo {
+  display: flex;
+  background-color: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 2px;
+}
+
+.mapa-calor-contenedor--alto-contraste .mapa-calor-btn-grupo {
+  background-color: #1f2937;
+  border-color: #374151;
+}
+
+.mapa-calor-btn-pill {
+  flex: 1;
+  padding: 0.35rem 0.6rem;
+  font-size: 0.775rem;
+  font-weight: 600;
+  border: none;
+  background: transparent;
+  color: var(--text-2);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.mapa-calor-btn-pill--activo {
+  background-color: var(--accent, #0284c7);
+  color: #ffffff !important;
+  font-weight: 700;
+}
+
+.mapa-calor-filtro-acciones {
+  display: flex;
+  align-items: center;
+  margin-left: auto;
+}
+
+.mapa-calor-btn-aux {
+  padding: 0.45rem 0.75rem;
+  font-size: 0.775rem;
+  font-weight: 600;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background-color: var(--surface);
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.mapa-calor-btn-aux--activo {
+  background-color: #1e293b;
+  color: #f8fafc;
+  border-color: #475569;
+}
+
+.mapa-calor-banner-normalizacion {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  background-color: #eff6ff;
+  border-left: 4px solid #3b82f6;
+  border-radius: 4px;
+  padding: 0.6rem 0.85rem;
+}
+
+.mapa-calor-contenedor--alto-contraste .mapa-calor-banner-normalizacion {
+  background-color: #172554;
+  border-left-color: #60a5fa;
+}
+
+.mapa-calor-banner-titulo {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #1d4ed8;
+}
+
+.mapa-calor-contenedor--alto-contraste .mapa-calor-banner-titulo {
+  color: #93c5fd;
+}
+
+.mapa-calor-banner-desc {
+  font-size: 0.75rem;
+  color: #1e3a8a;
+  line-height: 1.35;
+}
+
+.mapa-calor-contenedor--alto-contraste .mapa-calor-banner-desc {
+  color: #bfdbfe;
+}
+
+.mapa-calor-error {
+  padding: 0.65rem 0.85rem;
+  background-color: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #dc2626;
+  border-radius: 6px;
+  font-size: 0.8rem;
+}
+
+.mapa-calor-cancha-wrapper {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background-color: #0b1c10;
+  border-radius: 8px;
+  padding: 1rem;
+  overflow: hidden;
+}
+
+.mapa-calor-contenedor--alto-contraste .mapa-calor-cancha-wrapper {
+  background-color: #030712;
+}
+
+.mapa-calor-cargando-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(0, 0, 0, 0.45);
+  color: #ffffff;
+  font-size: 0.875rem;
+  font-weight: 600;
+  z-index: 10;
+}
+
+.mapa-calor-orientacion-barra {
+  width: 100%;
+  max-width: 960px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.35rem 0.5rem;
+  margin-bottom: 0.5rem;
+  font-size: 0.725rem;
+  font-weight: 700;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.mapa-calor-orientacion-flecha {
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.12);
+  padding: 0.2rem 0.55rem;
+  border-radius: 4px;
+}
+
+.mapa-calor-svg {
+  width: 100%;
+  max-width: 960px;
+  height: auto;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.mapa-calor-leyenda {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.mapa-calor-leyenda-txt {
+  font-size: 0.7rem;
+  color: #94a3b8;
+  font-weight: 600;
+}
+
+.mapa-calor-gradiente-barra {
+  width: 160px;
+  height: 8px;
+  border-radius: 9999px;
+  background: linear-gradient(to right, #00b4d8, #2ec4b6, #55a630, #ffb703, #e63946);
+}
+
+.mapa-calor-metricas-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1rem;
+}
+
+.mapa-calor-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  background-color: var(--surface-2, #f8fafc);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 1rem;
+}
+
+.mapa-calor-contenedor--alto-contraste .mapa-calor-card {
+  background-color: #111827;
+  border-color: #374151;
+}
+
+.mapa-calor-card-titulo {
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-2);
+  letter-spacing: 0.04em;
+}
+
+.mapa-calor-contenedor--alto-contraste .mapa-calor-card-titulo {
+  color: #9ca3af;
+}
+
+.mapa-calor-progreso-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.mapa-calor-progreso-item {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.775rem;
+  color: var(--text);
+}
+
+.mapa-calor-contenedor--alto-contraste .mapa-calor-progreso-item {
+  color: #f3f4f6;
+}
+
+.mapa-calor-barra-dual {
+  display: flex;
+  height: 8px;
+  border-radius: 9999px;
+  overflow: hidden;
+  background-color: var(--line);
+}
+
+.mapa-calor-barra-propia {
+  background-color: #3b82f6;
+  height: 100%;
+}
+
+.mapa-calor-barra-rival {
+  background-color: #ef4444;
+  height: 100%;
+}
+
+.mapa-calor-carriles-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.mapa-calor-carril-fila {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.775rem;
+}
+
+.mapa-calor-carril-nom {
+  width: 95px;
+  color: var(--text-2);
+}
+
+.mapa-calor-contenedor--alto-contraste .mapa-calor-carril-nom {
+  color: #9ca3af;
+}
+
+.mapa-calor-carril-prog {
+  flex: 1;
+  height: 6px;
+  background-color: var(--line);
+  border-radius: 9999px;
+  overflow: hidden;
+}
+
+.mapa-calor-carril-fill {
+  background-color: #10b981;
+  height: 100%;
+}
+
+.mapa-calor-carril-num {
+  width: 32px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.mapa-calor-contenedor--alto-contraste .mapa-calor-carril-num {
+  color: #f3f4f6;
+}
+
+.mapa-calor-resumen-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  font-size: 0.775rem;
+}
+
+.mapa-calor-resumen-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.mapa-calor-resumen-lbl {
+  color: var(--text-2);
+}
+
+.mapa-calor-contenedor--alto-contraste .mapa-calor-resumen-lbl {
+  color: #9ca3af;
+}
+
+.mapa-calor-resumen-val {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.mapa-calor-contenedor--alto-contraste .mapa-calor-resumen-val {
+  color: #f3f4f6;
+}
+
