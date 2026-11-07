@@ -6,7 +6,7 @@
  */
 import { api } from "@/shared/api/client";
 
-import type { Calibracion, CalibracionGuardar } from "./types";
+import type { Calibracion, CalibracionGuardar, ErrorCalibracion } from "./types";
 
 export async function ping() {
   const { data } = await api.get("/vision/ping");
@@ -25,5 +25,22 @@ export async function guardarCalibracion(
   datos: CalibracionGuardar,
 ): Promise<Calibracion> {
   const { data } = await api.post<Calibracion>(`/vision/partidos/${partidoId}/calibracion`, datos);
+  return data;
+}
+
+/**
+ * CU-21 · Calcular el error de reproyección SIN guardar nada (cualquier usuario
+ * autenticado). `signal` permite cancelar la petición si el cuerpo ya cambió.
+ */
+export async function validarCalibracion(
+  partidoId: number,
+  datos: CalibracionGuardar,
+  signal?: AbortSignal,
+): Promise<ErrorCalibracion> {
+  const { data } = await api.post<ErrorCalibracion>(
+    `/vision/partidos/${partidoId}/calibracion/validar`,
+    datos,
+    { signal },
+  );
   return data;
 }
