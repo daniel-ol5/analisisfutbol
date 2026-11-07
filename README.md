@@ -147,8 +147,9 @@ el balón, el que tiene la pelota se adelanta, el más cercano presiona, y hay
 pases, pérdidas y remates. Las velocidades son humanas (máximo 8 m/s), con
 unos 11 km por jugador cada 90 minutos.
 
-> Mientras no exista la tabla `partido` (T-047), cualquier número de partido
-> sirve, y las posiciones se ven en vivo pero no se guardan.
+> El partido debe existir y pertenecer al club de la sesión. Puede programarse
+> mediante `POST /api/deportivo/partidos`. Las posiciones se ven en vivo, pero
+> todavía no se guardan hasta implementar la tabla `posicion`.
 
 ### Si cambiás un router o un schema
 

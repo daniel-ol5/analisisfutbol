@@ -1,14 +1,12 @@
 /**
- * Interruptores de funciones que dependen de endpoints que TODAVÍA NO ESTÁN
- * en docs/api/openapi.json. El código ya está hecho; cada constante se pone
- * en true cuando su endpoint exista en el contrato.
+ * Interruptores de funciones del paquete de Seguridad y Administración (P1).
  */
 
-/** Desactivar, reactivar o cambiar rol de usuarios: PATCH /seguridad/usuarios/{id}. */
-export const HABILITAR_EDICION_USUARIOS = false;
+/** Editar, dar de baja, reactivar o cambiar rol de usuarios: PATCH/DELETE /seguridad/usuarios/{id}. */
+export const HABILITAR_EDICION_USUARIOS = true;
 
 /** Editar nombre y apellido propios: PATCH /seguridad/yo. */
-export const HABILITAR_EDICION_PERFIL = false;
+export const HABILITAR_EDICION_PERFIL = true;
 
 /** Cambiar la contraseña propia: POST /seguridad/yo/password. */
-export const HABILITAR_CAMBIO_PASSWORD = false;
+export const HABILITAR_CAMBIO_PASSWORD = true;

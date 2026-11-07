@@ -10,7 +10,6 @@ const CASOS = [
   "CU-23 Corregir distorsión",
   "CU-27 Procesar video grabado",
   "CU-28 Cargar video",
-  "CU-29 Versiones del modelo",
 ];
 
 export function VisionPage() {

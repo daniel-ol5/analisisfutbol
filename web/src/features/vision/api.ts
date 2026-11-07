@@ -6,7 +6,13 @@
  */
 import { api } from "@/shared/api/client";
 
-import type { Calibracion, CalibracionGuardar, ErrorCalibracion } from "./types";
+import type {
+  Calibracion,
+  CalibracionGuardar,
+  ErrorCalibracion,
+  Modelo,
+  ModeloCrear,
+} from "./types";
 
 export async function ping() {
   const { data } = await api.get("/vision/ping");
@@ -42,5 +48,23 @@ export async function validarCalibracion(
     datos,
     { signal },
   );
+  return data;
+}
+
+/** CU-29 · Listar las versiones del modelo registradas en el club, más nueva primero. */
+export async function listarModelos(): Promise<Modelo[]> {
+  const { data } = await api.get<Modelo[]>("/vision/modelos");
+  return data;
+}
+
+/** CU-29 · Registrar una versión ya entrenada (nunca activa por defecto). */
+export async function registrarModelo(datos: ModeloCrear): Promise<Modelo> {
+  const { data } = await api.post<Modelo>("/vision/modelos", datos);
+  return data;
+}
+
+/** CU-29 · Activar una versión; el backend desactiva cualquier otra del mismo club. */
+export async function activarModelo(modeloId: number): Promise<Modelo> {
+  const { data } = await api.post<Modelo>(`/vision/modelos/${modeloId}/activar`);
   return data;
 }

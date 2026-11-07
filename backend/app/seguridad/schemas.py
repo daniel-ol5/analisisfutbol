@@ -1,8 +1,28 @@
 """Esquemas de entrada y salida de Seguridad."""
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from typing import Annotated
+
+from pydantic import AfterValidator, BaseModel, ConfigDict, EmailStr, Field, model_validator
 
 from app.seguridad.models import Rol
+
+# ---------- Política de contraseñas (HU-52 · Criterio 2) ----------
+
+def _max_72_bytes(password: str) -> str:
+    # bcrypt rechaza más de 72 bytes, y con acentos 72 caracteres pueden ocupar más.
+    if len(password.encode()) > 72:
+        raise ValueError(
+            "La contraseña no puede ocupar más de 72 bytes "
+            "(los acentos y símbolos ocupan más de uno)"
+        )
+    return password
+
+
+# Una sola regla para toda contraseña nueva: registro, alta, cambio y recuperación.
+PasswordNueva = Annotated[
+    str, Field(min_length=8, max_length=72), AfterValidator(_max_72_bytes)
+]
+
 
 # ---------- CU-01 Registrar club ----------
 
@@ -10,7 +30,7 @@ class RegistroClub(BaseModel):
     nombre_club: str = Field(min_length=2, max_length=120)
     ciudad: str = Field(default="", max_length=80)
     email: EmailStr
-    password: str = Field(min_length=8, max_length=72)  # 72 = límite de bcrypt
+    password: PasswordNueva
     nombre: str = Field(default="", max_length=80)
     apellido: str = Field(default="", max_length=80)
 
@@ -55,7 +75,7 @@ class LogoutInput(BaseModel):
 
 class NuevoUsuario(BaseModel):
     email: EmailStr
-    password: str = Field(min_length=8, max_length=72)
+    password: PasswordNueva
     nombre: str = Field(default="", max_length=80)
     apellido: str = Field(default="", max_length=80)
     rol: Rol
@@ -66,7 +86,48 @@ class UsuarioEditar(BaseModel):
     apellido: str | None = Field(default=None, max_length=80)
     rol: Rol | None = None
     activo: bool | None = None
-    password: str | None = Field(default=None, min_length=8, max_length=72)
+    password: PasswordNueva | None = None
+
+
+# ---------- CU-05 Administrar perfil propio ----------
+
+class PerfilOut(UsuarioOut):
+    club_nombre: str
+
+
+class PerfilEditar(BaseModel):
+    """Solo nombre y apellido: email, rol y estado los administra el ADMIN (CU-04)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    nombre: str | None = Field(default=None, max_length=80)
+    apellido: str | None = Field(default=None, max_length=80)
+
+    @model_validator(mode="after")
+    def _al_menos_un_campo(self) -> "PerfilEditar":
+        if self.nombre is None and self.apellido is None:
+            raise ValueError("Indica al menos el nombre o el apellido")
+        return self
+
+
+class CambioPassword(BaseModel):
+    password_actual: str
+    password_nueva: PasswordNueva
+
+
+# ---------- CU-06 Recuperar contraseña (HU-52) ----------
+
+class SolicitudRecuperacion(BaseModel):
+    email: EmailStr
+
+
+class RestablecerPassword(BaseModel):
+    token: str
+    password_nueva: PasswordNueva
+
+
+class Mensaje(BaseModel):
+    detalle: str
 
 
 class ClubOut(BaseModel):

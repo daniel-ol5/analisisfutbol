@@ -71,6 +71,9 @@ export function LoginPage() {
           onChange={(e) => setPassword(e.target.value)}
           error={errores.password}
         />
+        <p className="auth-olvido">
+          <Link to="/recuperar">¿Olvidaste tu contraseña?</Link>
+        </p>
 
         {mutacion.isError && (
           <p className="auth-error" role="alert">

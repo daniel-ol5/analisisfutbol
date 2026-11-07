@@ -87,19 +87,24 @@ async def calibracion_previa(sede: str, usuario: Actual, db: Db) -> Calibracion:
 
 @router.get("/modelos", response_model=list[Modelo], summary="CU-29 · Listar versiones del modelo")
 async def listar_modelos(usuario: Actual, db: Db) -> list[Modelo]:
-    pendiente("CU-29", "Sprint 3", "Araceli")
+    modelos = await service.listar_modelos(db, usuario)
+    return [Modelo.model_validate(m) for m in modelos]
 
 
 @router.post("/modelos", response_model=Modelo, status_code=status.HTTP_201_CREATED,
+             dependencies=[Depends(requiere_rol("ADMIN", "ANALISTA"))],
              summary="CU-29 · Registrar una version entrenada")
 async def registrar_modelo(datos: ModeloCrear, usuario: Actual, db: Db) -> Modelo:
-    pendiente("CU-29", "Sprint 3", "Araceli")
+    modelo = await service.registrar_modelo(db, usuario, datos)
+    return Modelo.model_validate(modelo)
 
 
 @router.post("/modelos/{modelo_id}/activar", response_model=Modelo,
+             dependencies=[Depends(requiere_rol("ADMIN", "ANALISTA"))],
              summary="CU-29 · Activar una version (solo una activa por vez)")
 async def activar_modelo(modelo_id: int, usuario: Actual, db: Db) -> Modelo:
-    pendiente("CU-29", "Sprint 3", "Araceli")
+    modelo = await service.activar_modelo(db, usuario, modelo_id)
+    return Modelo.model_validate(modelo)
 
 
 # ---------------- CU-27, CU-28 · Video ----------------

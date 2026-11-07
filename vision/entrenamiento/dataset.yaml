@@ -1,0 +1,25 @@
+# Configuracion de dataset de ultralytics para el modelo propio (CU-29).
+#
+# `path` asume el dataset anotado como hermano de `vision/` (fuera del repo:
+# video/anotaciones de un partido real no se versionan en git). Estructura
+# esperada dentro de ese directorio, formato YOLO estandar:
+#
+#   datasets/futbol/
+#     images/train/*.jpg
+#     images/val/*.jpg
+#     labels/train/*.txt   # una linea por caja: "<clase> <x_c> <y_c> <w> <h>" normalizado 0-1
+#     labels/val/*.txt
+#
+# `names` define el indice de cada clase: DEBE coincidir en orden con
+# `deteccion/modelo.py::CLASES_PROPIO` (vision/tests/test_entrenamiento.py
+# lo valida). Cambiar un orden sin el otro produce un modelo que etiqueta
+# jugador donde deberia decir arbitro o balon.
+
+path: ../../datasets/futbol
+train: images/train
+val: images/val
+
+names:
+  0: jugador
+  1: arbitro
+  2: balon

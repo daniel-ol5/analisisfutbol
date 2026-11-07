@@ -175,12 +175,96 @@
         ]
       }
     },
+    "/api/seguridad/password/olvido": {
+      "post": {
+        "tags": [
+          "P1 · Seguridad y Administración"
+        ],
+        "summary": "CU-06 · Pedir enlace para restablecer la contraseña",
+        "description": "Responde lo mismo exista o no la cuenta, para no revelar qué correos están registrados. El enlace vence en 1 hora.",
+        "operationId": "olvido_password_api_seguridad_password_olvido_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SolicitudRecuperacion"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mensaje"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/seguridad/password/restablecer": {
+      "post": {
+        "tags": [
+          "P1 · Seguridad y Administración"
+        ],
+        "summary": "CU-06 · Restablecer la contraseña con el enlace recibido",
+        "description": "Enlace de un solo uso. Cierra todas las sesiones abiertas y devuelve una nueva para entrar de inmediato.",
+        "operationId": "restablecer_password_api_seguridad_password_restablecer_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RestablecerPassword"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Sesion"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/seguridad/yo": {
       "get": {
         "tags": [
           "P1 · Seguridad y Administración"
         ],
-        "summary": "Datos del usuario autenticado",
+        "summary": "CU-05 · Consultar perfil propio",
         "operationId": "yo_api_seguridad_yo_get",
         "responses": {
           "200": {
@@ -188,7 +272,98 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/UsuarioOut"
+                  "$ref": "#/components/schemas/PerfilOut"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      },
+      "patch": {
+        "tags": [
+          "P1 · Seguridad y Administración"
+        ],
+        "summary": "CU-05 · Editar nombre y apellido propios",
+        "operationId": "editar_perfil_api_seguridad_yo_patch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PerfilEditar"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PerfilOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/seguridad/yo/password": {
+      "post": {
+        "tags": [
+          "P1 · Seguridad y Administración"
+        ],
+        "summary": "CU-05 · Cambiar la contraseña propia",
+        "description": "Exige la contraseña actual (403 si no coincide). Cierra todas las sesiones abiertas y devuelve una nueva para este dispositivo.",
+        "operationId": "cambiar_password_api_seguridad_yo_password_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CambioPassword"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Sesion"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -454,16 +629,6 @@
               }
             }
           },
-          "501": {
-            "description": "Declarado en el contrato, pendiente de implementacion",
-            "content": {
-              "application/json": {
-                "example": {
-                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
-                }
-              }
-            }
-          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -504,16 +669,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Equipo"
-                }
-              }
-            }
-          },
-          "501": {
-            "description": "Declarado en el contrato, pendiente de implementacion",
-            "content": {
-              "application/json": {
-                "example": {
-                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
                 }
               }
             }
@@ -561,16 +716,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Equipo"
-                }
-              }
-            }
-          },
-          "501": {
-            "description": "Declarado en el contrato, pendiente de implementacion",
-            "content": {
-              "application/json": {
-                "example": {
-                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
                 }
               }
             }
@@ -630,16 +775,6 @@
               }
             }
           },
-          "501": {
-            "description": "Declarado en el contrato, pendiente de implementacion",
-            "content": {
-              "application/json": {
-                "example": {
-                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
-                }
-              }
-            }
-          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -677,16 +812,6 @@
         "responses": {
           "204": {
             "description": "Successful Response"
-          },
-          "501": {
-            "description": "Declarado en el contrato, pendiente de implementacion",
-            "content": {
-              "application/json": {
-                "example": {
-                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
-                }
-              }
-            }
           },
           "422": {
             "description": "Validation Error",
@@ -740,16 +865,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AvisoColores"
-                }
-              }
-            }
-          },
-          "501": {
-            "description": "Declarado en el contrato, pendiente de implementacion",
-            "content": {
-              "application/json": {
-                "example": {
-                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
                 }
               }
             }
@@ -826,16 +941,6 @@
               }
             }
           },
-          "501": {
-            "description": "Declarado en el contrato, pendiente de implementacion",
-            "content": {
-              "application/json": {
-                "example": {
-                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
-                }
-              }
-            }
-          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -873,16 +978,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Jugador"
-                }
-              }
-            }
-          },
-          "501": {
-            "description": "Declarado en el contrato, pendiente de implementacion",
-            "content": {
-              "application/json": {
-                "example": {
-                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
                 }
               }
             }
@@ -935,16 +1030,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Jugador"
-                }
-              }
-            }
-          },
-          "501": {
-            "description": "Declarado en el contrato, pendiente de implementacion",
-            "content": {
-              "application/json": {
-                "example": {
-                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
                 }
               }
             }
@@ -1004,16 +1089,6 @@
               }
             }
           },
-          "501": {
-            "description": "Declarado en el contrato, pendiente de implementacion",
-            "content": {
-              "application/json": {
-                "example": {
-                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
-                }
-              }
-            }
-          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -1052,13 +1127,114 @@
           "204": {
             "description": "Successful Response"
           },
-          "501": {
-            "description": "Declarado en el contrato, pendiente de implementacion",
+          "422": {
+            "description": "Validation Error",
             "content": {
               "application/json": {
-                "example": {
-                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/deportivo/equipos/{equipo_id}/jugadores/plantilla": {
+      "get": {
+        "tags": [
+          "P2 · Gestión Deportiva"
+        ],
+        "summary": "CU-12 · Descargar plantilla CSV para importar un plantel",
+        "operationId": "descargar_plantilla_jugadores_api_deportivo_equipos__equipo_id__jugadores_plantilla_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "equipo_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Equipo Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/deportivo/equipos/{equipo_id}/jugadores/exportar": {
+      "get": {
+        "tags": [
+          "P2 · Gestión Deportiva"
+        ],
+        "summary": "CU-12 · Exportar el plantel actual a CSV",
+        "operationId": "exportar_jugadores_csv_api_deportivo_equipos__equipo_id__jugadores_exportar_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "equipo_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Equipo Id"
+            }
+          },
+          {
+            "name": "activos",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": true,
+              "title": "Activos"
+            }
+          },
+          {
+            "name": "orden",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^(dorsal|posicion|apellido)$",
+              "default": "dorsal",
+              "title": "Orden"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
               }
             }
           },
@@ -1131,16 +1307,6 @@
               }
             }
           },
-          "501": {
-            "description": "Declarado en el contrato, pendiente de implementacion",
-            "content": {
-              "application/json": {
-                "example": {
-                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
-                }
-              }
-            }
-          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -1175,16 +1341,6 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "Declarado en el contrato, pendiente de implementacion",
-            "content": {
-              "application/json": {
-                "example": {
-                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
-                }
-              }
-            }
           }
         },
         "security": [
@@ -1216,16 +1372,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Competicion"
-                }
-              }
-            }
-          },
-          "501": {
-            "description": "Declarado en el contrato, pendiente de implementacion",
-            "content": {
-              "application/json": {
-                "example": {
-                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
                 }
               }
             }
@@ -1359,16 +1505,6 @@
               }
             }
           },
-          "501": {
-            "description": "Declarado en el contrato, pendiente de implementacion",
-            "content": {
-              "application/json": {
-                "example": {
-                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
-                }
-              }
-            }
-          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -1409,16 +1545,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Partido"
-                }
-              }
-            }
-          },
-          "501": {
-            "description": "Declarado en el contrato, pendiente de implementacion",
-            "content": {
-              "application/json": {
-                "example": {
-                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
                 }
               }
             }
@@ -1466,16 +1592,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Partido"
-                }
-              }
-            }
-          },
-          "501": {
-            "description": "Declarado en el contrato, pendiente de implementacion",
-            "content": {
-              "application/json": {
-                "example": {
-                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
                 }
               }
             }
@@ -1531,16 +1647,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Partido"
-                }
-              }
-            }
-          },
-          "501": {
-            "description": "Declarado en el contrato, pendiente de implementacion",
-            "content": {
-              "application/json": {
-                "example": {
-                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
                 }
               }
             }
@@ -1602,16 +1708,6 @@
               }
             }
           },
-          "501": {
-            "description": "Declarado en el contrato, pendiente de implementacion",
-            "content": {
-              "application/json": {
-                "example": {
-                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
-                }
-              }
-            }
-          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -1631,6 +1727,7 @@
           "P2 · Gestión Deportiva"
         ],
         "summary": "CU-17 · Ver alineacion del partido",
+        "description": "404 si el partido todavia no tiene alineacion.",
         "operationId": "ver_alineacion_api_deportivo_partidos__partido_id__alineacion_get",
         "security": [
           {
@@ -1659,16 +1756,6 @@
               }
             }
           },
-          "501": {
-            "description": "Declarado en el contrato, pendiente de implementacion",
-            "content": {
-              "application/json": {
-                "example": {
-                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
-                }
-              }
-            }
-          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -1686,6 +1773,7 @@
           "P2 · Gestión Deportiva"
         ],
         "summary": "CU-17 · Guardar alineacion y formacion",
+        "description": "Reemplaza la alineacion completa. Exige 11 titulares, un solo arquero titular y un solo capitan titular. 409 si el partido ya no esta PROGRAMADO ni EN_CURSO.",
         "operationId": "guardar_alineacion_api_deportivo_partidos__partido_id__alineacion_put",
         "security": [
           {
@@ -1720,16 +1808,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Alineacion"
-                }
-              }
-            }
-          },
-          "501": {
-            "description": "Declarado en el contrato, pendiente de implementacion",
-            "content": {
-              "application/json": {
-                "example": {
-                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
                 }
               }
             }
@@ -4644,18 +4722,6 @@
     "schemas": {
       "Alineacion": {
         "properties": {
-          "formacion": {
-            "$ref": "#/components/schemas/Formacion",
-            "default": "4-3-3"
-          },
-          "jugadores": {
-            "items": {
-              "$ref": "#/components/schemas/JugadorAlineado"
-            },
-            "type": "array",
-            "title": "Jugadores",
-            "description": "Maximo 11 con es_titular=true"
-          },
           "id": {
             "type": "integer",
             "title": "Id"
@@ -4663,13 +4729,25 @@
           "partido_id": {
             "type": "integer",
             "title": "Partido Id"
+          },
+          "formacion": {
+            "$ref": "#/components/schemas/Formacion"
+          },
+          "jugadores": {
+            "items": {
+              "$ref": "#/components/schemas/JugadorAlineadoOut"
+            },
+            "type": "array",
+            "title": "Jugadores",
+            "description": "Primero los titulares y después los suplentes, cada grupo por dorsal"
           }
         },
         "type": "object",
         "required": [
-          "jugadores",
           "id",
-          "partido_id"
+          "partido_id",
+          "formacion",
+          "jugadores"
         ],
         "title": "Alineacion"
       },
@@ -4685,7 +4763,7 @@
             },
             "type": "array",
             "title": "Jugadores",
-            "description": "Maximo 11 con es_titular=true"
+            "description": "Titulares y suplentes. Exactamente 11 con es_titular=true, uno solo de ellos arquero (posicion ARQ) y uno solo capitan."
           }
         },
         "type": "object",
@@ -4961,11 +5039,32 @@
         "title": "CalibracionGuardar",
         "description": "Se exigen al menos 8 puntos repartidos por toda la cancha.\n\nCon 4 la homografia ajusta exacta y el residual da cero, que no informa nada.\nSolo puntos sobre el plano del suelo: nunca el travesano, que esta a 2,44 m."
       },
+      "CambioPassword": {
+        "properties": {
+          "password_actual": {
+            "type": "string",
+            "title": "Password Actual"
+          },
+          "password_nueva": {
+            "type": "string",
+            "maxLength": 72,
+            "minLength": 8,
+            "title": "Password Nueva"
+          }
+        },
+        "type": "object",
+        "required": [
+          "password_actual",
+          "password_nueva"
+        ],
+        "title": "CambioPassword"
+      },
       "Cancelacion": {
         "properties": {
           "motivo": {
             "type": "string",
             "maxLength": 200,
+            "minLength": 1,
             "title": "Motivo",
             "examples": [
               "Suspendido por lluvia"
@@ -5044,6 +5143,7 @@
           "nombre": {
             "type": "string",
             "maxLength": 120,
+            "minLength": 1,
             "title": "Nombre",
             "examples": [
               "Torneo Apertura"
@@ -5052,6 +5152,7 @@
           "temporada": {
             "type": "string",
             "maxLength": 20,
+            "minLength": 1,
             "title": "Temporada",
             "examples": [
               "2026"
@@ -5104,6 +5205,7 @@
           "nombre": {
             "type": "string",
             "maxLength": 120,
+            "minLength": 1,
             "title": "Nombre",
             "examples": [
               "Torneo Apertura"
@@ -5112,6 +5214,7 @@
           "temporada": {
             "type": "string",
             "maxLength": 20,
+            "minLength": 1,
             "title": "Temporada",
             "examples": [
               "2026"
@@ -5424,6 +5527,17 @@
               }
             ],
             "title": "Color Arquero"
+          },
+          "activo": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Activo"
           }
         },
         "type": "object",
@@ -6181,18 +6295,21 @@
             "maximum": 100.0,
             "minimum": 0.0,
             "title": "Pos X",
-            "description": "Coordenada relativa en el plano, 0 a 100"
+            "description": "Porcentaje del largo: 0 = arco propio, 100 = arco rival"
           },
           "pos_y": {
             "type": "number",
             "maximum": 100.0,
             "minimum": 0.0,
-            "title": "Pos Y"
+            "title": "Pos Y",
+            "description": "Porcentaje del ancho: 0 = banda izquierda, 100 = banda derecha (mirando hacia el arco rival)"
           },
           "minuto_entra": {
             "anyOf": [
               {
-                "type": "integer"
+                "type": "integer",
+                "maximum": 130.0,
+                "minimum": 0.0
               },
               {
                 "type": "null"
@@ -6203,7 +6320,9 @@
           "minuto_sale": {
             "anyOf": [
               {
-                "type": "integer"
+                "type": "integer",
+                "maximum": 130.0,
+                "minimum": 0.0
               },
               {
                 "type": "null"
@@ -6218,7 +6337,93 @@
           "pos_x",
           "pos_y"
         ],
-        "title": "JugadorAlineado"
+        "title": "JugadorAlineado",
+        "description": "Coordenadas relativas, mismos ejes que el tracking (x largo, y ancho):\nse pasan a metros con `pos_x / 100 * largo_m` de la calibración."
+      },
+      "JugadorAlineadoOut": {
+        "properties": {
+          "jugador_id": {
+            "type": "integer",
+            "title": "Jugador Id"
+          },
+          "es_titular": {
+            "type": "boolean",
+            "title": "Es Titular",
+            "default": true
+          },
+          "es_capitan": {
+            "type": "boolean",
+            "title": "Es Capitan",
+            "default": false
+          },
+          "pos_x": {
+            "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Pos X",
+            "description": "Porcentaje del largo: 0 = arco propio, 100 = arco rival"
+          },
+          "pos_y": {
+            "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Pos Y",
+            "description": "Porcentaje del ancho: 0 = banda izquierda, 100 = banda derecha (mirando hacia el arco rival)"
+          },
+          "minuto_entra": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 130.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Minuto Entra"
+          },
+          "minuto_sale": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 130.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Minuto Sale"
+          },
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "apellido": {
+            "type": "string",
+            "title": "Apellido"
+          },
+          "dorsal": {
+            "type": "integer",
+            "title": "Dorsal"
+          },
+          "posicion": {
+            "$ref": "#/components/schemas/Posicion"
+          }
+        },
+        "type": "object",
+        "required": [
+          "jugador_id",
+          "pos_x",
+          "pos_y",
+          "nombre",
+          "apellido",
+          "dorsal",
+          "posicion"
+        ],
+        "title": "JugadorAlineadoOut",
+        "description": "Con los datos del jugador, para dibujar la cancha sin pedir el plantel."
       },
       "JugadorCrear": {
         "properties": {
@@ -6395,6 +6600,17 @@
               }
             ],
             "title": "Fecha Nacimiento"
+          },
+          "activo": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Activo"
           }
         },
         "type": "object",
@@ -6511,6 +6727,19 @@
           "celdas"
         ],
         "title": "MapaCalor"
+      },
+      "Mensaje": {
+        "properties": {
+          "detalle": {
+            "type": "string",
+            "title": "Detalle"
+          }
+        },
+        "type": "object",
+        "required": [
+          "detalle"
+        ],
+        "title": "Mensaje"
       },
       "MensajeWorker": {
         "properties": {
@@ -6806,7 +7035,10 @@
           "archivo_url": {
             "type": "string",
             "maxLength": 400,
-            "title": "Archivo Url"
+            "title": "Archivo Url",
+            "examples": [
+              "https://cdn.club.com/modelos/futbol-v3.pt"
+            ]
           },
           "map50_jugador": {
             "anyOf": [
@@ -6911,7 +7143,10 @@
           "archivo_url": {
             "type": "string",
             "maxLength": 400,
-            "title": "Archivo Url"
+            "title": "Archivo Url",
+            "examples": [
+              "https://cdn.club.com/modelos/futbol-v3.pt"
+            ]
           },
           "map50_jugador": {
             "anyOf": [
@@ -7141,6 +7376,7 @@
           "rival": {
             "type": "string",
             "maxLength": 120,
+            "minLength": 1,
             "title": "Rival",
             "examples": [
               "Club Atletico Rival"
@@ -7159,8 +7395,8 @@
           "sede": {
             "type": "string",
             "maxLength": 160,
+            "minLength": 1,
             "title": "Sede",
-            "default": "",
             "examples": [
               "Cancha municipal"
             ]
@@ -7181,7 +7417,8 @@
         "required": [
           "equipo_id",
           "rival",
-          "fecha_hora"
+          "fecha_hora",
+          "sede"
         ],
         "title": "PartidoCrear"
       },
@@ -7190,7 +7427,9 @@
           "rival": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 120,
+                "minLength": 1
               },
               {
                 "type": "null"
@@ -7224,7 +7463,9 @@
           "sede": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 160,
+                "minLength": 1
               },
               {
                 "type": "null"
@@ -7246,6 +7487,86 @@
         },
         "type": "object",
         "title": "PartidoEditar"
+      },
+      "PerfilEditar": {
+        "properties": {
+          "nombre": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 80
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nombre"
+          },
+          "apellido": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 80
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Apellido"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "PerfilEditar",
+        "description": "Solo nombre y apellido: email, rol y estado los administra el ADMIN (CU-04)."
+      },
+      "PerfilOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "club_id": {
+            "type": "integer",
+            "title": "Club Id"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "title": "Email"
+          },
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "apellido": {
+            "type": "string",
+            "title": "Apellido"
+          },
+          "rol": {
+            "$ref": "#/components/schemas/Rol"
+          },
+          "activo": {
+            "type": "boolean",
+            "title": "Activo"
+          },
+          "club_nombre": {
+            "type": "string",
+            "title": "Club Nombre"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "club_id",
+          "email",
+          "nombre",
+          "apellido",
+          "rol",
+          "activo",
+          "club_nombre"
+        ],
+        "title": "PerfilOut"
       },
       "Pie": {
         "type": "string",
@@ -7835,6 +8156,26 @@
         "type": "object",
         "title": "ReglaEditar"
       },
+      "RestablecerPassword": {
+        "properties": {
+          "token": {
+            "type": "string",
+            "title": "Token"
+          },
+          "password_nueva": {
+            "type": "string",
+            "maxLength": 72,
+            "minLength": 8,
+            "title": "Password Nueva"
+          }
+        },
+        "type": "object",
+        "required": [
+          "token",
+          "password_nueva"
+        ],
+        "title": "RestablecerPassword"
+      },
       "ResultadoImportacion": {
         "properties": {
           "total": {
@@ -7924,6 +8265,20 @@
           "usuario"
         ],
         "title": "Sesion"
+      },
+      "SolicitudRecuperacion": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "title": "Email"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email"
+        ],
+        "title": "SolicitudRecuperacion"
       },
       "TipoEventoDerivado": {
         "type": "string",

@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.core.database import SessionLocal
 from app.core.deps import UsuarioActual
 from app.core.tenancy import verificar_pertenencia
+from app.deportivo.models import Partido
 from app.partido.schemas import MensajeWorker
 
 log = logging.getLogger(__name__)
@@ -22,19 +23,9 @@ log = logging.getLogger(__name__)
 # ---------------- Acceso a partidos (T-032) ----------------
 #
 # Los WebSockets necesitan saber si un partido existe y es del club del
-# usuario. La tabla `partido` todavía no existe (T-047, Susana), así que la
-# consulta queda detrás de esta interfaz.
-#
-# >>> PUNTO ÚNICO DE CONEXIÓN CON EL MODELO REAL <<<
-# Cuando exista el modelo (con `club_id` desnormalizado), reemplazar por:
-#
-#     from app.deportivo.models import Partido
-#     MODELO_PARTIDO = Partido
-#
-# ⚠️ PROVISORIO hasta T-047 (Susana): con None, los WebSockets aceptan
-# cualquier partido_id (ver `PartidosSinTabla`). Al arrancar la API se avisa
-# en el log (`avisar_provisorios`).
-MODELO_PARTIDO: type[Any] | None = None
+# usuario. La consulta queda detrás de esta interfaz porque un WebSocket vive
+# todo el encuentro y no debe retener la sesión HTTP durante 90 minutos.
+MODELO_PARTIDO: type[Any] = Partido
 
 
 class RepositorioPartidos(Protocol):
@@ -75,8 +66,6 @@ class PartidosSinTabla:
 
 def obtener_repositorio_partidos() -> RepositorioPartidos:
     """Dependencia de FastAPI."""
-    if MODELO_PARTIDO is None:
-        return PartidosSinTabla()
     return PartidosEnTabla(MODELO_PARTIDO)
 
 
@@ -175,9 +164,6 @@ def obtener_almacen_posiciones() -> AlmacenPosiciones:
 
 def avisar_provisorios() -> None:
     """Deja en el log, al arrancar la API, lo que funciona en modo provisorio."""
-    if MODELO_PARTIDO is None:
-        log.warning("PROVISORIO hasta T-047 (Susana): no existe la tabla partido; "
-                    "los WebSockets aceptan cualquier partido_id, aislados por club.")
     if MODELO_POSICION is None:
         log.warning("PROVISORIO: no existe la tabla posicion; la ingesta difunde "
                     "en vivo pero no guarda las posiciones.")

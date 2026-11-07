@@ -64,3 +64,28 @@ export interface ParCalibracion {
   /** Coordenadas en metros sobre el plano de la cancha (`0..largo_m` × `0..ancho_m`). */
   cancha: Punto;
 }
+
+// ---------- CU-29 Versionado de modelos ----------
+
+export type TipoModelo = "DETECCION" | "POSE";
+
+/** Cuerpo de `POST /vision/modelos` (CU-29). */
+export interface ModeloCrear {
+  nombre: string;
+  version: string;
+  tipo: TipoModelo;
+  /** El backend exige https (el worker la descarga sin autenticación propia). */
+  archivo_url: string;
+  map50_jugador?: number | null;
+  map50_balon?: number | null;
+  idf1?: number | null;
+  notas?: string;
+}
+
+/** Respuesta de `GET /vision/modelos` y `POST /vision/modelos`. */
+export interface Modelo extends ModeloCrear {
+  id: number;
+  /** A lo sumo una versión activa por club; la usa el worker en el siguiente procesamiento. */
+  activo: boolean;
+  entrenado_en: string;
+}

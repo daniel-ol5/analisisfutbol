@@ -8,7 +8,17 @@ clubes (Pb-03), salvo las que cuelgan de otra que ya lo tenga.
 
 from datetime import UTC, date, datetime
 
-from sqlalchemy import Date, DateTime, Float, ForeignKey, Integer, String
+from sqlalchemy import (
+    Date,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -37,6 +47,19 @@ class Equipo(Base):
 
 class Jugador(Base):
     __tablename__ = "jugador"
+    __table_args__ = (
+        # Dorsal único por equipo entre jugadores activos (CU-11). Parcial
+        # porque un dorsal debe poder reasignarse tras dar de baja a quien
+        # lo tenía, igual que valida `_validar_dorsal_disponible` en service.py.
+        Index(
+            "ux_jugador_equipo_dorsal_activo",
+            "equipo_id",
+            "dorsal",
+            unique=True,
+            postgresql_where=text("activo"),
+            sqlite_where=text("activo"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     club_id: Mapped[int] = mapped_column(ForeignKey("club.id"), index=True)
@@ -60,6 +83,14 @@ class Jugador(Base):
 
 class Competicion(Base):
     __tablename__ = "competicion"
+    __table_args__ = (
+        UniqueConstraint(
+            "club_id",
+            "nombre",
+            "temporada",
+            name="uq_competicion_club_nombre_temporada",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     club_id: Mapped[int] = mapped_column(ForeignKey("club.id"), index=True)
@@ -111,7 +142,10 @@ class Alineacion(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     club_id: Mapped[int] = mapped_column(ForeignKey("club.id"), index=True)
-    partido_id: Mapped[int] = mapped_column(ForeignKey("partido.id"), index=True)
+    # CU-17: una sola alineación por partido; guardar de nuevo la reemplaza.
+    partido_id: Mapped[int] = mapped_column(
+        ForeignKey("partido.id"), index=True, unique=True
+    )
 
     formacion: Mapped[str] = mapped_column(String(20), default="4-3-3")
     creado_en: Mapped[datetime] = mapped_column(

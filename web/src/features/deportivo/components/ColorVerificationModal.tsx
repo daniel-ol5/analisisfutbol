@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { JerseyPreview } from "./JerseyPreview";
 import { verificarColoresEquipo } from "../api";
+import { calcularDistanciaHsv } from "../types";
 import type { Equipo } from "../types";
 
 interface ColorVerificationModalProps {
@@ -19,32 +20,50 @@ const RIVALES_COMUNES = [
   { nombre: "Blooming (Celeste)", hex: "#4FC3F7" },
   { nombre: "Real Tomayapo (Verde Limón)", hex: "#84CC16" },
   { nombre: "San Antonio (Naranja)", hex: "#EA580C" },
-  { nombre: "Rival con Blanco Puro", hex: "#FFFFFF" },
-  { nombre: "Rival con Azul Marino", hex: "#1E3A8A" },
+  { nombre: "Rival Blanco Puro", hex: "#FFFFFF" },
+  { nombre: "Rival Azul Marino", hex: "#1E3A8A" },
+  { nombre: "Rival Negro Azabache", hex: "#18181B" },
 ];
 
 export function ColorVerificationModal({
   abierto,
   equipo,
-  otrosEquipos,
+  otrosEquipos: _otrosEquipos,
   onCerrar,
 }: ColorVerificationModalProps) {
+  const [kitNuestro, setKitNuestro] = useState<"local" | "visitante">("local");
   const [colorRival, setColorRival] = useState<string>("#F2C200");
 
   const esHexValido = /^#[0-9A-Fa-f]{6}$/.test(colorRival);
 
-  // Consulta de verificación en backend mediante React Query
-  const {
-    data: resultado,
-    isLoading: cargando,
-    isError,
-    error,
-  } = useQuery({
+  // Consulta de verificación en backend para el uniforme titular
+  const { isError, error } = useQuery({
     queryKey: ["verificar-color", equipo?.id, colorRival],
     queryFn: () => verificarColoresEquipo(equipo!.id, colorRival),
     enabled: abierto && Boolean(equipo) && esHexValido,
     retry: false,
   });
+
+  // Cálculo en frontend para contraste inmediato de ambos kits (Titular y Alternativo)
+  const analisisKits = useMemo(() => {
+    if (!equipo || !esHexValido) return null;
+
+    const distTitular = calcularDistanciaHsv(equipo.color_local, colorRival) ?? 999;
+    const distAlternativa = calcularDistanciaHsv(equipo.color_visitante, colorRival) ?? 999;
+
+    const titularEnRiesgo = distTitular < 40;
+    const alternativaEnRiesgo = distAlternativa < 40;
+
+    return {
+      distTitular,
+      distAlternativa,
+      titularEnRiesgo,
+      alternativaEnRiesgo,
+      colorActivo: kitNuestro === "local" ? equipo.color_local : equipo.color_visitante,
+      distActiva: kitNuestro === "local" ? distTitular : distAlternativa,
+      hayRiesgoActivo: kitNuestro === "local" ? titularEnRiesgo : alternativaEnRiesgo,
+    };
+  }, [equipo, colorRival, esHexValido, kitNuestro]);
 
   if (!abierto || !equipo) return null;
 
@@ -54,7 +73,7 @@ export function ColorVerificationModal({
         position: "fixed",
         inset: 0,
         zIndex: 50,
-        backgroundColor: "rgba(0, 0, 0, 0.65)",
+        backgroundColor: "rgba(0, 0, 0, 0.7)",
         backdropFilter: "blur(3px)",
         display: "flex",
         alignItems: "center",
@@ -71,11 +90,11 @@ export function ColorVerificationModal({
           border: "1px solid var(--line)",
           borderRadius: 10,
           width: "100%",
-          maxWidth: 620,
-          maxHeight: "90vh",
+          maxWidth: 640,
+          maxHeight: "92vh",
           display: "flex",
           flexDirection: "column",
-          boxShadow: "0 20px 40px rgba(0,0,0,0.25)",
+          boxShadow: "0 20px 40px rgba(0,0,0,0.3)",
           overflow: "hidden",
         }}
       >
@@ -99,10 +118,10 @@ export function ColorVerificationModal({
                 letterSpacing: "0.08em",
               }}
             >
-              CU-10 · Verificador de Contraste Óptico (HSV)
+              CU-10 · Verificador Óptico de Partido vs Rival
             </span>
             <h3 style={{ margin: "2px 0 0", fontSize: 17, fontWeight: 800, color: "var(--text)" }}>
-              Contraste de Indumentaria vs. Rival
+              Contraste de Indumentaria: {equipo.nombre} vs. Rival
             </h3>
           </div>
           <button
@@ -121,9 +140,52 @@ export function ColorVerificationModal({
           </button>
         </div>
 
-        {/* Contenido */}
-        <div style={{ padding: 20, display: "flex", flexDirection: "column", gap: 18, overflowY: "auto" }}>
-          {/* Comparación visual de camisetas cara a cara */}
+        {/* Contenido del modal */}
+        <div style={{ padding: 20, display: "flex", flexDirection: "column", gap: 16, overflowY: "auto" }}>
+          {/* Selector de kit de nuestro equipo (Titular o Alternativo) */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: "var(--text)" }}>
+              Indumentaria a utilizar en el partido:
+            </span>
+            <div style={{ display: "flex", gap: 6 }}>
+              <button
+                type="button"
+                onClick={() => setKitNuestro("local")}
+                style={{
+                  all: "unset",
+                  cursor: "pointer",
+                  padding: "5px 12px",
+                  borderRadius: 6,
+                  fontSize: 12,
+                  fontWeight: 700,
+                  background: kitNuestro === "local" ? "var(--pitch)" : "var(--ground)",
+                  color: kitNuestro === "local" ? "#fff" : "var(--text-2)",
+                  border: "1px solid var(--line)",
+                }}
+              >
+                Titular ({equipo.color_local})
+              </button>
+              <button
+                type="button"
+                onClick={() => setKitNuestro("visitante")}
+                style={{
+                  all: "unset",
+                  cursor: "pointer",
+                  padding: "5px 12px",
+                  borderRadius: 6,
+                  fontSize: 12,
+                  fontWeight: 700,
+                  background: kitNuestro === "visitante" ? "var(--pitch)" : "var(--ground)",
+                  color: kitNuestro === "visitante" ? "#fff" : "var(--text-2)",
+                  border: "1px solid var(--line)",
+                }}
+              >
+                Alternativa ({equipo.color_visitante})
+              </button>
+            </div>
+          </div>
+
+          {/* Comparación visual cara a cara */}
           <div
             style={{
               display: "grid",
@@ -136,13 +198,13 @@ export function ColorVerificationModal({
               border: "1px solid var(--line)",
             }}
           >
-            {/* Tu equipo */}
+            {/* Nuestro equipo */}
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
-              <JerseyPreview color={equipo.color_local} size="lg" />
+              <JerseyPreview color={analisisKits?.colorActivo ?? equipo.color_local} size="lg" />
               <div style={{ textAlign: "center" }}>
                 <strong style={{ fontSize: 13, color: "var(--text)" }}>{equipo.nombre}</strong>
                 <p style={{ margin: 0, fontSize: 11, fontFamily: "monospace", color: "var(--text-3)" }}>
-                  Local ({equipo.color_local})
+                  {kitNuestro === "local" ? "Titular" : "Alternativa"} ({analisisKits?.colorActivo})
                 </p>
               </div>
             </div>
@@ -150,7 +212,7 @@ export function ColorVerificationModal({
             {/* Marcador VS */}
             <div
               style={{
-                fontSize: 14,
+                fontSize: 13,
                 fontWeight: 900,
                 color: "var(--text-3)",
                 padding: "6px 12px",
@@ -175,9 +237,93 @@ export function ColorVerificationModal({
           </div>
 
           {/* Resultado de la verificación */}
-          {cargando && (
-            <div style={{ textAlign: "center", padding: 12, fontSize: 13, color: "var(--text-3)" }}>
-              Calculando contraste cilíndrico en espacio HSV…
+          {analisisKits && (
+            <div
+              style={{
+                padding: "14px 16px",
+                borderRadius: 8,
+                background: analisisKits.hayRiesgoActivo
+                  ? "rgba(162, 55, 42, 0.1)"
+                  : "rgba(11, 107, 69, 0.1)",
+                border: analisisKits.hayRiesgoActivo
+                  ? "1.5px solid var(--risk)"
+                  : "1.5px solid var(--pitch)",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <strong
+                    style={{
+                      fontSize: 14,
+                      color: analisisKits.hayRiesgoActivo ? "var(--risk)" : "var(--pitch)",
+                    }}
+                  >
+                    {analisisKits.hayRiesgoActivo ? "Riesgo de Confusión Óptica" : "Contraste Óptico Aprobado"}
+                  </strong>
+                </div>
+
+                <span
+                  style={{
+                    fontSize: 11.5,
+                    fontFamily: "monospace",
+                    padding: "3px 8px",
+                    borderRadius: 4,
+                    fontWeight: 700,
+                    backgroundColor: analisisKits.hayRiesgoActivo ? "var(--risk)" : "var(--pitch)",
+                    color: "#fff",
+                  }}
+                >
+                  Distancia HSV: {analisisKits.distActiva.toFixed(1)} {analisisKits.hayRiesgoActivo ? "< 40" : "≥ 40"}
+                </span>
+              </div>
+
+              <p style={{ margin: 0, fontSize: 12.5, lineHeight: 1.5, color: "var(--text)" }}>
+                {analisisKits.hayRiesgoActivo
+                  ? `La indumentaria ${kitNuestro === "local" ? "titular" : "alternativa"} está muy próxima a la del rival en espacio HSV (distancia ${analisisKits.distActiva.toFixed(1)} < 40). El pipeline de visión computacional podría confundir a los jugadores.`
+                  : `Contraste adecuado: la distancia en espacio HSV (${analisisKits.distActiva.toFixed(1)} ≥ 40) garantiza una segmentación nítida de ambos planteles.`}
+              </p>
+
+              {/* Recomendación inteligente de cambio a indumentaria alternativa */}
+              {analisisKits.titularEnRiesgo && kitNuestro === "local" && (
+                <div
+                  style={{
+                    marginTop: 10,
+                    padding: "10px 12px",
+                    borderRadius: 6,
+                    background: "var(--surface)",
+                    border: "1px dashed var(--line)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    flexWrap: "wrap",
+                    gap: 8,
+                  }}
+                >
+                  <span style={{ fontSize: 12, color: "var(--text)" }}>
+                    <strong>Sugerencia:</strong> {!analisisKits.alternativaEnRiesgo
+                      ? `La indumentaria alternativa (${equipo.color_visitante}) sí contrasta adecuadamente (distancia ${analisisKits.distAlternativa.toFixed(1)} ≥ 40).`
+                      : "La indumentaria alternativa también presenta similitud. Conviene registrar o cambiar el color del rival."}
+                  </span>
+                  {!analisisKits.alternativaEnRiesgo && (
+                    <button
+                      type="button"
+                      onClick={() => setKitNuestro("visitante")}
+                      style={{
+                        all: "unset",
+                        cursor: "pointer",
+                        padding: "4px 10px",
+                        fontSize: 11.5,
+                        fontWeight: 700,
+                        color: "#fff",
+                        background: "var(--pitch)",
+                        borderRadius: 4,
+                      }}
+                    >
+                      Probar con Alternativa
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
@@ -192,54 +338,11 @@ export function ColorVerificationModal({
                 fontSize: 12,
               }}
             >
-              {(error as any)?.response?.data?.detail ?? "Error al verificar colores con el servidor"}
+              {(error as any)?.response?.data?.detail ?? "Error al sincronizar con el backend"}
             </div>
           )}
 
-          {resultado && !cargando && (
-            <div
-              style={{
-                padding: "14px 16px",
-                borderRadius: 8,
-                background: resultado.hay_riesgo ? "rgba(162, 55, 42, 0.1)" : "rgba(11, 107, 69, 0.1)",
-                border: resultado.hay_riesgo ? "1.5px solid var(--risk)" : "1.5px solid var(--pitch)",
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <span style={{ fontSize: 18 }}>{resultado.hay_riesgo ? "⚠️" : "✅"}</span>
-                  <strong
-                    style={{
-                      fontSize: 14,
-                      color: resultado.hay_riesgo ? "var(--risk)" : "var(--pitch)",
-                    }}
-                  >
-                    {resultado.hay_riesgo ? "Riesgo de Confusión Óptica" : "Contraste Aprobado"}
-                  </strong>
-                </div>
-
-                <span
-                  style={{
-                    fontSize: 11.5,
-                    fontFamily: "monospace",
-                    padding: "3px 8px",
-                    borderRadius: 4,
-                    fontWeight: 700,
-                    backgroundColor: resultado.hay_riesgo ? "var(--risk)" : "var(--pitch)",
-                    color: "#fff",
-                  }}
-                >
-                  Distancia HSV: {resultado.distancia_hsv.toFixed(1)} {resultado.hay_riesgo ? "< 40" : "≥ 40"}
-                </span>
-              </div>
-
-              <p style={{ margin: 0, fontSize: 12.5, lineHeight: 1.5, color: "var(--text)" }}>
-                {resultado.mensaje}
-              </p>
-            </div>
-          )}
-
-          {/* Selector interactivo de color rival */}
+          {/* Configuración del color del Rival */}
           <div>
             <label
               style={{
@@ -250,7 +353,7 @@ export function ColorVerificationModal({
                 marginBottom: 8,
               }}
             >
-              Elegir o personalizar color del rival:
+              Configurar color del uniforme rival:
             </label>
 
             <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
@@ -259,8 +362,8 @@ export function ColorVerificationModal({
                 value={esHexValido ? colorRival : "#F2C200"}
                 onChange={(e) => setColorRival(e.target.value.toUpperCase())}
                 style={{
-                  width: 42,
-                  height: 38,
+                  width: 44,
+                  height: 40,
                   border: "1px solid var(--line)",
                   borderRadius: 6,
                   cursor: "pointer",
@@ -271,25 +374,29 @@ export function ColorVerificationModal({
                 type="text"
                 value={colorRival}
                 maxLength={7}
+                placeholder="#RRGGBB"
                 onChange={(e) => setColorRival(e.target.value.toUpperCase())}
                 style={{
-                  width: 120,
-                  padding: "8px 10px",
+                  width: 140,
+                  padding: "8px 12px",
                   fontSize: 13,
                   fontFamily: "monospace",
-                  fontWeight: 600,
+                  fontWeight: 700,
                   border: "1px solid var(--line)",
                   borderRadius: 6,
                   background: "var(--ground)",
                   color: "var(--text)",
                 }}
               />
+              <span style={{ fontSize: 11.5, color: "var(--text-3)" }}>
+                Ingresa el código hexadecimal del visitante o selecciona un rival de la lista:
+              </span>
             </div>
 
             {/* Rivales típicos preestablecidos */}
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               <span style={{ fontSize: 11, fontWeight: 600, color: "var(--text-3)" }}>
-                Rivales y patrones de contraste frecuentes:
+                Rivales frecuentes para calibración de partido:
               </span>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                 {RIVALES_COMUNES.map((r) => (
@@ -300,7 +407,7 @@ export function ColorVerificationModal({
                     style={{
                       all: "unset",
                       cursor: "pointer",
-                      padding: "4px 8px",
+                      padding: "5px 10px",
                       borderRadius: 4,
                       fontSize: 11.5,
                       background: colorRival.toUpperCase() === r.hex.toUpperCase() ? "var(--pitch)" : "var(--ground)",
@@ -325,50 +432,6 @@ export function ColorVerificationModal({
                 ))}
               </div>
             </div>
-
-            {/* Otros equipos del mismo club para comparar amistosos o prácticas internas */}
-            {otrosEquipos.filter((e) => e.id !== equipo.id).length > 0 && (
-              <div style={{ marginTop: 12 }}>
-                <span style={{ fontSize: 11, fontWeight: 600, color: "var(--text-3)", display: "block", marginBottom: 6 }}>
-                  Comparar con otro equipo del club (entrenamientos o amistosos internos):
-                </span>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                  {otrosEquipos
-                    .filter((e) => e.id !== equipo.id)
-                    .map((otro) => (
-                      <button
-                        key={otro.id}
-                        type="button"
-                        onClick={() => setColorRival(otro.color_local)}
-                        style={{
-                          all: "unset",
-                          cursor: "pointer",
-                          padding: "4px 8px",
-                          borderRadius: 4,
-                          fontSize: 11.5,
-                          background: "var(--ground)",
-                          color: "var(--text-2)",
-                          border: "1px solid var(--line)",
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 6,
-                        }}
-                      >
-                        <span
-                          style={{
-                            width: 10,
-                            height: 10,
-                            borderRadius: "50%",
-                            backgroundColor: otro.color_local,
-                            border: "1px solid rgba(0,0,0,0.2)",
-                          }}
-                        />
-                        {otro.nombre} ({otro.color_local})
-                      </button>
-                    ))}
-                </div>
-              </div>
-            )}
           </div>
         </div>
 
@@ -387,16 +450,15 @@ export function ColorVerificationModal({
             style={{
               all: "unset",
               cursor: "pointer",
-              padding: "7px 16px",
+              padding: "7px 18px",
               fontSize: 12.5,
-              fontWeight: 600,
-              color: "var(--text)",
-              background: "var(--ground)",
+              fontWeight: 700,
+              color: "#fff",
+              background: "var(--pitch)",
               borderRadius: 6,
-              border: "1px solid var(--line)",
             }}
           >
-            Cerrar
+            Aceptar y Cerrar
           </button>
         </div>
       </div>

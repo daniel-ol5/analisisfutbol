@@ -4,10 +4,12 @@ Contrato congelado en el Sprint 1. Web y Movil generan sus mocks de aca.
 Cualquier cambio posterior se acuerda con las dos parejas antes de mergear.
 """
 
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from enum import StrEnum
+from typing import NoReturn
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic_core import PydanticCustomError
 
 
 class Posicion(StrEnum):
@@ -66,6 +68,7 @@ class EquipoEditar(BaseModel):
     color_local: str | None = None
     color_visitante: str | None = None
     color_arquero: str | None = None
+    activo: bool | None = None
 
 
 class Equipo(EquipoBase):
@@ -110,6 +113,7 @@ class JugadorEditar(BaseModel):
     altura_cm: int | None = None
     peso_kg: int | None = None
     fecha_nacimiento: date | None = None
+    activo: bool | None = None
 
 
 class Jugador(JugadorBase):
@@ -136,10 +140,30 @@ class ResultadoImportacion(BaseModel):
 # ---------- CU-13 Competiciones ----------
 
 class CompeticionCrear(BaseModel):
-    nombre: str = Field(max_length=120, examples=["Torneo Apertura"])
-    temporada: str = Field(max_length=20, examples=["2026"])
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    nombre: str = Field(min_length=1, max_length=120, examples=["Torneo Apertura"])
+    temporada: str = Field(min_length=1, max_length=20, examples=["2026"])
     fecha_inicio: date | None = None
     fecha_fin: date | None = None
+
+    @model_validator(mode="after")
+    def _validar_rango_fechas(self) -> "CompeticionCrear":
+        if (self.fecha_inicio is None) != (self.fecha_fin is None):
+            raise PydanticCustomError(
+                "rango_fechas_incompleto",
+                "La fecha de inicio y la fecha de finalizacion deben enviarse juntas",
+            )
+        if (
+            self.fecha_inicio is not None
+            and self.fecha_fin is not None
+            and self.fecha_fin < self.fecha_inicio
+        ):
+            raise PydanticCustomError(
+                "rango_fechas_invalido",
+                "La fecha de finalizacion no puede ser anterior a la fecha de inicio",
+            )
+        return self
 
 
 class Competicion(CompeticionCrear):
@@ -151,20 +175,47 @@ class Competicion(CompeticionCrear):
 # ---------- CU-14, CU-15, CU-16 Partidos ----------
 
 class PartidoCrear(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
     equipo_id: int
-    rival: str = Field(max_length=120, examples=["Club Atletico Rival"])
+    rival: str = Field(
+        min_length=1,
+        max_length=120,
+        examples=["Club Atletico Rival"],
+    )
     es_local: bool = True
     fecha_hora: datetime
-    sede: str = Field(default="", max_length=160, examples=["Cancha municipal"])
+    sede: str = Field(min_length=1, max_length=160, examples=["Cancha municipal"])
     competicion_id: int | None = None
 
 
 class PartidoEditar(BaseModel):
-    rival: str | None = None
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    rival: str | None = Field(default=None, min_length=1, max_length=120)
     es_local: bool | None = None
     fecha_hora: datetime | None = None
-    sede: str | None = None
+    sede: str | None = Field(default=None, min_length=1, max_length=160)
     competicion_id: int | None = None
+
+    @model_validator(mode="after")
+    def _al_menos_un_cambio(self) -> "PartidoEditar":
+        if not self.model_fields_set:
+            raise PydanticCustomError(
+                "partido_sin_cambios",
+                "Debe enviar al menos un campo para reprogramar el partido",
+            )
+        campos_nulos = [
+            campo
+            for campo in ("rival", "es_local", "fecha_hora", "sede")
+            if campo in self.model_fields_set and getattr(self, campo) is None
+        ]
+        if campos_nulos:
+            raise PydanticCustomError(
+                "partido_campo_nulo",
+                f"Estos campos no pueden ser null: {', '.join(campos_nulos)}",
+            )
+        return self
 
 
 class Partido(BaseModel):
@@ -185,30 +236,92 @@ class Partido(BaseModel):
     parte: int = Field(default=0, ge=0, le=2)
     minuto_actual: int = 0
 
+    @field_validator("fecha_hora", mode="after")
+    @classmethod
+    def _serializar_fecha_en_utc(cls, valor: datetime) -> datetime:
+        if valor.tzinfo is None:
+            return valor.replace(tzinfo=UTC)
+        return valor.astimezone(UTC)
+
 
 class Cancelacion(BaseModel):
-    motivo: str = Field(max_length=200, examples=["Suspendido por lluvia"])
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    motivo: str = Field(
+        min_length=1,
+        max_length=200,
+        examples=["Suspendido por lluvia"],
+    )
 
 
 # ---------- CU-17 Alineacion ----------
 
+TITULARES = 11
+
+
 class JugadorAlineado(BaseModel):
+    """Coordenadas relativas, mismos ejes que el tracking (x largo, y ancho):
+    se pasan a metros con `pos_x / 100 * largo_m` de la calibración.
+    """
+
     jugador_id: int
     es_titular: bool = True
     es_capitan: bool = False
-    pos_x: float = Field(ge=0, le=100, description="Coordenada relativa en el plano, 0 a 100")
-    pos_y: float = Field(ge=0, le=100)
-    minuto_entra: int | None = None
-    minuto_sale: int | None = None
+    pos_x: float = Field(
+        ge=0, le=100,
+        description="Porcentaje del largo: 0 = arco propio, 100 = arco rival")
+    pos_y: float = Field(
+        ge=0, le=100,
+        description="Porcentaje del ancho: 0 = banda izquierda, 100 = banda derecha "
+                    "(mirando hacia el arco rival)")
+    minuto_entra: int | None = Field(default=None, ge=0, le=130)
+    minuto_sale: int | None = Field(default=None, ge=0, le=130)
 
 
 class AlineacionGuardar(BaseModel):
     formacion: Formacion = Formacion.F_433
     jugadores: list[JugadorAlineado] = Field(
-        description="Maximo 11 con es_titular=true")
+        description="Titulares y suplentes. Exactamente 11 con es_titular=true, uno "
+                    "solo de ellos arquero (posicion ARQ) y uno solo capitan.")
+
+    # HU-14 · Criterio 3. La regla del arquero necesita la posición registrada de
+    # cada jugador, así que se valida en el servicio.
+    @model_validator(mode="after")
+    def _reglas_de_la_alineacion(self) -> "AlineacionGuardar":
+        ids = [j.jugador_id for j in self.jugadores]
+        if len(ids) != len(set(ids)):
+            _rechazar("Un jugador aparece más de una vez en la alineación")
+
+        titulares = [j for j in self.jugadores if j.es_titular]
+        if len(titulares) != TITULARES:
+            _rechazar(f"Tiene que haber exactamente {TITULARES} titulares "
+                      f"(hay {len(titulares)})")
+
+        capitanes = [j for j in self.jugadores if j.es_capitan]
+        if len(capitanes) != 1:
+            _rechazar(f"Tiene que haber un solo capitán (hay {len(capitanes)})")
+        if not capitanes[0].es_titular:
+            _rechazar("El capitán tiene que ser titular")
+        return self
 
 
-class Alineacion(AlineacionGuardar):
-    model_config = ConfigDict(from_attributes=True)
+def _rechazar(mensaje: str) -> NoReturn:
+    # Sin el prefijo «Value error, » que agrega ValueError: la web muestra el texto tal cual.
+    raise PydanticCustomError("alineacion_invalida", mensaje)
+
+
+class JugadorAlineadoOut(JugadorAlineado):
+    """Con los datos del jugador, para dibujar la cancha sin pedir el plantel."""
+
+    nombre: str
+    apellido: str
+    dorsal: int
+    posicion: Posicion
+
+
+class Alineacion(BaseModel):
     id: int
     partido_id: int
+    formacion: Formacion
+    jugadores: list[JugadorAlineadoOut] = Field(
+        description="Primero los titulares y después los suplentes, cada grupo por dorsal")

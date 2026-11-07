@@ -12,8 +12,11 @@ import type {
   CambioPassword,
   Credenciales,
   NuevoUsuario,
+  Perfil,
   RegistroClub,
+  RestablecerPassword,
   Sesion,
+  SolicitudRecuperacion,
   Usuario,
 } from "./types";
 
@@ -34,7 +37,21 @@ export async function login(credenciales: Credenciales): Promise<Sesion> {
   return data;
 }
 
-/** CU-03 · Cerrar sesión en el servidor (hoy no invalida el refresh token). */
+/**
+ * CU-06 · Pedir el enlace de recuperación. El servidor responde lo mismo exista
+ * o no la cuenta, así que la UI tampoco distingue.
+ */
+export async function pedirRecuperacion(datos: SolicitudRecuperacion): Promise<void> {
+  await api.post("/seguridad/password/olvido", datos);
+}
+
+/** CU-06 · Restablecer con el token del enlace. 400 si es inválido, usado o vencido. */
+export async function restablecerPassword(datos: RestablecerPassword): Promise<Sesion> {
+  const { data } = await api.post<Sesion>("/seguridad/password/restablecer", datos);
+  return data;
+}
+
+/** CU-03 · Cerrar sesión en el servidor. */
 export async function logout(): Promise<void> {
   await api.post("/seguridad/logout");
 }
@@ -45,46 +62,48 @@ export async function listarUsuarios(): Promise<Usuario[]> {
   return data;
 }
 
+/** CU-04 · Consultar el detalle de un usuario del club. */
+export async function obtenerUsuario(id: number): Promise<Usuario> {
+  const { data } = await api.get<Usuario>(`/seguridad/usuarios/${id}`);
+  return data;
+}
+
 /** CU-04 · Crear un usuario del club. */
 export async function crearUsuario(datos: NuevoUsuario): Promise<Usuario> {
   const { data } = await api.post<Usuario>("/seguridad/usuarios", datos);
   return data;
 }
 
-/** CU-05 · Datos del usuario autenticado. */
-export async function obtenerPerfil(): Promise<Usuario> {
-  const { data } = await api.get<Usuario>("/seguridad/yo");
-  return data;
-}
-
-/**
- * CU-05 · Editar nombre y apellido propios.
- *
- * PROPUESTO, NO ESTÁ EN EL CONTRATO: PATCH /seguridad/yo. Ver
- * HABILITAR_EDICION_PERFIL en config.ts.
- */
-export async function editarPerfil(cambios: ActualizarPerfil): Promise<Usuario> {
-  const { data } = await api.patch<Usuario>("/seguridad/yo", cambios);
-  return data;
-}
-
-/**
- * CU-05 · Cambiar la contraseña propia (cierra las demás sesiones).
- *
- * PROPUESTO, NO ESTÁ EN EL CONTRATO: POST /seguridad/yo/password. Ver
- * HABILITAR_CAMBIO_PASSWORD en config.ts.
- */
-export async function cambiarPassword(datos: CambioPassword): Promise<void> {
-  await api.post("/seguridad/yo/password", datos);
-}
-
-/**
- * CU-04 · Desactivar, reactivar o cambiar el rol de un usuario.
- *
- * PROPUESTO, NO ESTÁ EN EL CONTRATO: PATCH /seguridad/usuarios/{id}. Ver
- * HABILITAR_EDICION_USUARIOS en config.ts.
- */
+/** CU-04 · Editar datos, rol, contraseña o estado de un usuario del club. */
 export async function actualizarUsuario(id: number, cambios: ActualizarUsuario): Promise<Usuario> {
   const { data } = await api.patch<Usuario>(`/seguridad/usuarios/${id}`, cambios);
+  return data;
+}
+
+/** CU-04 · Dar de baja (baja lógica) a un usuario del club. */
+export async function eliminarUsuario(id: number): Promise<void> {
+  await api.delete(`/seguridad/usuarios/${id}`);
+}
+
+/** CU-05 · Datos del usuario autenticado, con el nombre de su club. */
+export async function obtenerPerfil(): Promise<Perfil> {
+  const { data } = await api.get<Perfil>("/seguridad/yo");
+  return data;
+}
+
+/** CU-05 · Editar nombre y apellido propios. */
+export async function editarPerfil(cambios: ActualizarPerfil): Promise<Perfil> {
+  const { data } = await api.patch<Perfil>("/seguridad/yo", cambios);
+  return data;
+}
+
+/**
+ * CU-05 · Cambiar la contraseña propia. 403 si la actual no coincide.
+ *
+ * El servidor cierra TODAS las sesiones, también esta, y devuelve una nueva
+ * que hay que guardar para seguir conectado (ver useCambiarPassword).
+ */
+export async function cambiarPassword(datos: CambioPassword): Promise<Sesion> {
+  const { data } = await api.post<Sesion>("/seguridad/yo/password", datos);
   return data;
 }

@@ -3,8 +3,27 @@
  *
  * Endpoints bajo /api/deportivo.
  */
+import { isAxiosError } from "axios";
+
 import { api } from "@/shared/api/client";
-import type { AvisoColores, Equipo, EquipoCrear, EquipoEditar } from "./types";
+import { estadoHttp } from "@/shared/lib/errors";
+import type {
+  Alineacion,
+  AlineacionGuardar,
+  AvisoColores,
+  Competicion,
+  Equipo,
+  EquipoCrear,
+  EquipoEditar,
+  FiltrosPartidos,
+  Jugador,
+  JugadorCrear,
+  JugadorEditar,
+  OrdenJugadores,
+  Partido,
+  PartidoCrear,
+  ResultadoImportacion,
+} from "./types";
 
 export async function ping() {
   const { data } = await api.get("/deportivo/ping");
@@ -32,10 +51,7 @@ export async function crearEquipo(datos: EquipoCrear): Promise<Equipo> {
 }
 
 /** CU-09: Editar datos o indumentaria de un equipo */
-export async function editarEquipo(
-  id: number,
-  datos: EquipoEditar
-): Promise<Equipo> {
+export async function editarEquipo(id: number, datos: EquipoEditar): Promise<Equipo> {
   const { data } = await api.patch<Equipo>(`/deportivo/equipos/${id}`, datos);
   return data;
 }
@@ -48,13 +64,148 @@ export async function desactivarEquipo(id: number): Promise<void> {
 /** CU-10: Verificar contraste de colores contra un rival en espacio HSV */
 export async function verificarColoresEquipo(
   equipoId: number,
-  colorRival: string
+  colorRival: string,
 ): Promise<AvisoColores> {
-  const { data } = await api.get<AvisoColores>(
-    `/deportivo/equipos/${equipoId}/colores/verificar`,
-    {
-      params: { color_rival: colorRival },
-    }
+  const { data } = await api.get<AvisoColores>(`/deportivo/equipos/${equipoId}/colores/verificar`, {
+    params: { color_rival: colorRival },
+  });
+  return data;
+}
+
+/** CU-11: Listar el plantel de un equipo */
+export async function listarJugadores(
+  equipoId: number,
+  activos = true,
+  orden: OrdenJugadores = "dorsal",
+): Promise<Jugador[]> {
+  const { data } = await api.get<Jugador[]>(`/deportivo/equipos/${equipoId}/jugadores`, {
+    params: { activos, orden },
+  });
+  return data;
+}
+
+/** CU-11: Crear jugador */
+export async function crearJugador(datos: JugadorCrear): Promise<Jugador> {
+  const { data } = await api.post<Jugador>("/deportivo/jugadores", datos);
+  return data;
+}
+
+/** CU-11: Ver ficha de jugador */
+export async function verJugador(id: number): Promise<Jugador> {
+  const { data } = await api.get<Jugador>(`/deportivo/jugadores/${id}`);
+  return data;
+}
+
+/** CU-11: Editar jugador */
+export async function editarJugador(id: number, datos: JugadorEditar): Promise<Jugador> {
+  const { data } = await api.patch<Jugador>(`/deportivo/jugadores/${id}`, datos);
+  return data;
+}
+
+/** CU-11: Dar de baja un jugador (conserva su historial) */
+export async function bajaJugador(id: number): Promise<void> {
+  await api.delete(`/deportivo/jugadores/${id}`);
+}
+
+/**
+ * CU-12: Importar plantel desde CSV.
+ *
+ * Con `confirmar=false` devuelve la vista previa sin guardar nada; con
+ * `confirmar=true` persiste las filas válidas. El archivo se reenvía en
+ * ambas llamadas porque el backend no conserva el upload entre peticiones.
+ */
+export async function importarPlantel(
+  equipoId: number,
+  archivo: File,
+  confirmar = false,
+): Promise<ResultadoImportacion> {
+  const formData = new FormData();
+  formData.append("archivo", archivo);
+  const { data } = await api.post<ResultadoImportacion>(
+    `/deportivo/equipos/${equipoId}/jugadores/importar`,
+    formData,
+    { params: { confirmar }, headers: { "Content-Type": undefined } },
   );
   return data;
+}
+
+/** CU-12: Descargar la plantilla CSV de ejemplo para importar un plantel. */
+export async function descargarPlantillaJugadores(equipoId: number): Promise<Blob> {
+  const { data } = await api.get(`/deportivo/equipos/${equipoId}/jugadores/plantilla`, {
+    responseType: "blob",
+  });
+  return data;
+}
+
+/** CU-12: Exportar a CSV el plantel actual de un equipo. */
+export async function exportarJugadoresCsv(
+  equipoId: number,
+  activos = true,
+  orden: OrdenJugadores = "dorsal",
+): Promise<Blob> {
+  const { data } = await api.get(`/deportivo/equipos/${equipoId}/jugadores/exportar`, {
+    params: { activos, orden },
+    responseType: "blob",
+  });
+  return data;
+}
+
+/** CU-13: competiciones activas disponibles para programar partidos. */
+export async function listarCompeticiones(): Promise<Competicion[]> {
+  const { data } = await api.get<Competicion[]>("/deportivo/competiciones");
+  return data;
+}
+
+/** CU-14: programa un partido real en estado inicial PROGRAMADO. */
+export async function programarPartido(datos: PartidoCrear): Promise<Partido> {
+  const { data } = await api.post<Partido>("/deportivo/partidos", datos);
+  return data;
+}
+
+/** CU-15: obtiene la agenda cronológica aplicando filtros en el backend. */
+export async function listarPartidos(filtros: FiltrosPartidos = {}): Promise<Partido[]> {
+  const { data } = await api.get<Partido[]>("/deportivo/partidos", {
+    params: filtros,
+  });
+  return data;
+}
+
+/** CU-17: alineación del partido, o null si todavía no tiene (404). */
+export async function obtenerAlineacion(partidoId: number): Promise<Alineacion | null> {
+  try {
+    const { data } = await api.get<Alineacion>(`/deportivo/partidos/${partidoId}/alineacion`);
+    return data;
+  } catch (error) {
+    if (estadoHttp(error) === 404 && esSinAlineacion(error)) return null;
+    throw error;
+  }
+}
+
+/**
+ * CU-17: guarda la alineación completa (reemplaza la anterior).
+ *
+ * 422 si no hay 11 titulares, un solo arquero titular y un solo capitán
+ * titular, o si un jugador no es del plantel activo. 409 si el partido ya no
+ * se puede editar o si otra persona guardó al mismo tiempo.
+ */
+export async function guardarAlineacion(
+  partidoId: number,
+  datos: AlineacionGuardar,
+): Promise<Alineacion> {
+  const { data } = await api.put<Alineacion>(`/deportivo/partidos/${partidoId}/alineacion`, datos);
+  return data;
+}
+
+/**
+ * El 404 de "partido sin alineación" se distingue del de "partido inexistente
+ * o de otro club" por el texto del backend: el primero abre una alineación
+ * vacía, el segundo es un error.
+ */
+function esSinAlineacion(error: unknown): boolean {
+  return (
+    isAxiosError(error) &&
+    /todavía no tiene alineación/i.test(
+      String((error.response?.data as { detail?: unknown } | undefined)?.detail ?? ""),
+    )
+  );
 }

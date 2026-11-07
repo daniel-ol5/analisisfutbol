@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.security import decodificar
-from app.seguridad.models import TokenRevocado
+from app.seguridad.models import TokenRevocado, Usuario
 
 esquema = HTTPBearer(auto_error=False)
 
@@ -42,6 +42,16 @@ async def usuario_actual(
         q = await db.execute(select(TokenRevocado).where(TokenRevocado.jti == jti))
         if q.scalar_one_or_none() is not None:
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Token revocado")
+
+    # CU-05: un cambio de contraseña sube la versión y cierra las sesiones viejas.
+    q_ver = await db.execute(
+        select(Usuario.version_sesion).where(Usuario.id == int(payload["sub"]))
+    )
+    version = q_ver.scalar_one_or_none()
+    if version is not None and payload.get("ver", 0) != version:
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED, "La sesión fue cerrada; inicia sesión de nuevo"
+        )
 
     return UsuarioActual(
         id=int(payload["sub"]),

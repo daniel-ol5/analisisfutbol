@@ -29,12 +29,131 @@ export interface EquipoEditar {
   color_local?: string;
   color_visitante?: string;
   color_arquero?: string;
+  activo?: boolean;
 }
 
 export interface AvisoColores {
   hay_riesgo: boolean;
   distancia_hsv: number;
   mensaje: string;
+}
+
+export type Posicion = "ARQ" | "DEF" | "MED" | "DEL";
+export type PieHabil = "IZQ" | "DER" | "AMBOS";
+
+export const ETIQUETAS_POSICION: Record<Posicion, string> = {
+  ARQ: "Arquero",
+  DEF: "Defensor",
+  MED: "Mediocampista",
+  DEL: "Delantero",
+};
+
+export const ETIQUETAS_PIE: Record<PieHabil, string> = {
+  IZQ: "Izquierdo",
+  DER: "Derecho",
+  AMBOS: "Ambos",
+};
+
+export interface Jugador {
+  id: number;
+  equipo_id: number;
+  nombre: string;
+  apellido: string;
+  dorsal: number;
+  posicion: Posicion;
+  pie_habil: PieHabil;
+  altura_cm: number;
+  peso_kg: number | null;
+  fecha_nacimiento: string | null;
+  activo: boolean;
+}
+
+export interface JugadorCrear {
+  equipo_id: number;
+  nombre: string;
+  apellido: string;
+  dorsal: number;
+  posicion?: Posicion;
+  pie_habil?: PieHabil;
+  altura_cm: number;
+  peso_kg?: number | null;
+  fecha_nacimiento?: string | null;
+}
+
+export interface JugadorEditar {
+  nombre?: string;
+  apellido?: string;
+  dorsal?: number;
+  posicion?: Posicion;
+  pie_habil?: PieHabil;
+  altura_cm?: number;
+  peso_kg?: number | null;
+  fecha_nacimiento?: string | null;
+  activo?: boolean;
+}
+
+export type OrdenJugadores = "dorsal" | "posicion" | "apellido";
+
+/** CU-12: resultado de validar o importar una fila del CSV de plantel. */
+export interface FilaImportacion {
+  fila: number;
+  datos: Record<string, string>;
+  error: string | null;
+}
+
+/** CU-12: resumen de la vista previa o la importación confirmada del plantel. */
+export interface ResultadoImportacion {
+  total: number;
+  importadas: number;
+  con_error: number;
+  detalle: FilaImportacion[];
+}
+
+// ---------- CU-13 a CU-16 · Competiciones y partidos ----------
+
+export interface Competicion {
+  id: number;
+  club_id: number;
+  nombre: string;
+  temporada: string;
+  fecha_inicio: string | null;
+  fecha_fin: string | null;
+}
+
+export type EstadoPartido =
+  "PROGRAMADO" | "EN_CURSO" | "FINALIZADO" | "PROCESANDO" | "ANALIZADO" | "CANCELADO";
+
+export interface Partido {
+  id: number;
+  equipo_id: number;
+  competicion_id: number | null;
+  rival: string;
+  es_local: boolean;
+  fecha_hora: string;
+  sede: string;
+  estado: EstadoPartido;
+  ataca_hacia: "IZQ" | "DER" | null;
+  goles_favor: number;
+  goles_contra: number;
+  parte: number;
+  minuto_actual: number;
+}
+
+export interface PartidoCrear {
+  equipo_id: number;
+  rival: string;
+  es_local: boolean;
+  fecha_hora: string;
+  sede: string;
+  competicion_id: number | null;
+}
+
+export interface FiltrosPartidos {
+  equipo_id?: number;
+  competicion_id?: number;
+  estado?: EstadoPartido;
+  desde?: string;
+  hasta?: string;
 }
 
 /**
@@ -95,9 +214,50 @@ export function calcularDistanciaHsv(hex1: string, hex2: string): number | null 
   const y2 = s2 * Math.sin(rad2);
   const z2 = v2;
 
-  const dist = Math.sqrt(
-    Math.pow(x1 - x2, 2) + Math.pow(y1 - y2, 2) + Math.pow(z1 - z2, 2)
-  );
+  const dist = Math.sqrt(Math.pow(x1 - x2, 2) + Math.pow(y1 - y2, 2) + Math.pow(z1 - z2, 2));
 
   return Math.round(dist * 100) / 100;
+}
+
+// ---------- CU-17 · Alineación y formación (T-051) ----------
+
+export type Formacion = "4-3-3" | "4-4-2" | "4-2-3-1" | "3-5-2";
+
+export const FORMACIONES: readonly Formacion[] = ["4-3-3", "4-4-2", "4-2-3-1", "3-5-2"];
+
+/**
+ * Coordenadas relativas, mismos ejes que el tracking: `pos_x` es el porcentaje
+ * del largo (0 = arco propio, 100 = arco rival) y `pos_y` el del ancho
+ * (0 = banda izquierda, 100 = banda derecha, mirando al arco rival).
+ */
+export interface JugadorAlineado {
+  jugador_id: number;
+  es_titular: boolean;
+  es_capitan: boolean;
+  pos_x: number;
+  pos_y: number;
+  minuto_entra?: number | null;
+  minuto_sale?: number | null;
+}
+
+/** Cuerpo de `PUT /deportivo/partidos/{id}/alineacion`. */
+export interface AlineacionGuardar {
+  formacion: Formacion;
+  jugadores: JugadorAlineado[];
+}
+
+export interface JugadorAlineadoOut extends JugadorAlineado {
+  nombre: string;
+  apellido: string;
+  dorsal: number;
+  posicion: Posicion;
+}
+
+/** Respuesta de `GET` y `PUT /deportivo/partidos/{id}/alineacion`. */
+export interface Alineacion {
+  id: number;
+  partido_id: number;
+  formacion: Formacion;
+  /** Primero los titulares y después los suplentes, cada grupo por dorsal. */
+  jugadores: JugadorAlineadoOut[];
 }

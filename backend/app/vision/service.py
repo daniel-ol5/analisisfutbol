@@ -5,6 +5,7 @@ lanza excepciones de dominio. Así se prueba sin levantar el servidor.
 """
 
 from fastapi import HTTPException, status
+from sqlalchemy import update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,8 +18,8 @@ from app.vision.homografia import (
     calcular_homografia,
     es_valida,
 )
-from app.vision.models import Calibracion
-from app.vision.schemas import CalibracionGuardar, ErrorCalibracion
+from app.vision.models import Calibracion, ModeloML
+from app.vision.schemas import CalibracionGuardar, ErrorCalibracion, ModeloCrear
 
 
 async def _buscar_calibracion(
@@ -115,3 +116,58 @@ async def guardar_calibracion(
         ) from None
     await db.refresh(calibracion)
     return calibracion, creada
+
+
+# ---------------- CU-29 · Modelos ----------------
+
+async def listar_modelos(db: AsyncSession, usuario: UsuarioActual) -> list[ModeloML]:
+    """CU-29: versiones del club, la más nueva primero (la activa puede no serlo)."""
+    stmt = del_club(ModeloML, usuario).order_by(ModeloML.entrenado_en.desc())
+    return list((await db.execute(stmt)).scalars().all())
+
+
+async def registrar_modelo(
+    db: AsyncSession, usuario: UsuarioActual, datos: ModeloCrear
+) -> ModeloML:
+    """CU-29 (T-059): registra una version ya entrenada, nunca activa por defecto.
+
+    Activarla es un paso aparte (`activar_modelo`): asi una version recien
+    subida se puede revisar antes de que el worker la use en el siguiente
+    procesamiento.
+    """
+    modelo = ModeloML(club_id=usuario.club_id, **datos.model_dump())
+    db.add(modelo)
+    try:
+        await db.commit()
+    except IntegrityError:
+        # Mismo club + nombre + version ya registrado (uq_modelo_club_nombre_version).
+        await db.rollback()
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"Ya existe un modelo '{datos.nombre}' version '{datos.version}' en este club",
+        ) from None
+    await db.refresh(modelo)
+    return modelo
+
+
+async def activar_modelo(db: AsyncSession, usuario: UsuarioActual, modelo_id: int) -> ModeloML:
+    """CU-29 (T-059): activa una version; a lo sumo una activa por club.
+
+    Permite "volver atras" sin reentrenar: activar una version anterior
+    alcanza, el worker usa la que este marcada como `activo` en el siguiente
+    procesamiento (T-063 en el frontend). 404 si no existe o es de otro club.
+    """
+    modelo = verificar_pertenencia(
+        (await db.execute(del_club(ModeloML, usuario).where(ModeloML.id == modelo_id)))
+        .scalar_one_or_none(),
+        usuario,
+    )
+    # Primero se desactivan todas las del club (incluida esta, no importa) y
+    # despues se activa solo esta: nunca hay un instante con dos activas.
+    await db.execute(
+        update(ModeloML).where(ModeloML.club_id == usuario.club_id).values(activo=False)
+    )
+    modelo.activo = True
+    await db.commit()
+    await db.refresh(modelo)
+    return modelo

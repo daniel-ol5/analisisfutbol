@@ -6,10 +6,16 @@ import {
   cambiarPassword,
   crearUsuario,
   editarPerfil,
+  eliminarUsuario,
   listarUsuarios,
   obtenerPerfil,
+  obtenerUsuario,
 } from "./api";
-import { actualizarUsuario as guardarUsuarioEnSesion } from "./session";
+import {
+  actualizarUsuario as guardarUsuarioEnSesion,
+  iniciarSesion,
+  obtenerSesion,
+} from "./session";
 import type { ActualizarUsuario } from "./types";
 
 const CLAVE_USUARIOS = ["seguridad", "usuarios"] as const;
@@ -17,6 +23,14 @@ const CLAVE_PERFIL = ["seguridad", "yo"] as const;
 
 export function useUsuarios() {
   return useQuery({ queryKey: CLAVE_USUARIOS, queryFn: listarUsuarios });
+}
+
+export function useUsuario(id: number | null) {
+  return useQuery({
+    queryKey: [...CLAVE_USUARIOS, id],
+    queryFn: () => obtenerUsuario(id!),
+    enabled: id !== null,
+  });
 }
 
 export function useCrearUsuario() {
@@ -32,6 +46,21 @@ export function useActualizarUsuario() {
   return useMutation({
     mutationFn: ({ id, cambios }: { id: number; cambios: ActualizarUsuario }) =>
       actualizarUsuario(id, cambios),
+    onSuccess: (usuarioActualizado) => {
+      const sesionActual = obtenerSesion();
+      if (sesionActual && sesionActual.usuario.id === usuarioActualizado.id) {
+        guardarUsuarioEnSesion(usuarioActualizado);
+        cliente.invalidateQueries({ queryKey: CLAVE_PERFIL });
+      }
+      return cliente.invalidateQueries({ queryKey: CLAVE_USUARIOS });
+    },
+  });
+}
+
+export function useEliminarUsuario() {
+  const cliente = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => eliminarUsuario(id),
     onSuccess: () => cliente.invalidateQueries({ queryKey: CLAVE_USUARIOS }),
   });
 }
@@ -53,6 +82,7 @@ export function useEditarPerfil() {
   });
 }
 
+/** El token anterior ya no sirve: se guarda la sesión nueva para no caer al login. */
 export function useCambiarPassword() {
-  return useMutation({ mutationFn: cambiarPassword });
+  return useMutation({ mutationFn: cambiarPassword, onSuccess: iniciarSesion });
 }

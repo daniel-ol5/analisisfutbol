@@ -24,6 +24,7 @@ agregaría segundos de latencia.
 | `calibracion/` | Homografía y proyección de píxeles a metros | CU-26 |
 | `emisor/` | Cliente WebSocket hacia el backend | CU-32 |
 | `evaluacion/` | mAP, IDF1 y error de reproyección sobre el clip de referencia | Pb-17 |
+| `entrenamiento/` | Andamiaje para afinar el modelo propio de 3 clases (jugador/árbitro/balón) | CU-29 |
 
 ## Requisitos
 
@@ -70,3 +71,52 @@ modelo.track(source="rtsp://192.168.1.50", ...)  # el día de la demostración
 
 Un archivo grabado es reproducible y se depura paso a paso. Desarrollar contra
 la cámara en vivo hace que cada prueba dependa del clima y de conseguir cancha.
+
+## Verificación de campo pendiente (T-055 a T-058)
+
+El código de `evaluacion/` (Pb-17) ya calcula mAP@50 e IDF1, con pruebas
+unitarias que validan la integración con `pycocotools`/`motmetrics` sobre
+datos sintéticos. Pero los criterios de aceptación de T-055 a T-058 son
+empíricos: dependen de un clip real (cancha, iluminación, oclusiones) que
+todavía no existe en el repositorio. No se resuelven escribiendo más código,
+sino grabando/anotando ese clip y corriendo el pipeline una vez con GPU.
+
+| Tarea | Criterio | Qué falta |
+|---|---|---|
+| T-055 (CU-24) | mAP@50 de jugador >= 0,85 e IDF1 >= 0,70 sobre el clip de referencia | Grabar y anotar a mano (cajas + `tid`) el clip de referencia, y correr `evaluacion.calcular_map50` / `calcular_idf1` sobre la salida real del modelo |
+| T-056 (CU-24) | Recall aceptable con jugadores en oclusión parcial | Clip real con oclusiones; no hay forma sintética creíble de generarlas |
+| T-057 (CU-25) | Precisión de color de camiseta con iluminación real de cancha (sol/sombra/reflectores) | Clip real: el ruido gaussiano sintético de `tests/test_color.py` no reproduce sombras duras ni reflejos |
+| T-058 (CU-26) | Verificación de la homografía contra marcas físicas de la cancha | Calibrar la cámara real y medir contra puntos físicos conocidos, no contra la cámara sintética de `tests/test_homografia.py` |
+
+Se decidió documentar este gap y avanzar con el resto del backlog en vez de
+bloquear el desarrollo esperando el día de grabación.
+
+## Modelo propio de 3 clases (CU-29) — andamiaje listo, entrenamiento pendiente
+
+`deteccion/modelo.py::CLASES_COCO` (el modelo preentrenado que usa hoy
+`seguimiento.tracker.seguir`) solo distingue "persona" y "balón": un árbitro
+se detecta como jugador, y HU-21 lo separa después por color de camiseta. El
+criterio de HU-20 de que YOLO detecte árbitro como clase propia requiere un
+modelo afinado con datos propios (CU-29), que no se resuelve escribiendo más
+código, sino anotando un clip real — igual que T-055 a T-058 arriba.
+
+Lo que sí está listo en `entrenamiento/` para el día que ese clip exista:
+
+- `dataset.yaml`: configuración de ultralytics con las 3 clases
+  (`jugador=0, arbitro=1, balon=2`), en el mismo orden que
+  `deteccion/modelo.py::CLASES_PROPIO` (una prueba en
+  `tests/test_entrenamiento.py` falla si se desincronizan).
+- `entrenar.py`: `entrenar()` afina YOLO11 (`yolo11n.pt`) sobre ese dataset.
+  Import perezoso de `ultralytics`, igual que `deteccion/modelo.py`: se
+  puede importar y probar sin GPU.
+
+Pasos que faltan y que no son de código:
+
+1. Grabar y anotar (cajas + clase) un clip real con formato YOLO en
+   `labels/{train,val}/*.txt`, siguiendo el layout documentado en
+   `entrenamiento/dataset.yaml`.
+2. Correr `python -m entrenamiento.entrenar` en la máquina con GPU.
+3. Subir `weights/best.pt` a un storage con URL https y registrarlo con
+   `POST /vision/modelos` (`backend/app/vision/schemas.py::ModeloCrear`),
+   activarlo, y solo entonces cambiar `ConfigModelo.clases` de
+   `CLASES_COCO` a `CLASES_PROPIO` en el worker.
