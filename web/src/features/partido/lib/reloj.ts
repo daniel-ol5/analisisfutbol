@@ -7,6 +7,30 @@ import type { EstadoEnVivo, EstadoPartidoAgenda, ResumenPartidoControl } from ".
 /** Intervalo de refresco HTTP de `GET /partido/{id}/estado` en la Fase 2A (5 s). */
 export const INTERVALO_REFRESCO_ESTADO_MS = 5_000;
 
+/** Intervalo de sondeo HTTP de respaldo cuando el WebSocket está conectado (15 s). */
+export const INTERVALO_SONDEO_CON_WS_MS = 15_000;
+
+/** Intervalo de sondeo HTTP activo cuando el WebSocket está reconectando o caído (2 s). */
+export const INTERVALO_SONDEO_SIN_WS_MS = 2_000;
+
+/** Intervalo de envío de `{"tipo":"ping"}` en el canal WebSocket `/vivo` (20 s). */
+export const INTERVALO_PING_WS_MS = 20_000;
+
+/** Intervalo mínimo entre actualizaciones de calidad recibidas en mensajes `posiciones` (1 s). */
+export const INTERVALO_MIN_CALIDAD_POSICIONES_MS = 1_000;
+
+/** Espera inicial (1 s) y tope (30 s) para reconexión exponencial del WebSocket. */
+export const BACKOFF_BASE_WS_MS = 1_000;
+export const BACKOFF_TOPE_WS_MS = 30_000;
+
+/** Códigos de cierre del protocolo WebSocket (`backend/app/core/ws.py`). */
+export const WS_CLOSE_NORMAL = 1000;
+export const WS_CLOSE_ANORMAL = 1006;
+export const WS_CLOSE_MENSAJE_INVALIDO = 4400;
+export const WS_CLOSE_NO_AUTENTICADO = 4401;
+export const WS_CLOSE_NO_ENCONTRADO = 4404;
+export const WS_CLOSE_TIEMPO_AGOTADO = 4408;
+
 /** Intervalo de actualización del reloj local con `performance.now()` (250 ms). */
 export const INTERVALO_TICK_RELOJ_MS = 250;
 
@@ -176,4 +200,46 @@ export function esErrorDeCalibracion409(status: number | null, mensaje: string):
   if (status !== 409) return false;
   const normalizado = mensaje.toLowerCase();
   return normalizado.includes("calibraci");
+}
+
+/**
+ * Convierte `env.apiUrl` (`http` -> `ws`, `https` -> `wss`, o ruta relativa
+ * contra `origenNavegador`) y añade `/partido/{id}/vivo`.
+ */
+export function construirUrlWsVivo(
+  apiUrl: string,
+  partidoId: number,
+  origenNavegador?: string,
+): string {
+  const baseLimpia = apiUrl.trim().replace(/\/+$/, "");
+  const sufijo = `/partido/${partidoId}/vivo`;
+
+  if (baseLimpia.startsWith("https://")) {
+    return `wss://${baseLimpia.slice("https://".length)}${sufijo}`;
+  }
+  if (baseLimpia.startsWith("http://")) {
+    return `ws://${baseLimpia.slice("http://".length)}${sufijo}`;
+  }
+  if (baseLimpia.startsWith("wss://") || baseLimpia.startsWith("ws://")) {
+    return `${baseLimpia}${sufijo}`;
+  }
+
+  const origen = (origenNavegador ?? window.location.origin).replace(/\/+$/, "");
+  const origenWs = origen.startsWith("https://")
+    ? `wss://${origen.slice("https://".length)}`
+    : origen.startsWith("http://")
+      ? `ws://${origen.slice("http://".length)}`
+      : origen;
+  const rutaRelativa = baseLimpia.startsWith("/") ? baseLimpia : `/${baseLimpia}`;
+  return `${origenWs}${rutaRelativa}${sufijo}`;
+}
+
+/**
+ * Calcula la espera en milisegundos para el intento `intento` (1-indexado):
+ * 1 s, 2 s, 4 s, 8 s, 16 s y tope de 30 s.
+ */
+export function calcularEsperaReconexionWsMs(intento: number): number {
+  const exponente = Math.max(0, Math.floor(intento) - 1);
+  const espera = BACKOFF_BASE_WS_MS * 2 ** exponente;
+  return Math.min(BACKOFF_TOPE_WS_MS, espera);
 }

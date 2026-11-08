@@ -64,3 +64,6 @@ export interface ResumenPartidoControl {
   goles_favor: number | null;
   goles_contra: number | null;
 }
+
+/** Estados posibles del canal WebSocket `/api/partido/{id}/vivo` (Fase 2B). */
+export type EstadoCanalVivo = "CONECTADO" | "RECONECTANDO" | "SIN_CONEXION" | "SESION_VENCIDA";

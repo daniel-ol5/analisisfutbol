@@ -155,6 +155,37 @@
   border-color: var(--warn);
 }
 
+.par-insignia-canal {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  border: 1px solid var(--line);
+  background: var(--surface-muted);
+  color: var(--text-2);
+}
+
+.par-insignia-canal--conectado {
+  background: var(--ok-bg);
+  color: var(--ok);
+  border-color: var(--pitch-border);
+}
+
+.par-insignia-canal--reconectando {
+  background: var(--warn-bg);
+  color: var(--warn);
+  border-color: var(--warn);
+}
+
+.par-insignia-canal--vencida {
+  background: var(--risk-bg);
+  color: var(--risk);
+  border-color: var(--risk);
+}
+
 .par-cronometro-digitos {
   font-size: clamp(2.4rem, 5vw, 3.6rem);
   font-weight: var(--fw-black);

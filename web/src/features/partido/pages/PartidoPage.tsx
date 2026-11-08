@@ -23,9 +23,11 @@ import {
   obtenerPartidoControl,
   registrarDescuentoPartido,
 } from "../api";
+import { useCanalVivo } from "../hooks/useCanalVivo";
 import { useRelojPartido } from "../hooks/useRelojPartido";
 import {
-  INTERVALO_REFRESCO_ESTADO_MS,
+  INTERVALO_SONDEO_CON_WS_MS,
+  INTERVALO_SONDEO_SIN_WS_MS,
   MAX_DESCUENTO_MIN,
   MIN_DESCUENTO_MIN,
   determinarFaseControl,
@@ -33,7 +35,12 @@ import {
   ordenarPartidosParaSelector,
   rolPuedeOperarPartido,
 } from "../lib/reloj";
-import type { DireccionAtaque, EstadoEnVivo, ResumenPartidoControl } from "../types";
+import type {
+  DireccionAtaque,
+  EstadoCanalVivo,
+  EstadoEnVivo,
+  ResumenPartidoControl,
+} from "../types";
 
 interface ErrorOperacion {
   mensaje: string;
@@ -45,6 +52,19 @@ function describirDireccionAtaque(dir: DireccionAtaque): string {
   return dir === "DER"
     ? "→ Hacia la derecha, visto desde la cámara (tribuna)"
     : "← Hacia la izquierda, visto desde la cámara (tribuna)";
+}
+
+function claseInsigniaCanal(estadoCanal: EstadoCanalVivo): string {
+  switch (estadoCanal) {
+    case "CONECTADO":
+      return "par-insignia-canal par-insignia-canal--conectado";
+    case "RECONECTANDO":
+      return "par-insignia-canal par-insignia-canal--reconectando";
+    case "SESION_VENCIDA":
+      return "par-insignia-canal par-insignia-canal--vencida";
+    case "SIN_CONEXION":
+      return "par-insignia-canal";
+  }
 }
 
 export function PartidoPage() {
@@ -98,20 +118,31 @@ export function PartidoPage() {
     minutos: number;
   } | null>(null);
 
+  // Canal WebSocket `/api/partido/{id}/vivo` (Fase 2B)
+  const canalVivo = useCanalVivo(partidoIdActivo, queryClient);
+
+  // Sondeo HTTP de respaldo: 15 s con WS conectado y 2 s cuando está reconectando o caído
+  const intervaloSondeoMs: number | false =
+    canalVivo.estado === "SESION_VENCIDA"
+      ? false
+      : canalVivo.estado === "CONECTADO"
+        ? INTERVALO_SONDEO_CON_WS_MS
+        : INTERVALO_SONDEO_SIN_WS_MS;
+
   // Consulta del partido individual en deportivo para conocer estado (PROGRAMADO/EN_CURSO/FINALIZADO) y ataca_hacia
   const partidoDetalleQuery = useQuery({
     queryKey: ["partido", "detalle-control", partidoIdActivo],
     queryFn: () => obtenerPartidoControl(partidoIdActivo as number),
     enabled: partidoIdActivo !== null,
-    refetchInterval: INTERVALO_REFRESCO_ESTADO_MS,
+    refetchInterval: intervaloSondeoMs,
   });
 
-  // Consulta de GET /partido/{id}/estado cada 5 s
+  // Consulta de GET /partido/{id}/estado con frecuencia adaptada al estado del WebSocket
   const estadoQuery = useQuery({
     queryKey: ["partido", "estado-vivo", partidoIdActivo],
     queryFn: () => obtenerEstadoPartido(partidoIdActivo as number),
     enabled: partidoIdActivo !== null,
-    refetchInterval: INTERVALO_REFRESCO_ESTADO_MS,
+    refetchInterval: intervaloSondeoMs,
   });
 
   // Refetch inmediato al volver a la pestaña (visibilitychange)
@@ -323,6 +354,20 @@ export function PartidoPage() {
         </div>
       )}
 
+      {canalVivo.aviso && (
+        <div className="par-alerta-error" role="alert">
+          <p className="par-alerta-error-titulo">Aviso del canal en vivo</p>
+          <p className="par-alerta-error-mensaje">{canalVivo.aviso}</p>
+          {canalVivo.estado === "SESION_VENCIDA" && (
+            <div className="par-alerta-acciones">
+              <Link to="/login" className="par-btn par-btn--primario">
+                Iniciar sesión
+              </Link>
+            </div>
+          )}
+        </div>
+      )}
+
       {errorConsultaInicial && (
         <div className="par-alerta-error" role="alert">
           <p className="par-alerta-error-titulo">
@@ -375,11 +420,15 @@ export function PartidoPage() {
             <section className="par-tarjeta" aria-label="Cronómetro del partido">
               <div className="par-cronometro-cabecera">
                 <span className={claseInsigniaFase}>{etiquetaFase}</span>
-                <span className="par-meta-reloj">
-                  Parte: {reloj.parte === 0 ? "—" : `${reloj.parte}.º tiempo`} ·{" "}
-                  {reloj.enCurso ? "Reloj corriendo" : "Reloj congelado"}
+                <span className={claseInsigniaCanal(canalVivo.estado)} role="status">
+                  Canal: {canalVivo.etiqueta}
                 </span>
               </div>
+
+              <p className="par-meta-reloj">
+                Parte: {reloj.parte === 0 ? "—" : `${reloj.parte}.º tiempo`} ·{" "}
+                {reloj.enCurso ? "Reloj corriendo" : "Reloj congelado"}
+              </p>
 
               <div className="par-cronometro-digitos" aria-live="off">
                 {reloj.textoCronometro}

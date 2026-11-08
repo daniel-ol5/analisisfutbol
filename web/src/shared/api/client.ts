@@ -33,6 +33,11 @@ export function registrarAdaptadorAuth(nuevo: AdaptadorAuth): void {
   adaptador = nuevo;
 }
 
+/** Token de acceso vigente en la sesión activa, o null si no hay sesión. */
+export function obtenerTokenAcceso(): string | null {
+  return adaptador?.obtenerToken() ?? null;
+}
+
 /** Rol del usuario en la sesión activa, o null si no hay sesión. */
 export function obtenerRolActual(): string | null {
   return adaptador?.obtenerRol?.() ?? null;
