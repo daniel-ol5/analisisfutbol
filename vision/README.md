@@ -24,6 +24,7 @@ agregaría segundos de latencia.
 | `calibracion/` | Homografía y proyección de píxeles a metros | CU-26 |
 | `emisor/` | Cliente WebSocket hacia el backend | CU-32 |
 | `evaluacion/` | mAP, IDF1 y error de reproyección sobre el clip de referencia | Pb-17 |
+| `procesamiento/` | Worker de video grabado: toma trabajos del backend y corre el pipeline completo | CU-27 |
 | `entrenamiento/` | Andamiaje para afinar el modelo propio de 3 clases (jugador/árbitro/balón) | CU-29 |
 
 ## Requisitos
@@ -71,6 +72,31 @@ modelo.track(source="rtsp://192.168.1.50", ...)  # el día de la demostración
 
 Un archivo grabado es reproducible y se depura paso a paso. Desarrollar contra
 la cámara en vivo hace que cada prueba dependa del clima y de conseguir cancha.
+
+## Procesar video grabado (CU-27, T-061)
+
+El analista sube el video desde la web (CU-28) y lanza el procesamiento: el
+video queda en cola en el backend. Este worker lo toma, lo descarga, corre
+YOLO + ByteTrack, color de equipo y homografía, y devuelve lotes de
+`MensajeWorker`, **el mismo contrato que en vivo**: el backend los guarda por el
+mismo camino que la ingesta, así que un video procesado deja las mismas
+entidades que un partido en vivo.
+
+```bash
+cd vision
+set VISION_PASSWORD=...        # usuario ADMIN o ANALISTA del club
+python -m procesamiento.worker --api http://localhost:8000/api --email analista@club.com
+```
+
+Opciones: `--dispositivo cpu` (sin GPU, mucho más lento), `--clases propio`
+cuando el modelo activo sea el de 3 clases (CU-29), `--una-vez` para procesar
+un solo video y salir. Sin modelo activo en el club usa `yolo11n.pt`.
+
+- **Cancelar** desde la web detiene al worker en su próximo lote (5 s de video).
+- **Worker caído**: si pasan 10 minutos sin lotes, otro worker puede retomar el video.
+- **Sesión**: el token dura 15 minutos; el worker vuelve a iniciar sesión solo.
+- **Color del rival**: si quien lanza el proceso no lo indica, los equipos se
+  separan por K-means y el grupo más parecido a la camiseta propia es el propio.
 
 ## Verificación de campo pendiente (T-055 a T-058)
 
