@@ -171,13 +171,13 @@ Rutas públicas: `/login` (CU-02) y `/registro` (CU-01). Tras iniciar sesión o 
 
 ### Piezas
 
-| Archivo (en `src/features/seguridad/`) | Para qué sirve |
-| --- | --- |
-| `session.ts` | Único módulo que guarda y lee `{ access_token, usuario }`: `iniciarSesion`, `cerrarSesion`, `obtenerSesion` y el hook `useSesion`. |
-| `api.ts` | `login`, `registrar` y `logout` contra `/seguridad/*`. |
-| `errors.ts` | Convierte el error del backend (`detail` como texto o como lista 422) en un mensaje legible en español. |
-| `validation.ts` | Validaciones de formulario y normalización del email. |
-| `components/BotonCerrarSesion.tsx` | Llama a `POST /seguridad/logout` y limpia la sesión aunque la llamada falle. Está exportado, pero no se monta en ninguna pantalla todavía. |
+| Archivo (en `src/features/seguridad/`) | Para qué sirve                                                                                                                             |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `session.ts`                           | Único módulo que guarda y lee `{ access_token, usuario }`: `iniciarSesion`, `cerrarSesion`, `obtenerSesion` y el hook `useSesion`.         |
+| `api.ts`                               | `login`, `registrar` y `logout` contra `/seguridad/*`.                                                                                     |
+| `errors.ts`                            | Convierte el error del backend (`detail` como texto o como lista 422) en un mensaje legible en español.                                    |
+| `validation.ts`                        | Validaciones de formulario y normalización del email.                                                                                      |
+| `components/BotonCerrarSesion.tsx`     | Llama a `POST /seguridad/logout` y limpia la sesión aunque la llamada falle. Está exportado, pero no se monta en ninguna pantalla todavía. |
 
 ### Cómo funciona
 
@@ -196,14 +196,33 @@ Rutas públicas: `/login` (CU-02) y `/registro` (CU-01). Tras iniciar sesión o 
 
 Pantalla estática en `/vision/guia-montaje`. No llama a la API. Por ahora solo se abre escribiendo la URL: no hay menú ni enlace desde `VisionPage`.
 
-| Archivo (en `src/features/vision/`) | Para qué sirve |
-| --- | --- |
-| `guia.ts` | Único lugar con los valores: datos recomendados, tamaños de referencia y los ítems de la lista. Los valores salen de `docs/adr/ADR-001-montaje-de-camara.md`. Lo que el ADR deja en blanco es `null` y se muestra «Por definir». |
-| `pages/GuiaMontajePage.tsx` | La pantalla. |
-| `components/ListaComprobacion.tsx` | Casillas con contador «X de Y completados» y aviso cuando todo está marcado. El estado no se guarda: al recargar se reinicia. |
-| `components/EsquemaMontaje.tsx` | Esquemas SVG (vista desde arriba y vista lateral). Son ilustrativos y no están a escala. |
-| `guia.css` | Estilos con prefijo `guia-`. |
+| Archivo (en `src/features/vision/`) | Para qué sirve                                                                                                                                                                                                                   |
+| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `guia.ts`                           | Único lugar con los valores: datos recomendados, tamaños de referencia y los ítems de la lista. Los valores salen de `docs/adr/ADR-001-montaje-de-camara.md`. Lo que el ADR deja en blanco es `null` y se muestra «Por definir». |
+| `pages/GuiaMontajePage.tsx`         | La pantalla.                                                                                                                                                                                                                     |
+| `components/ListaComprobacion.tsx`  | Casillas con contador «X de Y completados» y aviso cuando todo está marcado. El estado no se guarda: al recargar se reinicia.                                                                                                    |
+| `components/EsquemaMontaje.tsx`     | Esquemas SVG (vista desde arriba y vista lateral). Son ilustrativos y no están a escala.                                                                                                                                         |
+| `guia.css`                          | Estilos con prefijo `guia-`.                                                                                                                                                                                                     |
 
 - **Ítems de la lista:** los de `ITEMS_ADR` vienen del ADR. Los de `ITEMS_PROPUESTA` no: están marcados «Por confirmar» hasta que el equipo los apruebe.
 - **Aviso de estado del ADR:** `AVISO_ESTADO_ADR` en `guia.ts` muestra que el ADR sigue «pendiente de decisión». Cuando se cierre, ponerlo en `null` quita el aviso.
-- **Botón «Ir a calibrar»:** está deshabilitado a propósito; la pantalla de calibración es otra tarea.
+- **Botón «Ir a calibrar»:** enlaza a `/vision/calibracion`.
+
+---
+
+## Calibración de cancha y validación del error (feature `vision`, CU-19, CU-20, CU-21)
+
+Pantalla en `/vision/calibracion` (también acepta `?partidoId=N`). Permite cargar un cuadro congelado, configurar las dimensiones de la cancha (CU-20), marcar al menos 8 pares de puntos entre la imagen y el plano (CU-19) y validar el error de reproyección antes de guardar (CU-21).
+
+| Archivo (en `src/features/vision/`) | Para qué sirve                                                                                                                                   |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `calibracion.ts`                    | Constantes (`MINIMO_PUNTOS`, `UMBRAL_ERROR_MEDIO_M`, `RETARDO_VALIDACION_MS`), plantilla de puntos sugeridos, validaciones y formateo en metros. |
+| `api.ts`                            | `obtenerCalibracion`, `validarCalibracion` (`POST .../calibracion/validar`) y `guardarCalibracion` (`POST .../calibracion`).                     |
+| `useValidacionCalibracion.ts`       | Hook con retardo (`600 ms`) y cancelación (`AbortSignal`) que mantiene el resultado sincronizado con los puntos y las dimensiones actuales.      |
+| `bloqueo.ts`                        | Función pura `evaluarBloqueoInicio` que determina si una calibración permite o bloquea el inicio del partido (lista para reutilizar en T-068).   |
+| `pages/CalibracionPage.tsx`         | Pantalla principal de marcado, validación y guardado.                                                                                            |
+| `components/VisorCuadro.tsx`        | Visor SVG del cuadro congelado con marcadores arrastrables y resaltado del punto con mayor residual.                                             |
+| `components/PlanoCancha.tsx`        | Plano SVG proporcional de la cancha con puntos de plantilla y marcadores emparejados.                                                            |
+| `components/PanelResultado.tsx`     | Panel con error medio, error máximo, umbral (`≤ 2,00 m`), punto peor (numerado `1..N`) y aviso de bloqueo cuando `valida === false`.             |
+| `components/GuiaCorreccion.tsx`     | Pasos en español llano para reducir el error cuando supera el umbral o la homografía es degenerada.                                              |
+| `calibracion.css`                   | Estilos con prefijo `cal-`.                                                                                                                      |

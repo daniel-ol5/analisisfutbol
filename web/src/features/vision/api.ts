@@ -12,6 +12,7 @@ import type {
   ActivarModelo,
   Calibracion,
   CalibracionGuardar,
+  ErrorCalibracion,
   LanzarProceso,
   Modelo,
   ModeloCrear,
@@ -36,6 +37,23 @@ export async function guardarCalibracion(
   datos: CalibracionGuardar,
 ): Promise<Calibracion> {
   const { data } = await api.post<Calibracion>(`/vision/partidos/${partidoId}/calibracion`, datos);
+  return data;
+}
+
+/**
+ * CU-21 · Calcular el error de reproyección SIN guardar nada (cualquier usuario
+ * autenticado). `signal` permite cancelar la petición si el cuerpo ya cambió.
+ */
+export async function validarCalibracion(
+  partidoId: number,
+  datos: CalibracionGuardar,
+  signal?: AbortSignal,
+): Promise<ErrorCalibracion> {
+  const { data } = await api.post<ErrorCalibracion>(
+    `/vision/partidos/${partidoId}/calibracion/validar`,
+    datos,
+    { signal },
+  );
   return data;
 }
 
@@ -116,4 +134,5 @@ export async function lanzarProceso(videoId: number, datos: LanzarProceso): Prom
 /** CU-27 · Cancela un procesamiento en cola o en curso. */
 export async function cancelarProceso(videoId: number): Promise<void> {
   await api.delete(`/vision/videos/${videoId}/procesar`);
+}
 }

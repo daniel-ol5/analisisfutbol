@@ -6,7 +6,8 @@
  * avance automático (o punto libre secundario), corregirlos arrastrando o con
  * teclado, eliminarlos y enviarlos al backend.
  *
- * Nota: Mostrar el error medio/máximo y el punto peor corresponde a T-031.
+ * Valida el error de la calibración con `/validar` (CU-21, T-031): automático con
+ * retardo y manual; señala el punto con mayor error y avisa si no permite iniciar.
  */
 import { useMutation } from "@tanstack/react-query";
 import { useEffect, useId, useMemo, useRef, useState, type ChangeEvent } from "react";
@@ -22,7 +23,10 @@ import {
   LARGO_CANCHA_DEFECTO_M,
   MIN_PUNTOS_CALIBRACION,
   acotar,
+  construirCuerpoCalibracion,
   construirPlantillaCancha,
+  formatearMetros,
+  indicePeorValido,
   obtenerRolSesionActual,
   paresLibresFueraDeCancha,
   recalcularParesConMedidas,
@@ -30,9 +34,11 @@ import {
   rolPuedeGuardarCalibracion,
   validarEstadoCalibracion,
 } from "../calibracion";
+import { PanelResultado } from "../components/PanelResultado";
 import { PlanoCancha } from "../components/PlanoCancha";
 import { VisorCuadro } from "../components/VisorCuadro";
 import type { Calibracion, HitoCancha, ParCalibracion, Punto } from "../types";
+import { useValidacionCalibracion } from "../useValidacionCalibracion";
 
 const MAX_HISTORIAL = 40;
 
@@ -119,17 +125,29 @@ export function CalibracionPage() {
     [pares, largoM, anchoM],
   );
 
+  // Cuerpo común de «Validar» y «Guardar»; `null` mientras no cumpla los requisitos de cliente.
+  const cuerpo = useMemo(
+    () => (validacion.valido ? construirCuerpoCalibracion(pares, largoM, anchoM) : null),
+    [validacion.valido, pares, largoM, anchoM],
+  );
+
+  // Validación del error con /validar (CU-21): automática con retardo + manual.
+  const validacionError = useValidacionCalibracion(validacion.partidoId, cuerpo);
+  const resultadoError = validacionError.resultado;
+  // Solo se resalta si hay un resultado de los puntos ACTUALES y el índice es válido.
+  const indicePeor = indicePeorValido(resultadoError?.punto_peor, pares.length);
+  const peorEnAlerta = resultadoError !== null && !resultadoError.valida;
+  const errorNoValido = peorEnAlerta;
+
   const mutacionGuardar = useMutation({
     mutationFn: async () => {
       if (!validacion.valido || validacion.partidoId === null) {
         throw new Error("Revisa los datos antes de guardar.");
       }
-      return guardarCalibracion(validacion.partidoId, {
-        largo_m: redondear2(largoM),
-        ancho_m: redondear2(anchoM),
-        puntos_imagen: pares.map((p) => p.imagen),
-        puntos_cancha: pares.map((p) => p.cancha),
-      });
+      return guardarCalibracion(
+        validacion.partidoId,
+        construirCuerpoCalibracion(pares, largoM, anchoM),
+      );
     },
     onSuccess: (calibracion) => {
       setUltimaCalibracion(calibracion);
@@ -525,7 +543,8 @@ export function CalibracionPage() {
           pares={pares}
           parSeleccionadoId={parSeleccionadoId}
           etiquetaDestinoActual={etiquetaDestinoActual}
-          indicePeor={null}
+          indicePeor={indicePeor}
+          peorEnAlerta={peorEnAlerta}
           onCargarDimensiones={(ancho, alto) => setDimensiones({ ancho, alto })}
           onClicNuevoPunto={alClicNuevoPuntoImagen}
           onSeleccionarPar={setParSeleccionadoId}
@@ -549,7 +568,8 @@ export function CalibracionPage() {
           puntoLibrePendiente={puntoLibrePendiente}
           pares={pares}
           parSeleccionadoId={parSeleccionadoId}
-          indicePeor={null}
+          indicePeor={indicePeor}
+          peorEnAlerta={peorEnAlerta}
           onSeleccionarHito={(hitoId) => {
             setModoLibre(false);
             setHitoElegidoManualId(hitoId);
@@ -560,6 +580,13 @@ export function CalibracionPage() {
           }}
         />
       </section>
+
+      {/* Validación del error con /validar (CU-21): reserva su espacio, no salta de altura */}
+      <PanelResultado
+        validacion={validacionError}
+        cantidadPares={pares.length}
+        requisitosPendientes={[...validacion.erroresMedidas, ...validacion.erroresPuntos]}
+      />
 
       {/* Lista de pares marcados y envío */}
       <section className="cal-seccion-inferior" aria-labelledby="cal-titulo-pares">
@@ -579,8 +606,18 @@ export function CalibracionPage() {
               disabled={!puedeGuardarPorRol || !validacion.valido || mutacionGuardar.isPending}
               onClick={() => mutacionGuardar.mutate()}
             >
-              {mutacionGuardar.isPending ? "Guardando calibración…" : "Guardar calibración"}
+              {mutacionGuardar.isPending
+                ? "Guardando calibración…"
+                : errorNoValido
+                  ? "Guardar de todos modos (quedará NO válida)"
+                  : "Guardar calibración"}
             </button>
+            {errorNoValido && puedeGuardarPorRol && (
+              <p className="cal-nota-rol" role="note">
+                Se puede guardar, pero quedará marcada como NO válida y no permitirá iniciar el
+                partido hasta que corrijas los puntos.
+              </p>
+            )}
             {!puedeGuardarPorRol && (
               <p className="cal-nota-rol" role="note">
                 Solo los roles Administrador y Analista pueden guardar la calibración
@@ -603,18 +640,26 @@ export function CalibracionPage() {
         )}
 
         {ultimaCalibracion && (
-          <div className="cal-alerta cal-alerta-exito" role="status" aria-live="polite">
+          <div
+            className={`cal-alerta ${
+              ultimaCalibracion.valida ? "cal-alerta-exito" : "cal-alerta-aviso"
+            }`}
+            role="status"
+            aria-live="polite"
+          >
             <p>
-              <strong>Calibración guardada</strong> (partido #{ultimaCalibracion.partido_id} ·{" "}
-              {ultimaCalibracion.puntos_imagen.length} pares · cancha de {ultimaCalibracion.largo_m}{" "}
-              × {ultimaCalibracion.ancho_m} m).
+              <strong>
+                {ultimaCalibracion.valida
+                  ? "Calibración guardada"
+                  : "Calibración guardada, pero NO permite iniciar el partido"}
+              </strong>{" "}
+              (partido #{ultimaCalibracion.partido_id} · {ultimaCalibracion.puntos_imagen.length}{" "}
+              pares · cancha de {ultimaCalibracion.largo_m} × {ultimaCalibracion.ancho_m} m
+              {ultimaCalibracion.error_medio_m !== null && ultimaCalibracion.error_max_m !== null
+                ? ` · error medio ${formatearMetros(ultimaCalibracion.error_medio_m)} m, máximo ${formatearMetros(ultimaCalibracion.error_max_m)} m`
+                : ""}
+              ).
             </p>
-            {/*
-             * TODO T-031 (CU-21): punto de extensión para mostrar `error_medio_m`,
-             * `error_max_m`, el estado `valida` (bloqueo > 2 m) y resaltar el
-             * `punto_peor` (índice base 0 sobre la lista enviada) pasando `indicePeor`
-             * a <VisorCuadro /> y <PlanoCancha />.
-             */}
           </div>
         )}
 
@@ -639,16 +684,22 @@ export function CalibracionPage() {
               <tbody>
                 {pares.map((par, idx) => {
                   const seleccionado = par.id === parSeleccionadoId;
+                  const esPeor = indicePeor === idx;
                   return (
                     <tr
                       key={par.id}
-                      className={seleccionado ? "es-seleccionada" : ""}
+                      className={`${seleccionado ? "es-seleccionada" : ""} ${
+                        esPeor ? `es-peor-fila ${peorEnAlerta ? "es-alerta" : "es-suave"}` : ""
+                      }`}
                       onClick={() => setParSeleccionadoId(par.id)}
                     >
                       <td className="cal-col-num" title={`Índice base 0: ${idx}`}>
                         {idx + 1}
                       </td>
-                      <td>{par.etiqueta}</td>
+                      <td>
+                        {par.etiqueta}
+                        {esPeor && <span className="cal-insignia-peor">▲ Mayor error</span>}
+                      </td>
                       <td className="cal-col-mono">
                         ({par.imagen.x}, {par.imagen.y})
                       </td>
