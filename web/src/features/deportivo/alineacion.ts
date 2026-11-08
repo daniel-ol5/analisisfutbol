@@ -10,6 +10,7 @@ import type {
   Formacion,
   Jugador,
   JugadorAlineado,
+  Partido,
   Posicion,
 } from "./types";
 import type { Rol } from "@/features/seguridad";
@@ -21,6 +22,27 @@ export const ROLES_EDITAN_ALINEACION: readonly Rol[] = ["ADMIN", "DT", "ASISTENT
 
 export function puedeEditarAlineacion(rol: Rol | undefined): boolean {
   return rol !== undefined && ROLES_EDITAN_ALINEACION.includes(rol);
+}
+
+/**
+ * Con el partido terminado la alineación ya alimentó el análisis: el backend
+ * solo deja cambiarla mientras está PROGRAMADO o EN_CURSO (409 si no).
+ */
+export function partidoEditable(partido: Pick<Partido, "estado">): boolean {
+  return partido.estado === "PROGRAMADO" || partido.estado === "EN_CURSO";
+}
+
+const formatoFecha = new Intl.DateTimeFormat("es-BO", {
+  weekday: "short",
+  day: "2-digit",
+  month: "short",
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
+/** "vs Bolívar · sáb 15 nov, 16:00" */
+export function nombrePartido(p: Partido): string {
+  return `vs ${p.rival} · ${formatoFecha.format(new Date(p.fecha_hora))}`;
 }
 
 /** Un puesto de la formación: dónde va y qué posición le corresponde. */

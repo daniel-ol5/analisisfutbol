@@ -8,16 +8,13 @@
 
 .alin-elegir {
   display: grid;
-  grid-template-columns: minmax(200px, 280px) minmax(160px, 220px) auto;
+  grid-template-columns: minmax(0, 520px);
   gap: 12px;
   align-items: start;
   padding: 16px;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 8px;
-}
-.alin-elegir > button {
-  margin-top: 22px;
 }
 
 .alin-cargando {
@@ -93,12 +90,6 @@
 @media (max-width: 980px) {
   .alin-cuerpo {
     grid-template-columns: 1fr;
-  }
-  .alin-elegir {
-    grid-template-columns: 1fr;
-  }
-  .alin-elegir > button {
-    margin-top: 0;
   }
 }
 
