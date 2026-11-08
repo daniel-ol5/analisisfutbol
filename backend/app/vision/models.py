@@ -8,7 +8,16 @@ clubes (Pb-03), salvo las que cuelgan de otra que ya lo tenga.
 
 from datetime import UTC, datetime
 
-from sqlalchemy import JSON, DateTime, Float, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import (
+    JSON,
+    BigInteger,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -87,4 +96,42 @@ class ModeloML(Base):
     activo: Mapped[bool] = mapped_column(default=False, index=True)
     entrenado_en: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+
+
+class Video(Base):
+    """Video grabado de un partido (CU-27, CU-28).
+
+    T-060: se carga por partes. Mientras `bytes_recibidos < tamano_bytes` está
+    en CARGANDO; al llegar el último trozo se lee con OpenCV y pasa a SUBIDO
+    (o a ERROR si el archivo no es un video legible). `archivo_url` es la clave
+    en el almacén (ver `app/vision/almacen.py`), no una URL pública.
+    """
+
+    __tablename__ = "video"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    club_id: Mapped[int] = mapped_column(ForeignKey("club.id"), index=True)
+    partido_id: Mapped[int] = mapped_column(ForeignKey("partido.id"), index=True)
+    modelo_id: Mapped[int | None] = mapped_column(ForeignKey("modelo_ml.id"), nullable=True)
+
+    archivo_url: Mapped[str] = mapped_column(String(400))
+    nombre: Mapped[str] = mapped_column(String(200))
+    tipo: Mapped[str] = mapped_column(String(80))
+    tamano_bytes: Mapped[int] = mapped_column(BigInteger)
+    bytes_recibidos: Mapped[int] = mapped_column(BigInteger, default=0)
+
+    duracion_s: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    fps: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    resolucion: Mapped[str | None] = mapped_column(String(20), nullable=True)
+
+    estado: Mapped[str] = mapped_column(String(20), default="CARGANDO", index=True)
+    progreso_pct: Mapped[int] = mapped_column(Integer, default=0)
+    mensaje_error: Mapped[str | None] = mapped_column(String(400), nullable=True)
+
+    creado_en: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+    procesado_en: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )

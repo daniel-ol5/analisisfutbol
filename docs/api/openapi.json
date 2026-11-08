@@ -2237,7 +2237,7 @@
         "tags": [
           "P3 · Visión por Computadora"
         ],
-        "summary": "CU-28 · Listar videos del partido",
+        "summary": "CU-28 · Listar videos del partido (el más nuevo primero)",
         "operationId": "listar_videos_api_vision_partidos__partido_id__videos_get",
         "security": [
           {
@@ -2280,6 +2280,9 @@
               }
             }
           },
+          "404": {
+            "description": "Partido o video inexistente, o de otro club"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -2296,8 +2299,9 @@
         "tags": [
           "P3 · Visión por Computadora"
         ],
-        "summary": "CU-28 · Cargar video de partido",
-        "operationId": "cargar_video_api_vision_partidos__partido_id__videos_post",
+        "summary": "CU-28 · Iniciar la carga por partes de un video (T-060)",
+        "description": "Paso 1 de 3. Declara el archivo sin enviarlo: valida extensión (.mp4, .mov, .mkv), tipo MIME y tamaño, y crea el video en estado CARGANDO. Después se envía el contenido por trozos con `PUT /videos/{id}/contenido`.",
+        "operationId": "iniciar_carga_api_vision_partidos__partido_id__videos_post",
         "security": [
           {
             "HTTPBearer": []
@@ -2317,9 +2321,9 @@
         "requestBody": {
           "required": true,
           "content": {
-            "multipart/form-data": {
+            "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/Body_cargar_video_api_vision_partidos__partido_id__videos_post"
+                "$ref": "#/components/schemas/VideoIniciar"
               }
             }
           }
@@ -2345,6 +2349,18 @@
               }
             }
           },
+          "404": {
+            "description": "Partido o video inexistente, o de otro club"
+          },
+          "409": {
+            "description": "El partido está cancelado"
+          },
+          "413": {
+            "description": "El tamaño supera el máximo configurado"
+          },
+          "415": {
+            "description": "Formato no soportado: se rechaza antes de subir nada"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -2358,12 +2374,115 @@
         }
       }
     },
+    "/api/vision/videos/{video_id}/contenido": {
+      "put": {
+        "tags": [
+          "P3 · Visión por Computadora"
+        ],
+        "summary": "CU-28 · Enviar un trozo del video (T-060)",
+        "description": "Paso 2 de 3. El cuerpo son los bytes crudos del trozo y `Content-Range: bytes inicio-fin/total` dice cuáles son. Los trozos van en orden: cada uno empieza en `bytes_recibidos`. Para retomar una carga cortada, consultar `GET /videos/{id}` y seguir desde ahí. Con el último trozo el video se lee y queda SUBIDO (con duración, fps y resolución) o ERROR (con el motivo).",
+        "operationId": "enviar_trozo_api_vision_videos__video_id__contenido_put",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "video_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Video Id"
+            }
+          },
+          {
+            "name": "content-range",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Content-Range"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Video"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "Declarado en el contrato, pendiente de implementacion",
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Partido o video inexistente, o de otro club"
+          },
+          "400": {
+            "description": "Content-Range ausente o inconsistente con el cuerpo"
+          },
+          "409": {
+            "description": "El trozo no empieza donde quedó la carga (ver `bytes_recibidos`), o la carga ya terminó"
+          },
+          "413": {
+            "description": "El trozo supera el máximo por envío"
+          },
+          "415": {
+            "description": "El primer trozo no tiene la firma del formato declarado"
+          },
+          "416": {
+            "description": "El trozo se pasa del final del archivo"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/vision/videos/{video_id}": {
       "get": {
         "tags": [
           "P3 · Visión por Computadora"
         ],
-        "summary": "CU-27 · Estado del procesamiento",
+        "summary": "CU-27, CU-28 · Estado de la carga y del procesamiento",
         "operationId": "estado_video_api_vision_videos__video_id__get",
         "security": [
           {
@@ -2401,6 +2520,9 @@
                 }
               }
             }
+          },
+          "404": {
+            "description": "Partido o video inexistente, o de otro club"
           },
           "422": {
             "description": "Validation Error",
@@ -4841,20 +4963,6 @@
         "title": "AvisoColores",
         "description": "CU-10: los colores de ambos equipos quedaron demasiado cerca en HSV."
       },
-      "Body_cargar_video_api_vision_partidos__partido_id__videos_post": {
-        "properties": {
-          "archivo": {
-            "type": "string",
-            "contentMediaType": "application/octet-stream",
-            "title": "Archivo"
-          }
-        },
-        "type": "object",
-        "required": [
-          "archivo"
-        ],
-        "title": "Body_cargar_video_api_vision_partidos__partido_id__videos_post"
-      },
       "Body_importar_plantel_api_deportivo_equipos__equipo_id__jugadores_importar_post": {
         "properties": {
           "archivo": {
@@ -5673,6 +5781,7 @@
       "EstadoVideo": {
         "type": "string",
         "enum": [
+          "CARGANDO",
           "SUBIDO",
           "PROCESANDO",
           "PROCESADO",
@@ -8588,6 +8697,24 @@
             "type": "string",
             "title": "Archivo Url"
           },
+          "nombre": {
+            "type": "string",
+            "title": "Nombre",
+            "description": "Nombre original del archivo"
+          },
+          "tipo": {
+            "type": "string",
+            "title": "Tipo"
+          },
+          "tamano_bytes": {
+            "type": "integer",
+            "title": "Tamano Bytes"
+          },
+          "bytes_recibidos": {
+            "type": "integer",
+            "title": "Bytes Recibidos",
+            "description": "Para retomar una carga cortada: el siguiente trozo empieza en este byte"
+          },
           "duracion_s": {
             "anyOf": [
               {
@@ -8632,6 +8759,7 @@
             "maximum": 100.0,
             "minimum": 0.0,
             "title": "Progreso Pct",
+            "description": "Progreso del PROCESAMIENTO (CU-27), no de la carga",
             "default": 0
           },
           "mensaje_error": {
@@ -8644,6 +8772,11 @@
               }
             ],
             "title": "Mensaje Error"
+          },
+          "creado_en": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Creado En"
           },
           "procesado_en": {
             "anyOf": [
@@ -8663,9 +8796,54 @@
           "id",
           "partido_id",
           "archivo_url",
-          "estado"
+          "nombre",
+          "tipo",
+          "tamano_bytes",
+          "bytes_recibidos",
+          "estado",
+          "creado_en"
         ],
         "title": "Video"
+      },
+      "VideoIniciar": {
+        "properties": {
+          "nombre": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Nombre",
+            "description": "Nombre del archivo; su extension tiene que ser .mp4, .mov o .mkv",
+            "examples": [
+              "fecha-12-vs-rival.mp4"
+            ]
+          },
+          "tipo": {
+            "type": "string",
+            "maxLength": 80,
+            "title": "Tipo",
+            "description": "Tipo MIME que informa el navegador (File.type)",
+            "examples": [
+              "video/mp4"
+            ]
+          },
+          "tamano_bytes": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Tamano Bytes",
+            "description": "Tamano total; el maximo lo fija la configuracion del servidor",
+            "examples": [
+              4500000000
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "nombre",
+          "tipo",
+          "tamano_bytes"
+        ],
+        "title": "VideoIniciar",
+        "description": "Primer paso de la carga por partes: se declara el archivo sin subirlo."
       }
     },
     "securitySchemes": {

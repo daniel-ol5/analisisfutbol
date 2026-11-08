@@ -18,6 +18,7 @@ class TipoModelo(StrEnum):
 
 
 class EstadoVideo(StrEnum):
+    CARGANDO = "CARGANDO"   # T-060: la carga por partes todavía no terminó
     SUBIDO = "SUBIDO"
     PROCESANDO = "PROCESANDO"
     PROCESADO = "PROCESADO"
@@ -124,18 +125,46 @@ class Modelo(ModeloCrear):
 
 # ---------- CU-27, CU-28 Video ----------
 
+# T-060. Contenedores que el pipeline sabe leer (OpenCV + FFmpeg). Se validan
+# ANTES de empezar la carga: un partido son varios GB y descubrir al final que
+# el formato no sirve es perder una hora de subida.
+FORMATOS_VIDEO: dict[str, tuple[str, ...]] = {
+    ".mp4": ("video/mp4",),
+    ".mov": ("video/quicktime",),
+    ".mkv": ("video/x-matroska", "video/matroska"),
+}
+
+
+class VideoIniciar(BaseModel):
+    """Primer paso de la carga por partes: se declara el archivo sin subirlo."""
+
+    nombre: str = Field(min_length=1, max_length=200, examples=["fecha-12-vs-rival.mp4"],
+        description="Nombre del archivo; su extension tiene que ser .mp4, .mov o .mkv")
+    tipo: str = Field(max_length=80, examples=["video/mp4"],
+        description="Tipo MIME que informa el navegador (File.type)")
+    tamano_bytes: int = Field(gt=0, examples=[4_500_000_000],
+        description="Tamano total; el maximo lo fija la configuracion del servidor")
+
+
 class Video(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
     partido_id: int
     modelo_id: int | None = None
     archivo_url: str
+    nombre: str = Field(description="Nombre original del archivo")
+    tipo: str
+    tamano_bytes: int
+    bytes_recibidos: int = Field(
+        description="Para retomar una carga cortada: el siguiente trozo empieza en este byte")
     duracion_s: int | None = None
     fps: int | None = None
     resolucion: str | None = Field(default=None, examples=["3840x2160"])
     estado: EstadoVideo
-    progreso_pct: int = Field(default=0, ge=0, le=100)
+    progreso_pct: int = Field(default=0, ge=0, le=100,
+        description="Progreso del PROCESAMIENTO (CU-27), no de la carga")
     mensaje_error: str | None = None
+    creado_en: datetime
     procesado_en: datetime | None = None
 
 
