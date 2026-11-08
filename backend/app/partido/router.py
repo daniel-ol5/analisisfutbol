@@ -146,15 +146,20 @@ async def sincronizar_cola(partido_id: int, eventos: list[EventoManualCrear],
             summary="CU-34 · Identificadores detectados y su asignacion")
 async def listar_tracks(partido_id: int, usuario: Actual, db: Db,
                         solo_activos: bool = True) -> list[TrackDetectado]:
-    pendiente("CU-34", "Sprint 3", "Jhon")
+    return await service.listar_tracks_partido(
+        db, usuario, partido_id, solo_activos=solo_activos
+    )
 
 
 @router.put("/{partido_id}/tracks/{track_id}", response_model=TrackDetectado,
+            dependencies=[Depends(requiere_rol("ADMIN", "ANALISTA"))],
             summary="CU-34, CU-35 · Asignar o reasignar un identificador a un jugador")
 async def asignar_track(partido_id: int, track_id: int, datos: AsignarTrack,
-                        usuario: Actual, db: Db) -> TrackDetectado:
+                        usuario: Actual, db: Db, reloj: RelojDep) -> TrackDetectado:
     # Regla: reasignar tras una oclusion continua las metricas, no las reinicia.
-    pendiente("CU-34", "Sprint 3", "Jhon")
+    return await service.asignar_track_partido(
+        db, usuario, partido_id, track_id, datos, ahora=reloj
+    )
 
 
 # ---------------- Posiciones ----------------
@@ -307,6 +312,7 @@ async def ingesta(ws: WebSocket, partido_id: int, hub: HubDep, partidos: Partido
             await hub.difundir(canal, {"tipo": "posiciones",
                                        "datos": mensaje.model_dump(mode="json")})
             await almacen.agregar(mensaje)
+            await service.registrar_tracks_ingesta(worker.club_id, mensaje)
     except (WebSocketDisconnect, RuntimeError):
         pass
     finally:

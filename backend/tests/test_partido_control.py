@@ -6,16 +6,22 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from datos_calibracion import cuerpo_valido
 from httpx import ASGITransport, AsyncClient
+from modelos_falsos import SesionesPrueba
 from sqlalchemy import select
 from starlette.testclient import TestClient
 
-from app.core.database import SessionLocal
+from app.core.database import SessionLocal, get_db
 from app.core.realtime import HubMemoria, obtener_hub
 from app.core.security import token_acceso
 from app.deportivo.models import Partido
 from app.main import app
 from app.partido.models import RelojPartido
-from app.partido.service import normalizar_coordenadas, obtener_reloj
+from app.partido.service import (
+    PartidosEnTabla,
+    normalizar_coordenadas,
+    obtener_reloj,
+    obtener_repositorio_partidos,
+)
 
 BASE = "http://test"
 
@@ -484,8 +490,16 @@ async def test_rol_analista_puede_operar_el_partido(cliente: AsyncClient):
 
 
 def test_difusion_en_vivo_coincide_con_get_estado(reloj: RelojFalso):
+    async def _db_nullpool():
+        async with SesionesPrueba() as session:
+            yield session
+
     hub = HubMemoria()
     app.dependency_overrides[obtener_hub] = lambda: hub
+    app.dependency_overrides[get_db] = _db_nullpool
+    app.dependency_overrides[obtener_repositorio_partidos] = lambda: PartidosEnTabla(
+        Partido, SesionesPrueba
+    )
     try:
         with TestClient(app) as tc, ExitStack() as pila:
             reg = tc.post(
@@ -558,3 +572,5 @@ def test_difusion_en_vivo_coincide_con_get_estado(reloj: RelojFalso):
                 assert resp_post.json() == resp_get.json()
     finally:
         app.dependency_overrides.pop(obtener_hub, None)
+        app.dependency_overrides.pop(get_db, None)
+        app.dependency_overrides.pop(obtener_repositorio_partidos, None)

@@ -12,20 +12,25 @@ from typing import Any, Protocol
 from fastapi import HTTPException, status
 from sqlalchemy import insert, select
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
 
+from app.core.config import settings
 from app.core.database import SessionLocal
 from app.core.deps import UsuarioActual
 from app.core.tenancy import del_club, verificar_pertenencia
-from app.deportivo.models import Partido
+from app.deportivo.models import Jugador, Partido
 from app.deportivo.schemas import Direccion, EstadoPartido
-from app.partido.models import RelojPartido
+from app.partido.models import AsignacionTrack, RelojPartido
 from app.partido.schemas import (
+    AsignarTrack,
     Descuento,
+    EquipoDetectado,
     EstadoEnVivo,
     IndicadorCalidad,
     IniciarPartido,
     MensajeWorker,
+    TrackDetectado,
 )
 from app.vision.models import Calibracion
 
@@ -208,6 +213,8 @@ async def iniciar_partido(
     partido.parte = 1
     partido.minuto_actual = 0
 
+    limpiar_memoria_tracks(usuario.club_id, partido.id)
+
     await db.commit()
     await db.refresh(partido)
     await db.refresh(reloj)
@@ -320,6 +327,9 @@ async def finalizar_partido(
 
     partido.estado = EstadoPartido.FINALIZADO.value
 
+    t_cierre = calcular_t_actual(usuario.club_id, partido.id, reloj, instante)
+    await _cerrar_tracks_vigentes(db, usuario.club_id, partido.id, t_cierre)
+
     await db.commit()
     await db.refresh(partido)
     if reloj is not None:
@@ -337,6 +347,348 @@ async def obtener_estado_partido(
     partido = await _partido_del_club(db, usuario, partido_id)
     reloj = await _reloj_del_partido(db, usuario, partido_id)
     return _construir_estado_en_vivo(partido, reloj, _en_utc(ahora()))
+
+
+# ---------------- CU-34, CU-35 · Identificadores y asignación (T-067) ----------------
+
+# Registro en memoria por (club_id, partido_id) para no consultar la base a 5 Hz.
+# Si el proceso se reinicia, se reconstruye desde `asignacion_track` en el primer
+# mensaje posterior al reinicio.
+_tracks_vistos: dict[tuple[int, int], set[int]] = {}
+_ultimo_t_ingesta: dict[tuple[int, int], float] = {}
+
+# Sesión con NullPool para escrituras puntuales desde el bucle de WebSocket (/ingesta),
+# evitando compartir conexiones de aiosqlite entre distintos event loops en pruebas.
+_motor_ingesta = create_async_engine(settings.database_url, poolclass=NullPool)
+SesionesIngesta: async_sessionmaker[AsyncSession] = async_sessionmaker(
+    _motor_ingesta, expire_on_commit=False
+)
+
+
+def limpiar_memoria_tracks(
+    club_id: int | None = None, partido_id: int | None = None
+) -> None:
+    """Limpia el caché en memoria de tracks vistos y último `t` de ingesta."""
+    if club_id is None or partido_id is None:
+        _tracks_vistos.clear()
+        _ultimo_t_ingesta.clear()
+        return
+    clave = (club_id, partido_id)
+    _tracks_vistos.pop(clave, None)
+    _ultimo_t_ingesta.pop(clave, None)
+
+
+def registrar_t_ingesta(club_id: int, partido_id: int, t: float) -> None:
+    """Actualiza en memoria el último `t` recibido en `/ingesta` para `(club_id, partido_id)`."""
+    clave = (club_id, partido_id)
+    previo = _ultimo_t_ingesta.get(clave, 0.0)
+    if t >= previo:
+        _ultimo_t_ingesta[clave] = float(t)
+
+
+def calcular_t_actual(
+    club_id: int,
+    partido_id: int,
+    reloj: RelojPartido | None,
+    ahora: datetime,
+    *,
+    base_minima: float = 0.0,
+) -> float:
+    """Calcula `t_actual` para abrir o cerrar tramos de `AsignacionTrack` (T-067).
+
+    Elección:
+    1. Si `/ingesta` ya reportó muestras para `(club_id, partido_id)`, usa el último
+       `t` visto en `/ingesta`, porque todos los `desde_t` nacen en la línea de tiempo
+       del worker (`MensajeWorker.t`).
+    2. Si aún no hay muestras de `/ingesta` en memoria, usa `segundos_transcurridos`
+       del `RelojPartido` (T-065).
+    3. Nunca devuelve un valor menor que `base_minima` (`desde_t` del tramo que se
+       cierra), garantizando `hasta_t >= desde_t`.
+    """
+    clave = (club_id, partido_id)
+    if clave in _ultimo_t_ingesta:
+        t_base = _ultimo_t_ingesta[clave]
+    else:
+        t_base = segundos_transcurridos(reloj, ahora)
+    return max(float(base_minima), float(t_base))
+
+
+def _a_track_detectado(fila: AsignacionTrack) -> TrackDetectado:
+    return TrackDetectado(
+        track_id=fila.track_id,
+        equipo_detectado=EquipoDetectado(fila.equipo_detectado),
+        jugador_id=fila.jugador_id,
+        desde_t=fila.desde_t,
+        hasta_t=fila.hasta_t,
+        confianza=fila.confianza,
+    )
+
+
+async def _cerrar_tracks_vigentes(
+    db: AsyncSession, club_id: int, partido_id: int, t_cierre: float
+) -> None:
+    """Cierra todos los tramos con `hasta_t IS NULL` al finalizar el partido."""
+    stmt = select(AsignacionTrack).where(
+        AsignacionTrack.club_id == club_id,
+        AsignacionTrack.partido_id == partido_id,
+        AsignacionTrack.hasta_t.is_(None),
+    )
+    vigentes = (await db.execute(stmt)).scalars().all()
+    for tramo in vigentes:
+        tramo.hasta_t = max(float(tramo.desde_t), float(t_cierre))
+
+
+async def _cerrar_otros_tramos_del_jugador(
+    db: AsyncSession,
+    club_id: int,
+    partido_id: int,
+    jugador_id: int,
+    track_id_destino: int,
+    t_cierre: float,
+) -> None:
+    """CU-35: si el jugador tenía un tramo vigente en otro track (oclusión), lo cierra en `t_cierre`."""
+    stmt = select(AsignacionTrack).where(
+        AsignacionTrack.club_id == club_id,
+        AsignacionTrack.partido_id == partido_id,
+        AsignacionTrack.jugador_id == jugador_id,
+        AsignacionTrack.track_id != track_id_destino,
+        AsignacionTrack.hasta_t.is_(None),
+    )
+    anteriores = (await db.execute(stmt)).scalars().all()
+    for anterior in anteriores:
+        anterior.hasta_t = max(float(anterior.desde_t), float(t_cierre))
+
+
+async def listar_tracks_partido(
+    db: AsyncSession,
+    usuario: UsuarioActual,
+    partido_id: int,
+    *,
+    solo_activos: bool = True,
+) -> list[TrackDetectado]:
+    """CU-34: devuelve los tramos activos (`hasta_t IS NULL`) o el historial completo."""
+    await _partido_del_club(db, usuario, partido_id)
+    stmt = select(AsignacionTrack).where(
+        AsignacionTrack.club_id == usuario.club_id,
+        AsignacionTrack.partido_id == partido_id,
+    )
+    if solo_activos:
+        stmt = stmt.where(AsignacionTrack.hasta_t.is_(None)).order_by(
+            AsignacionTrack.track_id.asc()
+        )
+    else:
+        stmt = stmt.order_by(
+            AsignacionTrack.track_id.asc(),
+            AsignacionTrack.desde_t.asc(),
+            AsignacionTrack.id.asc(),
+        )
+    filas = (await db.execute(stmt)).scalars().all()
+    return [_a_track_detectado(f) for f in filas]
+
+
+async def asignar_track_partido(
+    db: AsyncSession,
+    usuario: UsuarioActual,
+    partido_id: int,
+    track_id: int,
+    datos: AsignarTrack,
+    ahora: RelojSistema = ahora_utc,
+) -> TrackDetectado:
+    """CU-34, CU-35: asigna, reasigna o desasigna un jugador a un `track_id`."""
+    partido = await _partido_del_club(db, usuario, partido_id)
+
+    if datos.jugador_id is not None:
+        jugador = await db.get(Jugador, datos.jugador_id)
+        if jugador is None or jugador.club_id != usuario.club_id:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                "El jugador indicado no existe en el club",
+            )
+        if jugador.equipo_id != partido.equipo_id:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                "El jugador indicado no pertenece al equipo del partido",
+            )
+
+    stmt_vigente = select(AsignacionTrack).where(
+        AsignacionTrack.club_id == usuario.club_id,
+        AsignacionTrack.partido_id == partido_id,
+        AsignacionTrack.track_id == track_id,
+        AsignacionTrack.hasta_t.is_(None),
+    )
+    tramo_vigente = (await db.execute(stmt_vigente)).scalar_one_or_none()
+
+    reloj = await _reloj_del_partido(db, usuario, partido_id)
+    instante = _en_utc(ahora())
+
+    if tramo_vigente is None:
+        stmt_hist = (
+            select(AsignacionTrack)
+            .where(
+                AsignacionTrack.club_id == usuario.club_id,
+                AsignacionTrack.partido_id == partido_id,
+                AsignacionTrack.track_id == track_id,
+            )
+            .order_by(AsignacionTrack.desde_t.desc(), AsignacionTrack.id.desc())
+            .limit(1)
+        )
+        ultimo_hist = (await db.execute(stmt_hist)).scalar_one_or_none()
+        if ultimo_hist is None:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND,
+                "Track no encontrado en este partido",
+            )
+        if datos.jugador_id is None:
+            return _a_track_detectado(ultimo_hist)
+
+        base_min = (
+            ultimo_hist.hasta_t
+            if ultimo_hist.hasta_t is not None
+            else ultimo_hist.desde_t
+        )
+        t_actual = calcular_t_actual(
+            usuario.club_id, partido_id, reloj, instante, base_minima=base_min
+        )
+        await _cerrar_otros_tramos_del_jugador(
+            db, usuario.club_id, partido_id, datos.jugador_id, track_id, t_actual
+        )
+        nuevo = AsignacionTrack(
+            club_id=usuario.club_id,
+            partido_id=partido_id,
+            track_id=track_id,
+            jugador_id=datos.jugador_id,
+            equipo_detectado=ultimo_hist.equipo_detectado,
+            desde_t=t_actual,
+            hasta_t=None,
+            confianza=ultimo_hist.confianza,
+        )
+        db.add(nuevo)
+        await db.commit()
+        await db.refresh(nuevo)
+        return _a_track_detectado(nuevo)
+
+    t_actual = calcular_t_actual(
+        usuario.club_id,
+        partido_id,
+        reloj,
+        instante,
+        base_minima=tramo_vigente.desde_t,
+    )
+
+    # Desasignar: cierra el tramo vigente en t_actual
+    if datos.jugador_id is None:
+        tramo_vigente.hasta_t = t_actual
+        await db.commit()
+        await db.refresh(tramo_vigente)
+        return _a_track_detectado(tramo_vigente)
+
+    # Si el jugador viene de otro track con tramo vigente (oclusión), cierra el tramo anterior
+    await _cerrar_otros_tramos_del_jugador(
+        db, usuario.club_id, partido_id, datos.jugador_id, track_id, t_actual
+    )
+
+    # Primera asignación sobre un tramo sin jugador: vale desde su inicio
+    if tramo_vigente.jugador_id is None:
+        tramo_vigente.jugador_id = datos.jugador_id
+        await db.commit()
+        await db.refresh(tramo_vigente)
+        return _a_track_detectado(tramo_vigente)
+
+    # Mismo jugador: idempotente
+    if tramo_vigente.jugador_id == datos.jugador_id:
+        await db.commit()
+        await db.refresh(tramo_vigente)
+        return _a_track_detectado(tramo_vigente)
+
+    # Reasignación a un jugador distinto: cierra en t_actual y abre tramo nuevo desde t_actual
+    tramo_vigente.hasta_t = t_actual
+    await db.flush()
+
+    nuevo = AsignacionTrack(
+        club_id=usuario.club_id,
+        partido_id=partido_id,
+        track_id=track_id,
+        jugador_id=datos.jugador_id,
+        equipo_detectado=tramo_vigente.equipo_detectado,
+        desde_t=t_actual,
+        hasta_t=None,
+        confianza=tramo_vigente.confianza,
+    )
+    db.add(nuevo)
+    await db.commit()
+    await db.refresh(nuevo)
+    return _a_track_detectado(nuevo)
+
+
+async def registrar_tracks_ingesta(
+    club_id: int,
+    mensaje: MensajeWorker,
+    sesiones: async_sessionmaker[AsyncSession] | None = None,
+) -> None:
+    """Gancho mínimo invocado desde `/ingesta`: registra tracks nuevos sin consultar a 5 Hz.
+
+    - Mantiene en `_tracks_vistos[(club_id, partido_id)]` los `track_id` ya vistos.
+    - Si la clave no está en memoria (primer mensaje del partido o tras reinicio del
+      servidor), la reconstruye una sola vez desde `asignacion_track` sin duplicar tramos.
+    - Solo escribe en base de datos cuando aparece al menos un `track_id` nuevo (un único
+      `INSERT` por mensaje con tracks nuevos; 0 consultas si todos los tracks ya fueron vistos).
+    - Cualquier excepción se captura y registra para no interrumpir `/ingesta` ni `/vivo`.
+    """
+    try:
+        partido_id = mensaje.partido
+        registrar_t_ingesta(club_id, partido_id, mensaje.t)
+        if not mensaje.jugadores:
+            return
+
+        clave = (club_id, partido_id)
+        vistos = _tracks_vistos.get(clave)
+
+        # Vía rápida a 5 Hz: si el partido ya está hidratado y ningún tid es nuevo, 0 consultas
+        if vistos is not None and all(j.tid in vistos for j in mensaje.jugadores):
+            return
+
+        fabrica = sesiones or SesionesIngesta
+        async with fabrica() as db:
+            if vistos is None:
+                stmt = select(AsignacionTrack.track_id).where(
+                    AsignacionTrack.club_id == club_id,
+                    AsignacionTrack.partido_id == partido_id,
+                )
+                existentes = set((await db.execute(stmt)).scalars().all())
+                vistos = _tracks_vistos.setdefault(clave, set())
+                vistos.update(existentes)
+
+            filas_nuevas: list[dict[str, Any]] = []
+            tids_nuevos: set[int] = set()
+            for j in mensaje.jugadores:
+                if j.tid in vistos or j.tid in tids_nuevos:
+                    continue
+                tids_nuevos.add(j.tid)
+                filas_nuevas.append(
+                    {
+                        "club_id": club_id,
+                        "partido_id": partido_id,
+                        "track_id": j.tid,
+                        "jugador_id": None,
+                        "equipo_detectado": j.equipo.value,
+                        "desde_t": float(mensaje.t),
+                        "hasta_t": None,
+                        "confianza": float(j.conf),
+                    }
+                )
+
+            if not filas_nuevas:
+                return
+
+            await db.execute(insert(AsignacionTrack), filas_nuevas)
+            await db.commit()
+            vistos.update(tids_nuevos)
+    except Exception:
+        log.exception(
+            "No se pudieron registrar los tracks nuevos del partido %s (club %s)",
+            mensaje.partido,
+            club_id,
+        )
 
 
 # ---------------- Acceso a partidos (T-032) ----------------
