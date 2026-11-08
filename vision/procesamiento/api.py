@@ -103,7 +103,7 @@ class ApiBackend:
                         open(destino, "ab") as archivo:
                     shutil.copyfileobj(respuesta, archivo, length=1024 * 1024)
                 return destino
-            except (OSError, urllib.error.URLError):
+            except OSError:  # incluye URLError: red caída a mitad de la descarga
                 if intento == intentos:
                     raise
         return destino
@@ -116,6 +116,16 @@ class ApiBackend:
             if e.codigo == 409:
                 raise Cancelado(e.detalle) from None
             raise
+
+    # ---------- Modelos (CU-29, usados por evaluacion/regresion.py) ----------
+
+    def modelo_activo(self) -> dict[str, Any] | None:
+        modelos = self._json("GET", "/vision/modelos")
+        return next((m for m in modelos if m.get("activo")), None)
+
+    def registrar_modelo(self, datos: dict[str, Any]) -> dict[str, Any]:
+        """Registra la versión con sus métricas. Nunca la activa: eso es un paso aparte."""
+        return self._json("POST", "/vision/modelos", datos)
 
     def terminar(self, video_id: int, ok: bool, mensaje_error: str | None = None) -> None:
         try:

@@ -98,6 +98,27 @@ un solo video y salir. Sin modelo activo en el club usa `yolo11n.pt`.
 - **Color del rival**: si quien lanza el proceso no lo indica, los equipos se
   separan por K-means y el grupo más parecido a la camiseta propia es el propio.
 
+## Prueba de regresión del modelo (T-064)
+
+Antes de activar una versión nueva, se evalúa sobre el clip de referencia
+anotado. El comando sale con código 1 si no llega a los mínimos de T-055
+(mAP@50 jugador ≥ 0,85, IDF1 ≥ 0,70) o si es peor que la versión activa:
+
+```bash
+cd vision
+python -m evaluacion.regresion --pesos runs/best.pt \
+    --clip referencia/clip.mp4 --anotaciones referencia/clip.json
+
+# Compararla con la activa del club y, si pasa, registrarla (sin activarla):
+python -m evaluacion.regresion ... --api http://localhost:8000/api --email analista@club.com \
+    --registrar --nombre futbol-propio --version v4 --archivo-url https://cdn.club.com/futbol-v4.pt
+```
+
+El formato de las anotaciones está en el docstring de `evaluacion/regresion.py`.
+El backend aplica la misma regla al activar: una versión con métricas peores
+que la activa responde 409. Para volver atrás a propósito (T-059) se activa con
+`{"forzar": true, "motivo": "..."}`, y el motivo queda registrado.
+
 ## Verificación de campo pendiente (T-055 a T-058)
 
 El código de `evaluacion/` (Pb-17) ya calcula mAP@50 e IDF1, con pruebas
