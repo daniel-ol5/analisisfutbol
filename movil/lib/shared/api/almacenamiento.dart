@@ -27,6 +27,18 @@ class Almacenamiento {
     await _seguro.write(key: _claveRefresco, value: refresco);
   }
 
+  /// Guarda una sesión iniciada con credenciales nuevas.
+  ///
+  /// A diferencia de una renovación del token, un login puede pertenecer a
+  /// otra persona o club. Antes de guardar los tokens elimina el perfil y
+  /// todas las respuestas descargadas por la cuenta anterior.
+  static Future<void> guardarNuevaSesion(String acceso, String refresco) async {
+    final p = await SharedPreferences.getInstance();
+    await p.remove(_claveUsuario);
+    await _borrarCaches(p);
+    await guardarSesion(acceso, refresco);
+  }
+
   static Future<String?> leerToken() async {
     await _migrarDesdeTextoPlano();
     return _seguro.read(key: _claveAcceso);
@@ -43,10 +55,7 @@ class Almacenamiento {
     await _seguro.delete(key: _claveRefresco);
     final p = await SharedPreferences.getInstance();
     await p.remove(_claveUsuario);
-    // Lo descargado pertenece al club de esta cuenta: no se deja para la próxima.
-    for (final clave in p.getKeys().where((k) => k.startsWith(_prefijoCache))) {
-      await p.remove(clave);
-    }
+    await _borrarCaches(p);
   }
 
   static Future<bool> haySesion() async => await leerToken() != null;
@@ -54,8 +63,31 @@ class Almacenamiento {
   // ---------- Caché de respuestas para usar sin conexión ----------
 
   static const _prefijoCache = 'areatecnica.cache.';
+  static const _prefijoCacheLegado = 'cache.';
 
-  static Future<void> guardarCache(String clave, Map<String, dynamic> datos) async {
+  /// Borra datos descargados de la cuenta, pero conserva preferencias como el tema.
+  /// Incluye las claves históricas de Deportivo para impedir que nombres de
+  /// equipos o planteles de un club aparezcan al iniciar sesión en otro.
+  static Future<void> borrarCaches() async {
+    final p = await SharedPreferences.getInstance();
+    await _borrarCaches(p);
+  }
+
+  static Future<void> _borrarCaches(SharedPreferences p) async {
+    final claves = p.getKeys().where(
+      (clave) =>
+          clave.startsWith(_prefijoCache) ||
+          clave.startsWith(_prefijoCacheLegado),
+    );
+    for (final clave in claves.toList()) {
+      await p.remove(clave);
+    }
+  }
+
+  static Future<void> guardarCache(
+    String clave,
+    Map<String, dynamic> datos,
+  ) async {
     final p = await SharedPreferences.getInstance();
     await p.setString('$_prefijoCache$clave', jsonEncode(datos));
   }
