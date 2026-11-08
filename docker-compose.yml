@@ -67,6 +67,10 @@ services:
       - ./backend/app:/app/app
       - ./backend/scripts:/app/scripts
       - ./backend/alembic:/app/alembic
+      # T-060: videos de partido cargados por partes (PROVISORIO hasta tener
+      # almacenamiento de objetos). En un volumen para que sobrevivan al
+      # recrear el contenedor; nunca en el repo.
+      - datos_videos:/app/almacen
     # Aplica las migraciones pendientes y recien despues arranca la API
     command: >
       sh -c "alembic upgrade head &&
@@ -116,3 +120,4 @@ services:
 
 volumes:
   datos_db:
+  datos_videos:
