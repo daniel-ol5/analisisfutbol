@@ -26,7 +26,9 @@ function fechaLegible(valor: string): string {
   }).format(new Date(valor));
 }
 
-export function PartidosView() {
+export function PartidosView({
+  onVerAlineacion,
+}: { onVerAlineacion?: (partidoId: number) => void } = {}) {
   const sesion = useSesion();
   const puedeProgramar = sesion?.usuario.rol === "ADMIN" || sesion?.usuario.rol === "DT";
   const equipos = useEquiposParaPartido(puedeProgramar);
@@ -97,7 +99,7 @@ export function PartidosView() {
   const sinEquipos = !cargando && (equipos.data?.length ?? 0) === 0;
 
   if (!puedeProgramar) {
-    return <AgendaPartidos />;
+    return <AgendaPartidos onVerAlineacion={onVerAlineacion} />;
   }
 
   return (
@@ -293,7 +295,7 @@ export function PartidosView() {
           </div>
         </aside>
       </div>
-      <AgendaPartidos />
+      <AgendaPartidos onVerAlineacion={onVerAlineacion} />
     </section>
   );
 }

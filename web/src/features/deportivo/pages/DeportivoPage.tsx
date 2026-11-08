@@ -11,6 +11,14 @@ export function DeportivoPage() {
   const [seccionActiva, setSeccionActiva] = useState<SeccionDeportivo>("equipos");
   const [equipoIndumentariaId, setEquipoIndumentariaId] = useState<number | null>(null);
 
+  // CU-17: partido elegido en la agenda para abrir directo su alineación.
+  const [partidoAlineacionId, setPartidoAlineacionId] = useState<number | null>(null);
+
+  const handleVerAlineacion = (partidoId: number) => {
+    setPartidoAlineacionId(partidoId);
+    setSeccionActiva("alineacion");
+  };
+
   const handleIrIndumentaria = (equipoId?: number) => {
     setEquipoIndumentariaId(equipoId ?? null);
     setSeccionActiva("indumentaria");
@@ -127,9 +135,11 @@ export function DeportivoPage() {
       )}
       {seccionActiva === "jugadores" && <JugadoresView />}
 
-      {seccionActiva === "partidos" && <PartidosView />}
+      {seccionActiva === "partidos" && <PartidosView onVerAlineacion={handleVerAlineacion} />}
 
-      {seccionActiva === "alineacion" && <AlineacionView />}
+      {seccionActiva === "alineacion" && (
+        <AlineacionView key={partidoAlineacionId ?? "sin"} partidoInicialId={partidoAlineacionId} />
+      )}
     </div>
   );
 }

@@ -8,6 +8,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../app/tema.dart';
 import '../../shared/api/almacenamiento.dart';
@@ -2151,22 +2152,22 @@ class _DeportivoPaginaState extends State<DeportivoPagina> {
     );
   }
 
+  /// Pestañas de Agenda (CU-15) y Alineación (CU-17): las dos viven en
+  /// /partidos, porque la alineación se abre desde un partido de la agenda.
   Widget _construirVistaCasosPendientes(int pestana) {
     final t = Theme.of(context);
     final datos = switch (pestana) {
       3 => (
           paquete: 'P2 · CU-15',
           titulo: 'Agenda de Partidos',
-          responsable: 'Susana · Sprint 2',
           desc:
-              'Calendario de partidos programados con modo fuera de línea para consulta en cancha sin cobertura celular.'
+              'Próximos partidos y resultados, también sin conexión para consultarla en la cancha.'
         ),
       _ => (
           paquete: 'P2 · CU-17',
           titulo: 'Ver Alineación y Formación',
-          responsable: 'Araceli · Sprint 2',
           desc:
-              'Visualización táctica de los 11 titulares, suplentes y esquema de juego en la pizarra del encuentro.'
+              'Elige un partido en la agenda para ver los titulares, el capitán, la formación y el banco.'
         ),
     };
 
@@ -2186,23 +2187,6 @@ class _DeportivoPaginaState extends State<DeportivoPagina> {
           datos.titulo,
           style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
         ),
-        const SizedBox(height: 6),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-          decoration: BoxDecoration(
-            color: verde.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(4),
-            border: Border.all(color: verde),
-          ),
-          child: Text(
-            'Asignado a: ${datos.responsable}',
-            style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w800,
-              color: verde,
-            ),
-          ),
-        ),
         const SizedBox(height: 16),
         Text(
           datos.desc,
@@ -2211,6 +2195,19 @@ class _DeportivoPaginaState extends State<DeportivoPagina> {
             fontWeight: FontWeight.w600,
             color: t.colorScheme.onSurfaceVariant,
             height: 1.5,
+          ),
+        ),
+        const SizedBox(height: 20),
+        FilledButton.icon(
+          onPressed: () => context.go('/partidos'),
+          style: FilledButton.styleFrom(
+            backgroundColor: verde,
+            minimumSize: const Size.fromHeight(52),
+          ),
+          icon: const Icon(Icons.sports_soccer),
+          label: const Text(
+            'ABRIR AGENDA DE PARTIDOS',
+            style: TextStyle(fontWeight: FontWeight.w800),
           ),
         ),
       ],

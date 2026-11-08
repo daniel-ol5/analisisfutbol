@@ -1,23 +1,21 @@
 /**
  * Editor de alineación y formación  —  CU-17 · T-051 (HU-14).
  *
- * El DT o el asistente eligen la formación, pasan jugadores del plantel a
- * titulares o al banco, los acomodan en la cancha y designan al capitán. El
- * analista ve la alineación pero no la cambia (el backend tampoco lo deja).
+ * El DT o el asistente eligen un partido de la agenda (CU-15), la formación,
+ * pasan jugadores del plantel a titulares o al banco, los acomodan en la cancha
+ * y designan al capitán. El plantel es el del equipo del partido.
  *
- * PROVISORIO hasta CU-15 (Susana): sin `GET /deportivo/partidos` no hay agenda
- * ni forma de saber el equipo de un partido, así que se eligen a mano el equipo
- * y el número de partido. Si el equipo no es el del partido, el backend
- * rechaza el guardado con un 422 que se muestra tal cual.
+ * Solo se edita con rol ADMIN, DT o ASISTENTE y con el partido PROGRAMADO o
+ * EN_CURSO, igual que en el backend; en otro caso la alineación es de consulta.
  */
-import { useMemo, useState, type FormEvent } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { useSesion } from "@/features/seguridad";
 import { mensajeDeError } from "@/shared/lib/errors";
-import { Alert, Badge, Button, Input, Select } from "@/shared/ui";
+import { Alert, Badge, Button, Select } from "@/shared/ui";
 
-import { guardarAlineacion, listarEquipos, listarJugadores, obtenerAlineacion } from "../api";
+import { guardarAlineacion, listarJugadores, obtenerAlineacion } from "../api";
 import {
   TITULARES,
   alineacionVacia,
@@ -29,6 +27,8 @@ import {
   marcarCapitan,
   mover,
   aPedido,
+  nombrePartido,
+  partidoEditable,
   problemas,
   puedeEditarAlineacion,
   reubicar,
@@ -36,123 +36,128 @@ import {
   type EstadoAlineacion,
   type RolEnAlineacion,
 } from "../alineacion";
+import { useEquiposAgenda, usePartidos } from "../hooks";
 import {
   ETIQUETAS_POSICION,
   FORMACIONES,
   type Alineacion,
   type Formacion,
   type Jugador,
+  type Partido,
   type Posicion,
 } from "../types";
 import { CanchaTactica } from "./CanchaTactica";
 import "./alineacion.css";
 
-interface Seleccion {
-  equipoId: number;
-  partidoId: number;
-}
+const SIN_FILTROS = {};
 
-export function AlineacionView() {
+export function AlineacionView({ partidoInicialId = null }: { partidoInicialId?: number | null }) {
   const rol = useSesion()?.usuario.rol;
-  const editable = puedeEditarAlineacion(rol);
-  const [seleccion, setSeleccion] = useState<Seleccion | null>(null);
+  const puedeEditar = puedeEditarAlineacion(rol);
+
+  const partidos = usePartidos(SIN_FILTROS);
+  const equipos = useEquiposAgenda();
+  const [elegido, setElegido] = useState<number | null>(partidoInicialId);
+
+  const lista = useMemo(() => partidos.data ?? [], [partidos.data]);
+  const grupos = useMemo(() => {
+    const porFecha = (a: Partido, b: Partido) =>
+      new Date(a.fecha_hora).getTime() - new Date(b.fecha_hora).getTime();
+    return {
+      proximos: lista.filter(partidoEditable).sort(porFecha),
+      jugados: lista.filter((p) => !partidoEditable(p)).sort((a, b) => porFecha(b, a)),
+    };
+  }, [lista]);
+  // Sin elección, el próximo partido; si no hay, el último jugado.
+  const partidoId = elegido ?? grupos.proximos[0]?.id ?? grupos.jugados[0]?.id ?? null;
+  const partido = lista.find((p) => p.id === partidoId) ?? null;
+
+  const nombresEquipo = useMemo(
+    () => new Map(equipos.data?.map((e) => [e.id, e.nombre]) ?? []),
+    [equipos.data],
+  );
+  const conEquipo = (p: Partido) =>
+    nombresEquipo.size > 1 ? ` · ${nombresEquipo.get(p.equipo_id) ?? ""}` : "";
+
+  if (partidos.isLoading) return <p className="alin-cargando">Cargando partidos…</p>;
+  if (partidos.isError) {
+    return (
+      <Alert tono="error" titulo="No se pudo cargar la agenda de partidos">
+        {mensajeDeError(partidos.error)}
+      </Alert>
+    );
+  }
+  if (lista.length === 0) {
+    return (
+      <Alert tono="info" titulo="Todavía no hay partidos">
+        Programa un partido en la pestaña «Competiciones y Calendario» para armar su alineación.
+      </Alert>
+    );
+  }
+
+  const editable = puedeEditar && partido !== null && partidoEditable(partido);
 
   return (
     <div className="alin">
-      <ElegirPartido onElegir={setSeleccion} actual={seleccion} />
-      {!editable && (
+      <div className="alin-elegir">
+        <Select
+          etiqueta="Partido"
+          value={partidoId ?? ""}
+          onChange={(e) => setElegido(Number(e.currentTarget.value))}
+        >
+          {grupos.proximos.length > 0 && (
+            <optgroup label="Próximos">
+              {grupos.proximos.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {nombrePartido(p)}
+                  {conEquipo(p)}
+                  {p.estado === "EN_CURSO" ? " · En curso" : ""}
+                </option>
+              ))}
+            </optgroup>
+          )}
+          {grupos.jugados.length > 0 && (
+            <optgroup label="Jugados y cancelados">
+              {grupos.jugados.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {nombrePartido(p)}
+                  {conEquipo(p)}
+                  {p.estado === "CANCELADO" ? " · Cancelado" : ""}
+                </option>
+              ))}
+            </optgroup>
+          )}
+        </Select>
+      </div>
+
+      {!puedeEditar && (
         <Alert tono="info">
           Tu rol puede ver la alineación, pero solo el DT, el asistente o un administrador pueden
           cambiarla.
         </Alert>
       )}
-      {seleccion && (
-        <CargarAlineacion
-          key={`${seleccion.equipoId}-${seleccion.partidoId}`}
-          {...seleccion}
-          editable={editable}
-        />
+      {puedeEditar && partido !== null && !partidoEditable(partido) && (
+        <Alert tono="info">
+          Este partido ya no está programado ni en curso: su alineación queda solo para consulta.
+        </Alert>
       )}
+
+      {partido && <CargarAlineacion key={partido.id} partido={partido} editable={editable} />}
     </div>
-  );
-}
-
-// ---------------- Elegir equipo y partido (provisorio hasta CU-15) ----------------
-
-function ElegirPartido({
-  actual,
-  onElegir,
-}: {
-  actual: Seleccion | null;
-  onElegir: (s: Seleccion) => void;
-}) {
-  const { data: equipos = [], isLoading } = useQuery({
-    queryKey: ["equipos", { activos: true }],
-    queryFn: () => listarEquipos(true),
-    retry: 1,
-  });
-  const [equipoElegido, setEquipoId] = useState<number | null>(actual?.equipoId ?? null);
-  // Mientras no se elija uno, el primer equipo del club.
-  const equipoId = equipoElegido ?? equipos[0]?.id ?? null;
-  const [numero, setNumero] = useState(actual ? String(actual.partidoId) : "");
-  const [error, setError] = useState<string | undefined>();
-
-  const enviar = (e: FormEvent) => {
-    e.preventDefault();
-    const partidoId = Number(numero.trim());
-    if (!Number.isInteger(partidoId) || partidoId < 1) {
-      setError("Escribe un número de partido válido.");
-      return;
-    }
-    if (equipoId === null) return;
-    setError(undefined);
-    onElegir({ equipoId, partidoId });
-  };
-
-  return (
-    <form className="alin-elegir" onSubmit={enviar}>
-      <Select
-        etiqueta="Equipo del partido"
-        value={equipoId ?? ""}
-        onChange={(e) => setEquipoId(Number(e.target.value))}
-        disabled={isLoading || equipos.length === 0}
-      >
-        {equipos.length === 0 && (
-          <option value="">{isLoading ? "Cargando…" : "Sin equipos"}</option>
-        )}
-        {equipos.map((eq) => (
-          <option key={eq.id} value={eq.id}>
-            {eq.nombre}
-            {eq.categoria ? ` · ${eq.categoria}` : ""}
-          </option>
-        ))}
-      </Select>
-      <Input
-        etiqueta="Número de partido"
-        inputMode="numeric"
-        value={numero}
-        onChange={(e) => setNumero(e.target.value)}
-        error={error}
-        ayuda="Provisorio: la agenda de partidos (CU-15) todavía no está disponible."
-      />
-      <Button type="submit" disabled={equipoId === null}>
-        Abrir alineación
-      </Button>
-    </form>
   );
 }
 
 // ---------------- Carga de plantel + alineación ----------------
 
-function CargarAlineacion({ equipoId, partidoId, editable }: Seleccion & { editable: boolean }) {
+function CargarAlineacion({ partido, editable }: { partido: Partido; editable: boolean }) {
   const plantel = useQuery({
-    queryKey: ["jugadores", equipoId, { activos: true, orden: "dorsal" }],
-    queryFn: () => listarJugadores(equipoId, true, "dorsal"),
+    queryKey: ["jugadores", partido.equipo_id, { activos: true, orden: "dorsal" }],
+    queryFn: () => listarJugadores(partido.equipo_id, true, "dorsal"),
     retry: 1,
   });
   const alineacion = useQuery({
-    queryKey: ["alineacion", partidoId],
-    queryFn: () => obtenerAlineacion(partidoId),
+    queryKey: ["alineacion", partido.id],
+    queryFn: () => obtenerAlineacion(partido.id),
     retry: false,
   });
 
@@ -162,14 +167,17 @@ function CargarAlineacion({ equipoId, partidoId, editable }: Seleccion & { edita
   if (plantel.isError || alineacion.isError) {
     const error = plantel.error ?? alineacion.error;
     return (
-      <Alert tono="error" titulo={`No se pudo abrir el partido ${partidoId}`}>
+      <Alert tono="error" titulo="No se pudo abrir la alineación">
         {mensajeDeError(error)}
       </Alert>
     );
   }
+  if (!editable && alineacion.data === null) {
+    return <Alert tono="info">Este partido no tiene alineación guardada.</Alert>;
+  }
   return (
     <Editor
-      partidoId={partidoId}
+      partido={partido}
       plantel={plantel.data ?? []}
       guardada={alineacion.data ?? null}
       editable={editable}
@@ -182,12 +190,12 @@ function CargarAlineacion({ equipoId, partidoId, editable }: Seleccion & { edita
 const ORDEN_POSICION: Record<Posicion, number> = { ARQ: 0, DEF: 1, MED: 2, DEL: 3 };
 
 function Editor({
-  partidoId,
+  partido,
   plantel,
   guardada,
   editable,
 }: {
-  partidoId: number;
+  partido: Partido;
   plantel: Jugador[];
   guardada: Alineacion | null;
   editable: boolean;
@@ -212,9 +220,9 @@ function Editor({
   const titulares = cantidadTitulares(estado);
 
   const guardar = useMutation({
-    mutationFn: () => guardarAlineacion(partidoId, aPedido(estado)),
+    mutationFn: () => guardarAlineacion(partido.id, aPedido(estado)),
     onSuccess: (respuesta) => {
-      queryClient.setQueryData(["alineacion", partidoId], respuesta);
+      queryClient.setQueryData(["alineacion", partido.id], respuesta);
       setHuellaGuardada(huella(estado));
       setExito(true);
     },
@@ -234,10 +242,10 @@ function Editor({
   }, [plantel, estado]);
 
   return (
-    <section className="alin-editor" aria-label={`Alineación del partido ${partidoId}`}>
+    <section className="alin-editor" aria-label={`Alineación ${nombrePartido(partido)}`}>
       <div className="alin-barra">
         <div className="alin-barra-titulo">
-          <h3>Partido {partidoId}</h3>
+          <h3>{nombrePartido(partido)}</h3>
           {guardada === null && huellaGuardada === null && (
             <Badge tono="info">Sin alineación guardada</Badge>
           )}
