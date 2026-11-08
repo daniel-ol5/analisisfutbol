@@ -135,4 +135,3 @@ export async function lanzarProceso(videoId: number, datos: LanzarProceso): Prom
 export async function cancelarProceso(videoId: number): Promise<void> {
   await api.delete(`/vision/videos/${videoId}/procesar`);
 }
-}
