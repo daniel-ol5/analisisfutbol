@@ -78,6 +78,23 @@ void main() {
       expect(agenda.jugados.last.conResultado, isTrue);
     });
 
+    test('filtro por momento: próximos, jugados con resultado y cancelados', () {
+      List<int> ids(FiltroAgenda f) => f.aplicar(_partidos()).map((p) => p.id).toList();
+      expect(ids(const FiltroAgenda()), [1, 2, 3, 4, 5]);
+      expect(ids(const FiltroAgenda(momento: Momento.proximos)), [3, 4, 5]);
+      expect(ids(const FiltroAgenda(momento: Momento.jugados)), [1]);
+      expect(ids(const FiltroAgenda(momento: Momento.cancelados)), [2]);
+    });
+
+    test('filtro por equipo, combinable con el momento', () {
+      List<int> ids(FiltroAgenda f) => f.aplicar(_partidos()).map((p) => p.id).toList();
+      expect(ids(const FiltroAgenda(equipoId: 2)), [5]);
+      expect(ids(const FiltroAgenda(momento: Momento.proximos, equipoId: 1)), [3, 4]);
+      expect(const FiltroAgenda().activo, isFalse);
+      expect(const FiltroAgenda().conEquipo(2).activo, isTrue);
+      expect(const FiltroAgenda(momento: Momento.jugados).conEquipo(1).momento, Momento.jugados);
+    });
+
     test('la fecha llega en UTC y se muestra en la hora local', () {
       final p = Partido.fromJson(_json.first);
       expect(p.fechaHora.isUtc, isFalse);
@@ -124,7 +141,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Próximos (3)'), findsOneWidget);
-      expect(find.text('Jugados (2)'), findsOneWidget);
+      expect(find.text('Anteriores (2)'), findsOneWidget);
       expect(find.text('vs Always Ready'), findsOneWidget);
       expect(find.text('En curso'), findsOneWidget);
       expect(find.text('Cancelado'), findsOneWidget);
@@ -140,7 +157,10 @@ void main() {
           obtener: _desdeServidor, enCache: _sinCache, equipos: _dosEquipos)));
       await tester.pumpAndSettle();
 
-      expect(find.textContaining('Reserva'), findsOneWidget);
+      expect(
+          find.descendant(
+              of: find.byType(TarjetaPartido), matching: find.textContaining('Reserva')),
+          findsOneWidget);
     });
 
     testWidgets('un toque en el partido abre su alineación', (tester) async {
@@ -192,6 +212,85 @@ void main() {
 
       expect(find.text('Sin conexión con el servidor.'), findsOneWidget);
       expect(find.widgetWithText(OutlinedButton, 'Reintentar'), findsOneWidget);
+    });
+
+    testWidgets('los chips filtran la agenda sin volver a pedirla', (tester) async {
+      await _pantallaAlta(tester);
+      var pedidos = 0;
+      Future<List<Partido>> contar() async {
+        pedidos++;
+        return _partidos();
+      }
+
+      await tester.pumpWidget(_app(
+          AgendaPagina(obtener: contar, enCache: _sinCache, equipos: _unEquipo)));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.widgetWithText(ChoiceChip, 'Jugados'));
+      await tester.pumpAndSettle();
+      expect(find.text('vs Bolívar'), findsOneWidget);
+      expect(find.text('vs Always Ready'), findsNothing);
+      expect(find.text('vs The Strongest'), findsNothing); // cancelado
+
+      await tester.tap(find.widgetWithText(ChoiceChip, 'Cancelados'));
+      await tester.pumpAndSettle();
+      expect(find.text('vs The Strongest'), findsOneWidget);
+      expect(find.text('vs Bolívar'), findsNothing);
+      expect(pedidos, 1);
+    });
+
+    testWidgets('con un solo equipo no aparece el filtro por equipo', (tester) async {
+      await _pantallaAlta(tester);
+      await tester.pumpWidget(_app(const AgendaPagina(
+          obtener: _desdeServidor, enCache: _sinCache, equipos: _unEquipo)));
+      await tester.pumpAndSettle();
+      expect(find.text('Todos los equipos'), findsNothing);
+    });
+
+    testWidgets('con varios equipos se filtra por equipo', (tester) async {
+      await _pantallaAlta(tester);
+      await tester.pumpWidget(_app(const AgendaPagina(
+          obtener: _desdeServidor, enCache: _sinCache, equipos: _dosEquipos)));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.widgetWithText(ChoiceChip, 'Reserva'));
+      await tester.pumpAndSettle();
+      expect(find.text('vs Oriente'), findsOneWidget);
+      expect(find.text('vs Wilstermann'), findsNothing);
+      expect(find.text('Próximos (1)'), findsOneWidget);
+    });
+
+    testWidgets('si nada coincide, ofrece quitar los filtros', (tester) async {
+      await _pantallaAlta(tester);
+      await tester.pumpWidget(_app(const AgendaPagina(
+          obtener: _desdeServidor, enCache: _sinCache, equipos: _dosEquipos)));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.widgetWithText(ChoiceChip, 'Reserva'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(ChoiceChip, 'Cancelados'));
+      await tester.pumpAndSettle();
+      expect(find.text('Ningún partido coincide con los filtros.'), findsOneWidget);
+
+      await tester.tap(find.widgetWithText(OutlinedButton, 'Quitar filtros'));
+      await tester.pumpAndSettle();
+      expect(find.text('vs Always Ready'), findsOneWidget);
+    });
+
+    testWidgets('los filtros también funcionan sin conexión', (tester) async {
+      await _pantallaAlta(tester);
+      Future<List<Partido>> sinRed() => throw const SocketException('sin red');
+      Future<AgendaGuardada?> guardada() async => AgendaGuardada(
+          partidos: _partidos(), guardado: DateTime(2026, 11, 7, 9, 30));
+
+      await tester.pumpWidget(_app(
+          AgendaPagina(obtener: sinRed, enCache: guardada, equipos: _unEquipo)));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.widgetWithText(ChoiceChip, 'Próximos'));
+      await tester.pumpAndSettle();
+      expect(find.text('Próximos (3)'), findsOneWidget);
+      expect(find.textContaining('Anteriores'), findsNothing);
     });
 
     testWidgets('agenda vacía lo dice claramente', (tester) async {

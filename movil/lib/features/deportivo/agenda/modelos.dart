@@ -59,6 +59,44 @@ class Partido {
       );
 }
 
+/// Filtros básicos de la agenda (T-052). Se aplican en el teléfono sobre la
+/// agenda descargada, así que también funcionan sin conexión.
+enum Momento {
+  todos('Todos'),
+  proximos('Próximos'),
+  jugados('Jugados'),
+  cancelados('Cancelados');
+
+  const Momento(this.etiqueta);
+  final String etiqueta;
+
+  bool incluye(Partido p) => switch (this) {
+        Momento.todos => true,
+        Momento.proximos => p.pendiente,
+        Momento.jugados => p.conResultado,
+        Momento.cancelados => p.cancelado,
+      };
+}
+
+class FiltroAgenda {
+  const FiltroAgenda({this.momento = Momento.todos, this.equipoId});
+
+  final Momento momento;
+
+  /// null = todos los equipos del club.
+  final int? equipoId;
+
+  bool get activo => momento != Momento.todos || equipoId != null;
+
+  List<Partido> aplicar(List<Partido> partidos) => [
+        for (final p in partidos)
+          if (momento.incluye(p) && (equipoId == null || p.equipoId == equipoId)) p,
+      ];
+
+  FiltroAgenda conMomento(Momento m) => FiltroAgenda(momento: m, equipoId: equipoId);
+  FiltroAgenda conEquipo(int? id) => FiltroAgenda(momento: momento, equipoId: id);
+}
+
 /// La agenda separada como se lee en la cancha: lo que viene primero.
 class Agenda {
   Agenda(List<Partido> partidos)
@@ -70,7 +108,7 @@ class Agenda {
   /// En curso arriba; después los programados, del más cercano al más lejano.
   final List<Partido> proximos;
 
-  /// Jugados y cancelados, del más reciente al más antiguo.
+  /// Jugados y cancelados ("Anteriores"), del más reciente al más antiguo.
   final List<Partido> jugados;
 
   bool get vacia => proximos.isEmpty && jugados.isEmpty;

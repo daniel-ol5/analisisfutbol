@@ -41,7 +41,9 @@ class AgendaPagina extends StatefulWidget {
 }
 
 class _AgendaPaginaState extends State<AgendaPagina> {
-  Agenda? _agenda;
+  /// Toda la agenda descargada; los filtros se aplican al dibujar.
+  List<Partido>? _partidos;
+  FiltroAgenda _filtro = const FiltroAgenda();
   Map<int, String> _equipos = {};
   bool _cargando = true;
 
@@ -64,9 +66,9 @@ class _AgendaPaginaState extends State<AgendaPagina> {
   Future<void> _cargar() async {
     setState(() => _cargando = true);
     final guardada = await widget.enCache();
-    if (mounted && guardada != null && _agenda == null) {
+    if (mounted && guardada != null && _partidos == null) {
       setState(() {
-        _agenda = Agenda(guardada.partidos);
+        _partidos = guardada.partidos;
         _descargada = guardada.guardado;
         _sinConexion = true; // hasta que responda el servidor
       });
@@ -75,7 +77,7 @@ class _AgendaPaginaState extends State<AgendaPagina> {
       final partidos = await widget.obtener();
       if (!mounted) return;
       setState(() {
-        _agenda = Agenda(partidos);
+        _partidos = partidos;
         _descargada = DateTime.now();
         _sinConexion = false;
         _error = null;
@@ -89,8 +91,8 @@ class _AgendaPaginaState extends State<AgendaPagina> {
     } catch (_) {
       if (!mounted) return;
       setState(() {
-        _sinConexion = _agenda != null;
-        _error = _agenda == null ? 'Sin conexión con el servidor.' : null;
+        _sinConexion = _partidos != null;
+        _error = _partidos == null ? 'Sin conexión con el servidor.' : null;
       });
     } finally {
       if (mounted) setState(() => _cargando = false);
@@ -99,7 +101,8 @@ class _AgendaPaginaState extends State<AgendaPagina> {
 
   @override
   Widget build(BuildContext context) {
-    final agenda = _agenda;
+    final todos = _partidos;
+    final agenda = todos == null ? null : Agenda(_filtro.aplicar(todos));
     final t = Theme.of(context);
     // El nombre del equipo solo aporta si el club tiene más de uno.
     final mostrarEquipo = _equipos.length > 1;
@@ -125,8 +128,22 @@ class _AgendaPaginaState extends State<AgendaPagina> {
               OutlinedButton(onPressed: _cargar, child: const Text('Reintentar')),
               const SizedBox(height: 12),
             ],
-            if (agenda != null && agenda.vacia)
+            if (todos != null && todos.isNotEmpty)
+              _Filtros(
+                filtro: _filtro,
+                equipos: mostrarEquipo ? _equipos : const {},
+                onCambiar: (f) => setState(() => _filtro = f),
+              ),
+            if (todos != null && todos.isEmpty)
               Text('Todavía no hay partidos programados.', style: t.textTheme.bodyLarge),
+            if (todos != null && todos.isNotEmpty && agenda!.vacia) ...[
+              Text('Ningún partido coincide con los filtros.', style: t.textTheme.bodyLarge),
+              const SizedBox(height: 8),
+              OutlinedButton(
+                onPressed: () => setState(() => _filtro = const FiltroAgenda()),
+                child: const Text('Quitar filtros'),
+              ),
+            ],
             if (agenda != null && agenda.proximos.isNotEmpty) ...[
               _Titulo('Próximos (${agenda.proximos.length})'),
               for (final p in agenda.proximos)
@@ -136,7 +153,7 @@ class _AgendaPaginaState extends State<AgendaPagina> {
                 ),
             ],
             if (agenda != null && agenda.jugados.isNotEmpty) ...[
-              _Titulo('Jugados (${agenda.jugados.length})'),
+              _Titulo('Anteriores (${agenda.jugados.length})'),
               for (final p in agenda.jugados)
                 TarjetaPartido(
                   partido: p,
@@ -148,6 +165,95 @@ class _AgendaPaginaState extends State<AgendaPagina> {
       ),
     );
   }
+}
+
+/// Chips de filtro: grandes y en una fila deslizable, para usar con una mano.
+class _Filtros extends StatelessWidget {
+  const _Filtros({required this.filtro, required this.equipos, required this.onCambiar});
+
+  final FiltroAgenda filtro;
+
+  /// Vacío si el club tiene un solo equipo: entonces no se muestra esa fila.
+  final Map<int, String> equipos;
+  final ValueChanged<FiltroAgenda> onCambiar;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _Fila(
+            etiqueta: 'Filtrar por momento',
+            chips: [
+              for (final m in Momento.values)
+                _Chip(
+                  texto: m.etiqueta,
+                  elegido: filtro.momento == m,
+                  onTap: () => onCambiar(filtro.conMomento(m)),
+                ),
+            ],
+          ),
+          if (equipos.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            _Fila(
+              etiqueta: 'Filtrar por equipo',
+              chips: [
+                _Chip(
+                  texto: 'Todos los equipos',
+                  elegido: filtro.equipoId == null,
+                  onTap: () => onCambiar(filtro.conEquipo(null)),
+                ),
+                for (final e in equipos.entries)
+                  _Chip(
+                    texto: e.value,
+                    elegido: filtro.equipoId == e.key,
+                    onTap: () => onCambiar(filtro.conEquipo(e.key)),
+                  ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _Fila extends StatelessWidget {
+  const _Fila({required this.etiqueta, required this.chips});
+  final String etiqueta;
+  final List<Widget> chips;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+        label: etiqueta,
+        container: true,
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              for (final c in chips) Padding(padding: const EdgeInsets.only(right: 8), child: c),
+            ],
+          ),
+        ),
+      );
+}
+
+class _Chip extends StatelessWidget {
+  const _Chip({required this.texto, required this.elegido, required this.onTap});
+  final String texto;
+  final bool elegido;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => ChoiceChip(
+        label: Text(texto, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+        selected: elegido,
+        onSelected: (_) => onTap(),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        materialTapTargetSize: MaterialTapTargetSize.padded,
+      );
 }
 
 class TarjetaPartido extends StatelessWidget {
