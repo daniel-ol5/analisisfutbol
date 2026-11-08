@@ -2542,7 +2542,8 @@
         "tags": [
           "P3 · Visión por Computadora"
         ],
-        "summary": "CU-27 · Lanzar el procesamiento en segundo plano",
+        "summary": "CU-27 · Lanzar el procesamiento en segundo plano (T-061)",
+        "description": "Deja el video PROCESANDO, en cola. Un worker externo con GPU lo toma, corre el pipeline completo y va actualizando `progreso_pct`. Consultar el avance con `GET /videos/{id}`.",
         "operationId": "procesar_video_api_vision_videos__video_id__procesar_post",
         "security": [
           {
@@ -2591,6 +2592,12 @@
               }
             }
           },
+          "404": {
+            "description": "Partido o video inexistente, o de otro club"
+          },
+          "409": {
+            "description": "Ya se está procesando, la carga no terminó, o el partido no tiene una calibración válida"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -2608,6 +2615,7 @@
           "P3 · Visión por Computadora"
         ],
         "summary": "CU-27 · Cancelar un procesamiento en curso",
+        "description": "El video vuelve a SUBIDO. El worker se entera en su próximo lote.",
         "operationId": "cancelar_proceso_api_vision_videos__video_id__procesar_delete",
         "security": [
           {
@@ -2638,6 +2646,258 @@
                 }
               }
             }
+          },
+          "404": {
+            "description": "Partido o video inexistente, o de otro club"
+          },
+          "409": {
+            "description": "No se está procesando"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/vision/trabajos/tomar": {
+      "post": {
+        "tags": [
+          "P3 · Visión por Computadora"
+        ],
+        "summary": "T-061 · Worker: tomar el próximo video en cola",
+        "description": "Usado por `vision/procesamiento/worker.py`. Devuelve todo lo necesario para procesar sin otra consulta: homografía, modelo y colores. Un trabajo sin lotes durante 10 minutos se considera abandonado y se puede volver a tomar.",
+        "operationId": "tomar_trabajo_api_vision_trabajos_tomar_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Trabajo"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "Declarado en el contrato, pendiente de implementacion",
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
+                }
+              }
+            }
+          },
+          "204": {
+            "description": "No hay videos en cola"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/vision/videos/{video_id}/archivo": {
+      "get": {
+        "tags": [
+          "P3 · Visión por Computadora"
+        ],
+        "summary": "T-061 · Worker: descargar el video",
+        "operationId": "descargar_video_api_vision_videos__video_id__archivo_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "video_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Video Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "El video; admite `Range` para reanudar la descarga",
+            "content": {
+              "application/octet-stream": {}
+            }
+          },
+          "501": {
+            "description": "Declarado en el contrato, pendiente de implementacion",
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Partido o video inexistente, o de otro club"
+          },
+          "409": {
+            "description": "El video todavía no terminó de subirse"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/vision/videos/{video_id}/resultados": {
+      "post": {
+        "tags": [
+          "P3 · Visión por Computadora"
+        ],
+        "summary": "T-061 · Worker: enviar un lote de posiciones y el progreso",
+        "description": "Las muestras usan el mismo contrato `MensajeWorker` que la ingesta en vivo y se guardan por el mismo camino: un video procesado genera las mismas entidades que un partido en vivo.",
+        "operationId": "recibir_resultados_api_vision_videos__video_id__resultados_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "video_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Video Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResultadosLote"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Video"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "Declarado en el contrato, pendiente de implementacion",
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Partido o video inexistente, o de otro club"
+          },
+          "409": {
+            "description": "Se canceló o ya terminó: el worker debe detenerse"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/vision/videos/{video_id}/terminar": {
+      "post": {
+        "tags": [
+          "P3 · Visión por Computadora"
+        ],
+        "summary": "T-061 · Worker: cerrar el procesamiento",
+        "operationId": "terminar_proceso_api_vision_videos__video_id__terminar_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "video_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Video Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FinTrabajo"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Video"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "Declarado en el contrato, pendiente de implementacion",
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Partido o video inexistente, o de otro club"
+          },
+          "409": {
+            "description": "No se está procesando"
           },
           "422": {
             "description": "Validation Error",
@@ -6043,6 +6303,32 @@
         ],
         "title": "FilaImportacion"
       },
+      "FinTrabajo": {
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "title": "Ok"
+          },
+          "mensaje_error": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 400
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mensaje Error",
+            "description": "Obligatorio si ok=false: es lo que ve el analista en la web"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ok"
+        ],
+        "title": "FinTrabajo"
+      },
       "Formacion": {
         "type": "string",
         "enum": [
@@ -6745,7 +7031,23 @@
               }
             ],
             "title": "Modelo Id",
-            "description": "Si se omite, usa el modelo marcado como activo"
+            "description": "Si se omite, usa el modelo marcado como activo; sin modelo activo, el worker usa el YOLO preentrenado"
+          },
+          "color_rival": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^#[0-9A-Fa-f]{6}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color Rival",
+            "description": "Color de camiseta del rival en este partido. El backend solo conoce los del equipo propio; sin este dato el worker separa los equipos por K-means y toma como propio el grupo mas parecido a la camiseta registrada",
+            "examples": [
+              "#C8102E"
+            ]
           }
         },
         "type": "object",
@@ -7318,6 +7620,38 @@
           "archivo_url"
         ],
         "title": "ModeloCrear"
+      },
+      "ModeloTrabajo": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version"
+          },
+          "tipo": {
+            "$ref": "#/components/schemas/TipoModelo"
+          },
+          "archivo_url": {
+            "type": "string",
+            "title": "Archivo Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "nombre",
+          "version",
+          "tipo",
+          "archivo_url"
+        ],
+        "title": "ModeloTrabajo"
       },
       "NodoPase": {
         "properties": {
@@ -8338,6 +8672,33 @@
         ],
         "title": "ResultadoPrueba"
       },
+      "ResultadosLote": {
+        "properties": {
+          "progreso_pct": {
+            "type": "integer",
+            "maximum": 99.0,
+            "minimum": 0.0,
+            "title": "Progreso Pct",
+            "description": "Hasta 99: el 100 lo pone el backend al terminar"
+          },
+          "muestras": {
+            "items": {
+              "$ref": "#/components/schemas/MensajeWorker"
+            },
+            "type": "array",
+            "maxItems": 500,
+            "title": "Muestras",
+            "description": "Cada una con el mismo contrato que /partido/{id}/ingesta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "progreso_pct",
+          "muestras"
+        ],
+        "title": "ResultadosLote",
+        "description": "Un lote de muestras del video: las mismas que manda el worker en vivo."
+      },
       "Rol": {
         "type": "string",
         "enum": [
@@ -8443,6 +8804,123 @@
         ],
         "title": "TokenIngesta",
         "description": "T-033. Credencial del worker para publicar en /ingesta de un solo partido."
+      },
+      "Trabajo": {
+        "properties": {
+          "video_id": {
+            "type": "integer",
+            "title": "Video Id"
+          },
+          "partido_id": {
+            "type": "integer",
+            "title": "Partido Id"
+          },
+          "archivo": {
+            "type": "string",
+            "title": "Archivo",
+            "description": "Ruta de descarga del video, relativa a la API"
+          },
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "tamano_bytes": {
+            "type": "integer",
+            "title": "Tamano Bytes"
+          },
+          "fps": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fps"
+          },
+          "duracion_s": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duracion S"
+          },
+          "modelo": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModeloTrabajo"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null: usar el YOLO preentrenado (no hay modelo activo en el club)"
+          },
+          "matriz_h": {
+            "items": {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            "type": "array",
+            "title": "Matriz H",
+            "description": "Homografia pixeles a metros (CU-26)"
+          },
+          "largo_m": {
+            "type": "number",
+            "title": "Largo M"
+          },
+          "ancho_m": {
+            "type": "number",
+            "title": "Ancho M"
+          },
+          "es_local": {
+            "type": "boolean",
+            "title": "Es Local",
+            "description": "Si el equipo propio es el LOCAL del mensaje"
+          },
+          "color_propio": {
+            "type": "string",
+            "title": "Color Propio",
+            "description": "Camiseta del equipo propio en este partido"
+          },
+          "color_rival": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color Rival"
+          }
+        },
+        "type": "object",
+        "required": [
+          "video_id",
+          "partido_id",
+          "archivo",
+          "nombre",
+          "tamano_bytes",
+          "fps",
+          "duracion_s",
+          "modelo",
+          "matriz_h",
+          "largo_m",
+          "ancho_m",
+          "es_local",
+          "color_propio",
+          "color_rival"
+        ],
+        "title": "Trabajo",
+        "description": "Todo lo que el worker necesita para procesar un video sin consultar nada mas."
       },
       "TrackDetectado": {
         "properties": {

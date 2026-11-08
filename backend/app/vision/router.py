@@ -9,18 +9,23 @@ Responsables segun el Sprint Planning:
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, Request, Response, status
+from fastapi.responses import FileResponse
 
 from app.core.deps import Actual, Db, requiere_rol
 from app.core.pendiente import RESPUESTA_501, pendiente
-from app.vision import service, videos
+from app.partido.service import AlmacenPosiciones, obtener_almacen_posiciones
+from app.vision import procesamiento, service, videos
 from app.vision.almacen import AlmacenVideos, obtener_almacen_videos
 from app.vision.schemas import (
     Calibracion,
     CalibracionGuardar,
     ErrorCalibracion,
+    FinTrabajo,
     LanzarProceso,
     Modelo,
     ModeloCrear,
+    ResultadosLote,
+    Trabajo,
     Video,
     VideoIniciar,
 )
@@ -189,13 +194,91 @@ async def estado_video(video_id: int, usuario: Actual, db: Db) -> Video:
     return Video.model_validate(await videos.ver_video(db, usuario, video_id))
 
 
+# ---------------- CU-27 · Procesamiento diferido (T-061) ----------------
+
+# CU-27 lo lanza el analista; el worker se autentica como ADMIN o ANALISTA.
+PUEDEN_PROCESAR = Depends(requiere_rol("ADMIN", "ANALISTA"))
+
+PosicionesDep = Annotated[AlmacenPosiciones, Depends(obtener_almacen_posiciones)]
+
+
 @router.post("/videos/{video_id}/procesar", response_model=Video,
-             summary="CU-27 · Lanzar el procesamiento en segundo plano")
+             dependencies=[PUEDEN_PROCESAR],
+             responses={
+                 **_RESPUESTA_404,
+                 409: {"description": "Ya se está procesando, la carga no terminó, o el "
+                                      "partido no tiene una calibración válida"},
+             },
+             summary="CU-27 · Lanzar el procesamiento en segundo plano (T-061)",
+             description=(
+                 "Deja el video PROCESANDO, en cola. Un worker externo con GPU lo toma, corre "
+                 "el pipeline completo y va actualizando `progreso_pct`. Consultar el avance "
+                 "con `GET /videos/{id}`."
+             ))
 async def procesar_video(video_id: int, datos: LanzarProceso, usuario: Actual, db: Db) -> Video:
-    pendiente("CU-27", "Sprint 3", "Araceli")
+    return Video.model_validate(await procesamiento.lanzar(db, usuario, video_id, datos))
 
 
 @router.delete("/videos/{video_id}/procesar", status_code=status.HTTP_204_NO_CONTENT,
-               summary="CU-27 · Cancelar un procesamiento en curso")
+               dependencies=[PUEDEN_PROCESAR],
+               responses={**_RESPUESTA_404, 409: {"description": "No se está procesando"}},
+               summary="CU-27 · Cancelar un procesamiento en curso",
+               description="El video vuelve a SUBIDO. El worker se entera en su próximo lote.")
 async def cancelar_proceso(video_id: int, usuario: Actual, db: Db) -> None:
-    pendiente("CU-27", "Sprint 3", "Araceli")
+    await procesamiento.cancelar(db, usuario, video_id)
+
+
+@router.post("/trabajos/tomar", response_model=Trabajo,
+             dependencies=[PUEDEN_PROCESAR],
+             responses={204: {"description": "No hay videos en cola"}},
+             summary="T-061 · Worker: tomar el próximo video en cola",
+             description=(
+                 "Usado por `vision/procesamiento/worker.py`. Devuelve todo lo necesario para "
+                 "procesar sin otra consulta: homografía, modelo y colores. Un trabajo sin "
+                 "lotes durante 10 minutos se considera abandonado y se puede volver a tomar."
+             ))
+async def tomar_trabajo(usuario: Actual, db: Db) -> Trabajo | Response:
+    trabajo = await procesamiento.tomar(db, usuario)
+    return trabajo if trabajo is not None else Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/videos/{video_id}/archivo",
+            dependencies=[PUEDEN_PROCESAR],
+            response_class=FileResponse,
+            responses={
+                **_RESPUESTA_404,
+                200: {"content": {"application/octet-stream": {}},
+                      "description": "El video; admite `Range` para reanudar la descarga"},
+                409: {"description": "El video todavía no terminó de subirse"},
+            },
+            summary="T-061 · Worker: descargar el video")
+async def descargar_video(video_id: int, usuario: Actual, db: Db,
+                          almacen: AlmacenDep) -> FileResponse:
+    ruta = await procesamiento.archivo(db, usuario, video_id, almacen)
+    return FileResponse(ruta, media_type="application/octet-stream")
+
+
+@router.post("/videos/{video_id}/resultados", response_model=Video,
+             dependencies=[PUEDEN_PROCESAR],
+             responses={
+                 **_RESPUESTA_404,
+                 409: {"description": "Se canceló o ya terminó: el worker debe detenerse"},
+             },
+             summary="T-061 · Worker: enviar un lote de posiciones y el progreso",
+             description=(
+                 "Las muestras usan el mismo contrato `MensajeWorker` que la ingesta en vivo y "
+                 "se guardan por el mismo camino: un video procesado genera las mismas "
+                 "entidades que un partido en vivo."
+             ))
+async def recibir_resultados(video_id: int, lote: ResultadosLote, usuario: Actual, db: Db,
+                             posiciones: PosicionesDep) -> Video:
+    video = await procesamiento.recibir_resultados(db, usuario, video_id, lote, posiciones)
+    return Video.model_validate(video)
+
+
+@router.post("/videos/{video_id}/terminar", response_model=Video,
+             dependencies=[PUEDEN_PROCESAR],
+             responses={**_RESPUESTA_404, 409: {"description": "No se está procesando"}},
+             summary="T-061 · Worker: cerrar el procesamiento")
+async def terminar_proceso(video_id: int, fin: FinTrabajo, usuario: Actual, db: Db) -> Video:
+    return Video.model_validate(await procesamiento.terminar(db, usuario, video_id, fin))

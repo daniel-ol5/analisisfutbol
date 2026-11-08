@@ -104,7 +104,7 @@ async def _verificando_firma(
         yield pendiente
 
 
-async def _video_del_club(db: AsyncSession, usuario: UsuarioActual, video_id: int) -> Video:
+async def video_del_club(db: AsyncSession, usuario: UsuarioActual, video_id: int) -> Video:
     stmt = del_club(Video, usuario).where(Video.id == video_id)
     return verificar_pertenencia((await db.execute(stmt)).scalar_one_or_none(), usuario)
 
@@ -127,7 +127,7 @@ async def listar_videos(db: AsyncSession, usuario: UsuarioActual, partido_id: in
 
 async def ver_video(db: AsyncSession, usuario: UsuarioActual, video_id: int) -> Video:
     """CU-27, CU-28: estado de la carga y del procesamiento."""
-    return await _video_del_club(db, usuario, video_id)
+    return await video_del_club(db, usuario, video_id)
 
 
 async def iniciar_carga(
@@ -192,7 +192,7 @@ async def recibir_trozo(
     almacen: AlmacenVideos,
 ) -> Video:
     """T-060 paso 2: guarda un trozo. Van en orden y sin huecos."""
-    video = await _video_del_club(db, usuario, video_id)
+    video = await video_del_club(db, usuario, video_id)
     if video.estado != EstadoVideo.CARGANDO:
         raise HTTPException(status.HTTP_409_CONFLICT, "La carga de este video ya terminó")
 

@@ -11,6 +11,8 @@ from typing import Annotated, Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from app.partido.schemas import MensajeWorker
+
 
 class TipoModelo(StrEnum):
     DETECCION = "DETECCION"
@@ -168,6 +170,75 @@ class Video(BaseModel):
     procesado_en: datetime | None = None
 
 
+_HEX = r"^#[0-9A-Fa-f]{6}$"
+
+
 class LanzarProceso(BaseModel):
     modelo_id: int | None = Field(default=None,
-        description="Si se omite, usa el modelo marcado como activo")
+        description="Si se omite, usa el modelo marcado como activo; sin modelo activo, "
+                    "el worker usa el YOLO preentrenado")
+    color_rival: str | None = Field(default=None, pattern=_HEX, examples=["#C8102E"],
+        description="Color de camiseta del rival en este partido. El backend solo conoce los "
+                    "del equipo propio; sin este dato el worker separa los equipos por K-means "
+                    "y toma como propio el grupo mas parecido a la camiseta registrada")
+
+
+# ---------- T-061 Procesamiento diferido: contrato del worker ----------
+#
+# El worker corre en la maquina con GPU (vision/procesamiento/worker.py), se
+# autentica como un usuario ADMIN o ANALISTA del club y:
+#   1. POST /trabajos/tomar          toma el video PROCESANDO mas antiguo
+#   2. GET  /videos/{id}/archivo     lo descarga (admite Range)
+#   3. POST /videos/{id}/resultados  manda lotes de MensajeWorker + progreso
+#   4. POST /videos/{id}/terminar    cierra con exito o con el motivo del error
+# Un 409 en (3) significa que el procesamiento se cancelo: el worker se detiene.
+
+
+class ModeloTrabajo(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    nombre: str
+    version: str
+    tipo: TipoModelo
+    archivo_url: str
+
+
+class Trabajo(BaseModel):
+    """Todo lo que el worker necesita para procesar un video sin consultar nada mas."""
+
+    video_id: int
+    partido_id: int
+    archivo: str = Field(description="Ruta de descarga del video, relativa a la API")
+    nombre: str
+    tamano_bytes: int
+    fps: int | None
+    duracion_s: int | None
+    modelo: ModeloTrabajo | None = Field(
+        description="null: usar el YOLO preentrenado (no hay modelo activo en el club)")
+    matriz_h: list[list[float]] = Field(description="Homografia pixeles a metros (CU-26)")
+    largo_m: float
+    ancho_m: float
+    es_local: bool = Field(description="Si el equipo propio es el LOCAL del mensaje")
+    color_propio: str = Field(description="Camiseta del equipo propio en este partido")
+    color_rival: str | None
+
+
+class ResultadosLote(BaseModel):
+    """Un lote de muestras del video: las mismas que manda el worker en vivo."""
+
+    progreso_pct: int = Field(ge=0, le=99,
+        description="Hasta 99: el 100 lo pone el backend al terminar")
+    muestras: list[MensajeWorker] = Field(max_length=500,
+        description="Cada una con el mismo contrato que /partido/{id}/ingesta")
+
+
+class FinTrabajo(BaseModel):
+    ok: bool
+    mensaje_error: str | None = Field(default=None, max_length=400,
+        description="Obligatorio si ok=false: es lo que ve el analista en la web")
+
+    @model_validator(mode="after")
+    def _error_con_motivo(self) -> Self:
+        if not self.ok and not (self.mensaje_error or "").strip():
+            raise ValueError("Un procesamiento fallido necesita mensaje_error")
+        return self
