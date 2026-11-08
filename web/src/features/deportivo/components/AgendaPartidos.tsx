@@ -64,7 +64,12 @@ function Marcador({ partido }: { partido: Partido }) {
   );
 }
 
-export function AgendaPartidos() {
+interface Props {
+  /** CU-17: si se pasa, cada partido ofrece abrir su alineación. */
+  onVerAlineacion?: (partidoId: number) => void;
+}
+
+export function AgendaPartidos({ onVerAlineacion }: Props = {}) {
   const [equipoId, setEquipoId] = useState("");
   const [competicionId, setCompeticionId] = useState("");
   const [estado, setEstado] = useState<EstadoPartido | "">("");
@@ -291,9 +296,22 @@ export function AgendaPartidos() {
                     </div>
                   </div>
 
-                  {partido.estado === "EN_CURSO" && (
-                    <div className="agenda-en-vivo" aria-label="Partido en curso">
-                      <span aria-hidden="true" /> EN VIVO
+                  {(partido.estado === "EN_CURSO" || onVerAlineacion) && (
+                    <div className="agenda-lateral">
+                      {partido.estado === "EN_CURSO" && (
+                        <div className="agenda-en-vivo" aria-label="Partido en curso">
+                          <span aria-hidden="true" /> EN VIVO
+                        </div>
+                      )}
+                      {onVerAlineacion && (
+                        <Button
+                          variante="secundario"
+                          aria-label={`Alineación del partido contra ${partido.rival}`}
+                          onClick={() => onVerAlineacion(partido.id)}
+                        >
+                          Alineación
+                        </Button>
+                      )}
                     </div>
                   )}
                 </article>

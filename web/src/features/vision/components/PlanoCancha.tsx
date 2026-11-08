@@ -26,8 +26,10 @@ export interface PlanoCanchaProps {
   puntoLibrePendiente: Punto | null;
   pares: readonly ParCalibracion[];
   parSeleccionadoId: string | null;
-  /** Punto de extensión para T-031 (`ErrorCalibracion.punto_peor`, base 0). */
+  /** Índice base 0 del peor punto (`ErrorCalibracion.punto_peor`), ya comprobado. */
   indicePeor?: number | null;
+  /** Estilo de alerta (calibración NO válida) o suave (válida) para el peor punto. */
+  peorEnAlerta?: boolean;
   onSeleccionarHito: (hitoId: string) => void;
   onSeleccionarPar: (parId: string) => void;
   onElegirPuntoLibre: (puntoMetros: Punto) => void;
@@ -43,6 +45,7 @@ export function PlanoCancha({
   pares,
   parSeleccionadoId,
   indicePeor = null,
+  peorEnAlerta = true,
   onSeleccionarHito,
   onSeleccionarPar,
   onElegirPuntoLibre,
@@ -213,7 +216,7 @@ export function PlanoCancha({
               <g
                 key={par.id}
                 className={`cal-marcador-cancha ${seleccionado ? "es-seleccionado" : ""} ${
-                  esPeor ? "es-peor" : ""
+                  esPeor ? `es-peor ${peorEnAlerta ? "es-alerta" : "es-suave"}` : ""
                 }`}
                 transform={`translate(${cx}, ${cy})`}
                 onClick={(e) => {
@@ -221,7 +224,17 @@ export function PlanoCancha({
                   onSeleccionarPar(par.id);
                 }}
               >
-                <title>{`#${idx + 1} ${par.etiqueta} (${par.cancha.x} m, ${par.cancha.y} m)`}</title>
+                <title>{`#${idx + 1} ${par.etiqueta} (${par.cancha.x} m, ${par.cancha.y} m)${
+                  esPeor ? " — Mayor error de la calibración" : ""
+                }`}</title>
+                {esPeor && (
+                  <>
+                    <circle r={5} className="cal-peor-anillo" />
+                    <text y={8.6} textAnchor="middle" className="cal-peor-rotulo-cancha">
+                      ▲ Mayor error
+                    </text>
+                  </>
+                )}
                 <circle r={seleccionado ? 3.2 : 2.6} className="cal-marcador-cancha-circulo" />
                 <text y={0.9} textAnchor="middle" className="cal-marcador-cancha-texto">
                   {idx + 1}

@@ -92,6 +92,7 @@ const GRUPOS_NAV: GrupoNav[] = [
         hijos: [
           { ruta: "/vision/guia-montaje", permiso: "/vision", nombre: "Guía de montaje" },
           { ruta: "/vision/calibracion", permiso: "/vision", nombre: "Calibrar cámara" },
+          { ruta: "/vision/videos", permiso: "/vision", nombre: "Video del partido" },
         ],
       },
     ],
@@ -167,6 +168,7 @@ function obtenerSeccionActual(pathname: string): string {
   if (pathname.startsWith("/partido")) return "Operación del Partido";
   if (pathname.startsWith("/vision/guia-montaje")) return "Visión · Guía de Montaje";
   if (pathname.startsWith("/vision/calibracion")) return "Visión · Calibración de Cámara";
+  if (pathname.startsWith("/vision/videos")) return "Visión · Video del Partido";
   if (pathname.startsWith("/vision")) return "Visión por Computadora";
   if (pathname.startsWith("/analisis")) return "Análisis Táctico";
   if (pathname.startsWith("/asistencia")) return "Asistencia y Reportes";

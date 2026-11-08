@@ -27,7 +27,13 @@ import {
   RestablecerPage,
   UsuariosPage,
 } from "@/features/seguridad";
-import { CalibracionPage, GuiaMontajePage, ModelosPage, VisionPage } from "@/features/vision";
+import {
+  CalibracionPage,
+  GuiaMontajePage,
+  ModelosPage,
+  VideosPage,
+  VisionPage,
+} from "@/features/vision";
 
 export function Router() {
   return (
@@ -102,6 +108,14 @@ export function Router() {
             element={
               <RequiereRol ruta="/vision">
                 <ModelosPage />
+              </RequiereRol>
+            }
+          />
+          <Route
+            path="/vision/videos"
+            element={
+              <RequiereRol ruta="/vision">
+                <VideosPage />
               </RequiereRol>
             }
           />

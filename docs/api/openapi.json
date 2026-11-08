@@ -2181,6 +2181,7 @@
           "P3 · Visión por Computadora"
         ],
         "summary": "CU-29 · Activar una version (solo una activa por vez)",
+        "description": "El cuerpo es opcional. Sin cuerpo (o con forzar=false) se rechaza una version con mAP o IDF1 peores que la activa (T-064). Con forzar=true y un motivo se activa igual, y el motivo queda registrado (volver atras, T-059).",
         "operationId": "activar_modelo_api_vision_modelos__modelo_id__activar_post",
         "security": [
           {
@@ -2198,6 +2199,23 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/ActivarModelo"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Datos"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -2219,6 +2237,9 @@
               }
             }
           },
+          "409": {
+            "description": "T-064: tiene metricas peores que la version activa. Para volver atras, enviar forzar=true con el motivo"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -2237,7 +2258,7 @@
         "tags": [
           "P3 · Visión por Computadora"
         ],
-        "summary": "CU-28 · Listar videos del partido",
+        "summary": "CU-28 · Listar videos del partido (el más nuevo primero)",
         "operationId": "listar_videos_api_vision_partidos__partido_id__videos_get",
         "security": [
           {
@@ -2280,6 +2301,9 @@
               }
             }
           },
+          "404": {
+            "description": "Partido o video inexistente, o de otro club"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -2296,8 +2320,9 @@
         "tags": [
           "P3 · Visión por Computadora"
         ],
-        "summary": "CU-28 · Cargar video de partido",
-        "operationId": "cargar_video_api_vision_partidos__partido_id__videos_post",
+        "summary": "CU-28 · Iniciar la carga por partes de un video (T-060)",
+        "description": "Paso 1 de 3. Declara el archivo sin enviarlo: valida extensión (.mp4, .mov, .mkv), tipo MIME y tamaño, y crea el video en estado CARGANDO. Después se envía el contenido por trozos con `PUT /videos/{id}/contenido`.",
+        "operationId": "iniciar_carga_api_vision_partidos__partido_id__videos_post",
         "security": [
           {
             "HTTPBearer": []
@@ -2317,9 +2342,9 @@
         "requestBody": {
           "required": true,
           "content": {
-            "multipart/form-data": {
+            "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/Body_cargar_video_api_vision_partidos__partido_id__videos_post"
+                "$ref": "#/components/schemas/VideoIniciar"
               }
             }
           }
@@ -2345,6 +2370,18 @@
               }
             }
           },
+          "404": {
+            "description": "Partido o video inexistente, o de otro club"
+          },
+          "409": {
+            "description": "El partido está cancelado"
+          },
+          "413": {
+            "description": "El tamaño supera el máximo configurado"
+          },
+          "415": {
+            "description": "Formato no soportado: se rechaza antes de subir nada"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -2358,12 +2395,115 @@
         }
       }
     },
+    "/api/vision/videos/{video_id}/contenido": {
+      "put": {
+        "tags": [
+          "P3 · Visión por Computadora"
+        ],
+        "summary": "CU-28 · Enviar un trozo del video (T-060)",
+        "description": "Paso 2 de 3. El cuerpo son los bytes crudos del trozo y `Content-Range: bytes inicio-fin/total` dice cuáles son. Los trozos van en orden: cada uno empieza en `bytes_recibidos`. Para retomar una carga cortada, consultar `GET /videos/{id}` y seguir desde ahí. Con el último trozo el video se lee y queda SUBIDO (con duración, fps y resolución) o ERROR (con el motivo).",
+        "operationId": "enviar_trozo_api_vision_videos__video_id__contenido_put",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "video_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Video Id"
+            }
+          },
+          {
+            "name": "content-range",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Content-Range"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Video"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "Declarado en el contrato, pendiente de implementacion",
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Partido o video inexistente, o de otro club"
+          },
+          "400": {
+            "description": "Content-Range ausente o inconsistente con el cuerpo"
+          },
+          "409": {
+            "description": "El trozo no empieza donde quedó la carga (ver `bytes_recibidos`), o la carga ya terminó"
+          },
+          "413": {
+            "description": "El trozo supera el máximo por envío"
+          },
+          "415": {
+            "description": "El primer trozo no tiene la firma del formato declarado"
+          },
+          "416": {
+            "description": "El trozo se pasa del final del archivo"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/vision/videos/{video_id}": {
       "get": {
         "tags": [
           "P3 · Visión por Computadora"
         ],
-        "summary": "CU-27 · Estado del procesamiento",
+        "summary": "CU-27, CU-28 · Estado de la carga y del procesamiento",
         "operationId": "estado_video_api_vision_videos__video_id__get",
         "security": [
           {
@@ -2402,6 +2542,9 @@
               }
             }
           },
+          "404": {
+            "description": "Partido o video inexistente, o de otro club"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -2420,7 +2563,8 @@
         "tags": [
           "P3 · Visión por Computadora"
         ],
-        "summary": "CU-27 · Lanzar el procesamiento en segundo plano",
+        "summary": "CU-27 · Lanzar el procesamiento en segundo plano (T-061)",
+        "description": "Deja el video PROCESANDO, en cola. Un worker externo con GPU lo toma, corre el pipeline completo y va actualizando `progreso_pct`. Consultar el avance con `GET /videos/{id}`.",
         "operationId": "procesar_video_api_vision_videos__video_id__procesar_post",
         "security": [
           {
@@ -2469,6 +2613,12 @@
               }
             }
           },
+          "404": {
+            "description": "Partido o video inexistente, o de otro club"
+          },
+          "409": {
+            "description": "Ya se está procesando, la carga no terminó, o el partido no tiene una calibración válida"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -2486,6 +2636,7 @@
           "P3 · Visión por Computadora"
         ],
         "summary": "CU-27 · Cancelar un procesamiento en curso",
+        "description": "El video vuelve a SUBIDO. El worker se entera en su próximo lote.",
         "operationId": "cancelar_proceso_api_vision_videos__video_id__procesar_delete",
         "security": [
           {
@@ -2516,6 +2667,258 @@
                 }
               }
             }
+          },
+          "404": {
+            "description": "Partido o video inexistente, o de otro club"
+          },
+          "409": {
+            "description": "No se está procesando"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/vision/trabajos/tomar": {
+      "post": {
+        "tags": [
+          "P3 · Visión por Computadora"
+        ],
+        "summary": "T-061 · Worker: tomar el próximo video en cola",
+        "description": "Usado por `vision/procesamiento/worker.py`. Devuelve todo lo necesario para procesar sin otra consulta: homografía, modelo y colores. Un trabajo sin lotes durante 10 minutos se considera abandonado y se puede volver a tomar.",
+        "operationId": "tomar_trabajo_api_vision_trabajos_tomar_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Trabajo"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "Declarado en el contrato, pendiente de implementacion",
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
+                }
+              }
+            }
+          },
+          "204": {
+            "description": "No hay videos en cola"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/vision/videos/{video_id}/archivo": {
+      "get": {
+        "tags": [
+          "P3 · Visión por Computadora"
+        ],
+        "summary": "T-061 · Worker: descargar el video",
+        "operationId": "descargar_video_api_vision_videos__video_id__archivo_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "video_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Video Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "El video; admite `Range` para reanudar la descarga",
+            "content": {
+              "application/octet-stream": {}
+            }
+          },
+          "501": {
+            "description": "Declarado en el contrato, pendiente de implementacion",
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Partido o video inexistente, o de otro club"
+          },
+          "409": {
+            "description": "El video todavía no terminó de subirse"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/vision/videos/{video_id}/resultados": {
+      "post": {
+        "tags": [
+          "P3 · Visión por Computadora"
+        ],
+        "summary": "T-061 · Worker: enviar un lote de posiciones y el progreso",
+        "description": "Las muestras usan el mismo contrato `MensajeWorker` que la ingesta en vivo y se guardan por el mismo camino: un video procesado genera las mismas entidades que un partido en vivo.",
+        "operationId": "recibir_resultados_api_vision_videos__video_id__resultados_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "video_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Video Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResultadosLote"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Video"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "Declarado en el contrato, pendiente de implementacion",
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Partido o video inexistente, o de otro club"
+          },
+          "409": {
+            "description": "Se canceló o ya terminó: el worker debe detenerse"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/vision/videos/{video_id}/terminar": {
+      "post": {
+        "tags": [
+          "P3 · Visión por Computadora"
+        ],
+        "summary": "T-061 · Worker: cerrar el procesamiento",
+        "operationId": "terminar_proceso_api_vision_videos__video_id__terminar_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "video_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Video Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FinTrabajo"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Video"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "Declarado en el contrato, pendiente de implementacion",
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Partido o video inexistente, o de otro club"
+          },
+          "409": {
+            "description": "No se está procesando"
           },
           "422": {
             "description": "Validation Error",
@@ -4720,6 +5123,33 @@
   },
   "components": {
     "schemas": {
+      "ActivarModelo": {
+        "properties": {
+          "forzar": {
+            "type": "boolean",
+            "title": "Forzar",
+            "default": false
+          },
+          "motivo": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Motivo",
+            "examples": [
+              "v4 confunde a los arbitros con jugadores; se vuelve a v3"
+            ]
+          }
+        },
+        "type": "object",
+        "title": "ActivarModelo",
+        "description": "T-064: una version con metricas peores que la activa no se activa, salvo\nque se fuerce a proposito (volver atras, criterio de T-059) y se diga por que."
+      },
       "Alineacion": {
         "properties": {
           "id": {
@@ -4840,20 +5270,6 @@
         ],
         "title": "AvisoColores",
         "description": "CU-10: los colores de ambos equipos quedaron demasiado cerca en HSV."
-      },
-      "Body_cargar_video_api_vision_partidos__partido_id__videos_post": {
-        "properties": {
-          "archivo": {
-            "type": "string",
-            "contentMediaType": "application/octet-stream",
-            "title": "Archivo"
-          }
-        },
-        "type": "object",
-        "required": [
-          "archivo"
-        ],
-        "title": "Body_cargar_video_api_vision_partidos__partido_id__videos_post"
       },
       "Body_importar_plantel_api_deportivo_equipos__equipo_id__jugadores_importar_post": {
         "properties": {
@@ -5673,6 +6089,7 @@
       "EstadoVideo": {
         "type": "string",
         "enum": [
+          "CARGANDO",
           "SUBIDO",
           "PROCESANDO",
           "PROCESADO",
@@ -5933,6 +6350,32 @@
           "datos"
         ],
         "title": "FilaImportacion"
+      },
+      "FinTrabajo": {
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "title": "Ok"
+          },
+          "mensaje_error": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 400
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mensaje Error",
+            "description": "Obligatorio si ok=false: es lo que ve el analista en la web"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ok"
+        ],
+        "title": "FinTrabajo"
       },
       "Formacion": {
         "type": "string",
@@ -6636,7 +7079,23 @@
               }
             ],
             "title": "Modelo Id",
-            "description": "Si se omite, usa el modelo marcado como activo"
+            "description": "Si se omite, usa el modelo marcado como activo; sin modelo activo, el worker usa el YOLO preentrenado"
+          },
+          "color_rival": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^#[0-9A-Fa-f]{6}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color Rival",
+            "description": "Color de camiseta del rival en este partido. El backend solo conoce los del equipo propio; sin este dato el worker separa los equipos por K-means y toma como propio el grupo mas parecido a la camiseta registrada",
+            "examples": [
+              "#C8102E"
+            ]
           }
         },
         "type": "object",
@@ -7105,6 +7564,31 @@
             "type": "string",
             "format": "date-time",
             "title": "Entrenado En"
+          },
+          "activado_en": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Activado En",
+            "description": "Ultima vez que se activo esta version"
+          },
+          "motivo_activacion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Motivo Activacion",
+            "description": "T-064: por que se activo aunque tuviera metricas peores (volver atras)"
           }
         },
         "type": "object",
@@ -7209,6 +7693,38 @@
           "archivo_url"
         ],
         "title": "ModeloCrear"
+      },
+      "ModeloTrabajo": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version"
+          },
+          "tipo": {
+            "$ref": "#/components/schemas/TipoModelo"
+          },
+          "archivo_url": {
+            "type": "string",
+            "title": "Archivo Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "nombre",
+          "version",
+          "tipo",
+          "archivo_url"
+        ],
+        "title": "ModeloTrabajo"
       },
       "NodoPase": {
         "properties": {
@@ -8229,6 +8745,33 @@
         ],
         "title": "ResultadoPrueba"
       },
+      "ResultadosLote": {
+        "properties": {
+          "progreso_pct": {
+            "type": "integer",
+            "maximum": 99.0,
+            "minimum": 0.0,
+            "title": "Progreso Pct",
+            "description": "Hasta 99: el 100 lo pone el backend al terminar"
+          },
+          "muestras": {
+            "items": {
+              "$ref": "#/components/schemas/MensajeWorker"
+            },
+            "type": "array",
+            "maxItems": 500,
+            "title": "Muestras",
+            "description": "Cada una con el mismo contrato que /partido/{id}/ingesta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "progreso_pct",
+          "muestras"
+        ],
+        "title": "ResultadosLote",
+        "description": "Un lote de muestras del video: las mismas que manda el worker en vivo."
+      },
       "Rol": {
         "type": "string",
         "enum": [
@@ -8334,6 +8877,123 @@
         ],
         "title": "TokenIngesta",
         "description": "T-033. Credencial del worker para publicar en /ingesta de un solo partido."
+      },
+      "Trabajo": {
+        "properties": {
+          "video_id": {
+            "type": "integer",
+            "title": "Video Id"
+          },
+          "partido_id": {
+            "type": "integer",
+            "title": "Partido Id"
+          },
+          "archivo": {
+            "type": "string",
+            "title": "Archivo",
+            "description": "Ruta de descarga del video, relativa a la API"
+          },
+          "nombre": {
+            "type": "string",
+            "title": "Nombre"
+          },
+          "tamano_bytes": {
+            "type": "integer",
+            "title": "Tamano Bytes"
+          },
+          "fps": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fps"
+          },
+          "duracion_s": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duracion S"
+          },
+          "modelo": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModeloTrabajo"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null: usar el YOLO preentrenado (no hay modelo activo en el club)"
+          },
+          "matriz_h": {
+            "items": {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            "type": "array",
+            "title": "Matriz H",
+            "description": "Homografia pixeles a metros (CU-26)"
+          },
+          "largo_m": {
+            "type": "number",
+            "title": "Largo M"
+          },
+          "ancho_m": {
+            "type": "number",
+            "title": "Ancho M"
+          },
+          "es_local": {
+            "type": "boolean",
+            "title": "Es Local",
+            "description": "Si el equipo propio es el LOCAL del mensaje"
+          },
+          "color_propio": {
+            "type": "string",
+            "title": "Color Propio",
+            "description": "Camiseta del equipo propio en este partido"
+          },
+          "color_rival": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color Rival"
+          }
+        },
+        "type": "object",
+        "required": [
+          "video_id",
+          "partido_id",
+          "archivo",
+          "nombre",
+          "tamano_bytes",
+          "fps",
+          "duracion_s",
+          "modelo",
+          "matriz_h",
+          "largo_m",
+          "ancho_m",
+          "es_local",
+          "color_propio",
+          "color_rival"
+        ],
+        "title": "Trabajo",
+        "description": "Todo lo que el worker necesita para procesar un video sin consultar nada mas."
       },
       "TrackDetectado": {
         "properties": {
@@ -8588,6 +9248,24 @@
             "type": "string",
             "title": "Archivo Url"
           },
+          "nombre": {
+            "type": "string",
+            "title": "Nombre",
+            "description": "Nombre original del archivo"
+          },
+          "tipo": {
+            "type": "string",
+            "title": "Tipo"
+          },
+          "tamano_bytes": {
+            "type": "integer",
+            "title": "Tamano Bytes"
+          },
+          "bytes_recibidos": {
+            "type": "integer",
+            "title": "Bytes Recibidos",
+            "description": "Para retomar una carga cortada: el siguiente trozo empieza en este byte"
+          },
           "duracion_s": {
             "anyOf": [
               {
@@ -8632,7 +9310,34 @@
             "maximum": 100.0,
             "minimum": 0.0,
             "title": "Progreso Pct",
+            "description": "Progreso del PROCESAMIENTO (CU-27), no de la carga",
             "default": 0
+          },
+          "iniciado_en": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Iniciado En",
+            "description": "Cuando un worker empezo a procesarlo; null mientras espera en cola"
+          },
+          "tiempo_restante_s": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tiempo Restante S",
+            "description": "HU-25. Estimado al ritmo actual; null en cola o sin avance, 0 al terminar"
           },
           "mensaje_error": {
             "anyOf": [
@@ -8644,6 +9349,11 @@
               }
             ],
             "title": "Mensaje Error"
+          },
+          "creado_en": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Creado En"
           },
           "procesado_en": {
             "anyOf": [
@@ -8663,9 +9373,54 @@
           "id",
           "partido_id",
           "archivo_url",
-          "estado"
+          "nombre",
+          "tipo",
+          "tamano_bytes",
+          "bytes_recibidos",
+          "estado",
+          "creado_en"
         ],
         "title": "Video"
+      },
+      "VideoIniciar": {
+        "properties": {
+          "nombre": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Nombre",
+            "description": "Nombre del archivo; su extension tiene que ser .mp4, .mov o .mkv",
+            "examples": [
+              "fecha-12-vs-rival.mp4"
+            ]
+          },
+          "tipo": {
+            "type": "string",
+            "maxLength": 80,
+            "title": "Tipo",
+            "description": "Tipo MIME que informa el navegador (File.type)",
+            "examples": [
+              "video/mp4"
+            ]
+          },
+          "tamano_bytes": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Tamano Bytes",
+            "description": "Tamano total; el maximo lo fija la configuracion del servidor",
+            "examples": [
+              4500000000
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "nombre",
+          "tipo",
+          "tamano_bytes"
+        ],
+        "title": "VideoIniciar",
+        "description": "Primer paso de la carga por partes: se declara el archivo sin subirlo."
       }
     },
     "securitySchemes": {

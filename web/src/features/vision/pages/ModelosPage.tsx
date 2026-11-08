@@ -97,6 +97,10 @@ export function ModelosPage() {
   const cliente = useQueryClient();
   const [form, setForm] = useState<FormularioModelo>(FORMULARIO_VACIO);
   const [activandoId, setActivandoId] = useState<number | null>(null);
+  // T-064: versión rechazada por tener métricas peores, a la espera de un motivo para forzar.
+  const [rechazo, setRechazo] = useState<{ modelo: Modelo; mensaje: string } | null>(null);
+  const [motivo, setMotivo] = useState("");
+  const idMotivo = useId();
 
   const consultaModelos = useQuery({
     queryKey: CLAVE_MODELOS,
@@ -112,11 +116,23 @@ export function ModelosPage() {
   });
 
   const mutacionActivar = useMutation({
-    mutationFn: (modeloId: number) => activarModelo(modeloId),
-    onMutate: (modeloId: number) => setActivandoId(modeloId),
+    mutationFn: ({ modelo, forzarCon }: { modelo: Modelo; forzarCon?: string }) =>
+      activarModelo(
+        modelo.id,
+        forzarCon === undefined ? undefined : { forzar: true, motivo: forzarCon },
+      ),
+    onMutate: ({ modelo }) => setActivandoId(modelo.id),
     onSettled: () => setActivandoId(null),
     onSuccess: () => {
+      setRechazo(null);
+      setMotivo("");
       void cliente.invalidateQueries({ queryKey: CLAVE_MODELOS });
+    },
+    onError: (error, { modelo, forzarCon }) => {
+      // T-064: métricas peores que la activa. Se ofrece volver atrás con un motivo.
+      if (estadoHttp(error) === 409 && forzarCon === undefined) {
+        setRechazo({ modelo, mensaje: mensajeDeError(error) });
+      }
     },
   });
 
@@ -313,10 +329,62 @@ export function ModelosPage() {
         </div>
       )}
 
-      {mutacionActivar.isError && (
-        <div className="mod-alerta mod-alerta-error" role="alert">
-          <p>{mensajeErrorActivar(mutacionActivar.error)}</p>
+      {rechazo ? (
+        <div className="mod-alerta mod-alerta-aviso" role="alert">
+          <p>
+            <strong>
+              No se activó {rechazo.modelo.nombre} {rechazo.modelo.version}.
+            </strong>{" "}
+            {rechazo.mensaje}
+          </p>
+          <form
+            className="mod-forzar"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (motivo.trim())
+                mutacionActivar.mutate({ modelo: rechazo.modelo, forzarCon: motivo.trim() });
+            }}
+          >
+            <label htmlFor={idMotivo}>Motivo para volver a esta versión</label>
+            <input
+              id={idMotivo}
+              className="mod-input"
+              value={motivo}
+              maxLength={300}
+              placeholder="Ej.: la versión activa confunde a los árbitros con jugadores"
+              onChange={(e) => setMotivo(e.target.value)}
+            />
+            <div className="mod-forzar-acciones">
+              <button
+                type="submit"
+                className="mod-btn-primario"
+                disabled={!motivo.trim() || mutacionActivar.isPending}
+              >
+                Activar igual (volver atrás)
+              </button>
+              <button
+                type="button"
+                className="mod-btn-fila"
+                onClick={() => {
+                  setRechazo(null);
+                  setMotivo("");
+                }}
+              >
+                No activar
+              </button>
+            </div>
+            {/* Si falla el intento forzado, el error va aquí: la alerta general queda oculta. */}
+            {mutacionActivar.isError && mutacionActivar.variables?.forzarCon !== undefined && (
+              <p className="mod-forzar-error">{mensajeErrorActivar(mutacionActivar.error)}</p>
+            )}
+          </form>
         </div>
+      ) : (
+        mutacionActivar.isError && (
+          <div className="mod-alerta mod-alerta-error" role="alert">
+            <p>{mensajeErrorActivar(mutacionActivar.error)}</p>
+          </div>
+        )
       )}
 
       {consultaModelos.isError ? (
@@ -359,6 +427,11 @@ export function ModelosPage() {
                     ) : (
                       <span className="mod-badge-inactivo">Inactivo</span>
                     )}
+                    {modelo.activo && modelo.motivo_activacion && (
+                      <span className="mod-motivo" title="Se activó con métricas peores">
+                        Vuelta atrás: {modelo.motivo_activacion}
+                      </span>
+                    )}
                   </td>
                   <td>
                     <button
@@ -369,7 +442,11 @@ export function ModelosPage() {
                         modelo.activo ||
                         (mutacionActivar.isPending && activandoId === modelo.id)
                       }
-                      onClick={() => mutacionActivar.mutate(modelo.id)}
+                      onClick={() => {
+                        setRechazo(null);
+                        setMotivo("");
+                        mutacionActivar.mutate({ modelo });
+                      }}
                     >
                       {mutacionActivar.isPending && activandoId === modelo.id
                         ? "Activando…"
