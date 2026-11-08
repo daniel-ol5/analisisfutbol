@@ -97,6 +97,7 @@ async def lanzar(
     video.mensaje_error = None
     video.procesado_en = None
     video.tomado_en = None
+    video.iniciado_en = None
     await db.commit()
     await db.refresh(video)
     return video
@@ -110,6 +111,7 @@ async def cancelar(db: AsyncSession, usuario: UsuarioActual, video_id: int) -> N
     video.estado = EstadoVideo.SUBIDO.value
     video.progreso_pct = 0
     video.tomado_en = None
+    video.iniciado_en = None
     await db.commit()
 
 
@@ -127,7 +129,9 @@ async def tomar(db: AsyncSession, usuario: UsuarioActual) -> Trabajo | None:
         marcado = await db.execute(
             update(Video)
             .where(Video.id == video.id, Video.estado == EstadoVideo.PROCESANDO, libre)
-            .values(tomado_en=_ahora())
+            # Un worker que retoma un trabajo abandonado empieza de cero: el
+            # progreso y el reloj del tiempo restante también.
+            .values(tomado_en=_ahora(), iniciado_en=_ahora(), progreso_pct=0)
             # Se relee con refresh: sin esto SQLAlchemy compara en Python la fecha
             # de SQLite (sin zona) con la del filtro (con zona) y falla.
             .execution_options(synchronize_session=False)

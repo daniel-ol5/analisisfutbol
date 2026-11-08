@@ -98,6 +98,12 @@ class ModeloML(Base):
         DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
 
+    # T-064: quién activó esta versión, cuándo y, si tenía métricas peores que
+    # la vigente, por qué se forzó (volver atrás).
+    activado_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    activado_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuario.id"), nullable=True)
+    motivo_activacion: Mapped[str | None] = mapped_column(String(300), nullable=True)
+
 
 class Video(Base):
     """Video grabado de un partido (CU-27, CU-28).
@@ -134,6 +140,8 @@ class Video(Base):
     # cada lote: si deja de llegar (worker caído), otro worker puede retomarlo.
     color_rival: Mapped[str | None] = mapped_column(String(7), nullable=True)
     tomado_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # HU-25 · Criterio 2: cuándo el worker empezó; base del tiempo restante.
+    iniciado_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     creado_en: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC)
@@ -141,3 +149,21 @@ class Video(Base):
     procesado_en: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+
+    @property
+    def tiempo_restante_s(self) -> int | None:
+        """HU-25 · Criterio 2: segundos que faltan, al ritmo que lleva.
+
+        Si en `t` segundos hizo el `p` %, el resto (100 - p) % lleva
+        t·(100 - p)/p. Sin avance todavía (o en cola) no hay base para estimar:
+        null. Terminado: 0.
+        """
+        if self.estado == "PROCESADO":
+            return 0
+        if self.estado != "PROCESANDO" or self.iniciado_en is None or self.progreso_pct <= 0:
+            return None
+        inicio = self.iniciado_en
+        if inicio.tzinfo is None:  # SQLite devuelve la fecha sin zona; se guardó en UTC
+            inicio = inicio.replace(tzinfo=UTC)
+        transcurrido = max((datetime.now(UTC) - inicio).total_seconds(), 0.0)
+        return round(transcurrido * (100 - self.progreso_pct) / self.progreso_pct)

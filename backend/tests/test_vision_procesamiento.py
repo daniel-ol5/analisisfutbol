@@ -450,3 +450,103 @@ async def test_la_descarga_admite_range_para_reanudar(cliente, mp4):
                           headers={**club["auth"], "Range": "bytes=100-199"})
     assert r.status_code == 206
     assert r.content == mp4[100:200]
+
+
+# ---------- HU-25 · Criterio 2: tiempo restante estimado ----------
+
+async def _empezado_hace(video_id: int, segundos: int) -> None:
+    """Mueve el inicio hacia atrás, para no depender del reloj de la prueba."""
+    async with SessionLocal() as db:
+        await db.execute(update(Video).where(Video.id == video_id).values(
+            iniciado_en=datetime.now(UTC) - timedelta(seconds=segundos)))
+        await db.commit()
+
+
+async def _estado(cliente, club, video) -> dict:
+    return (await cliente.get(f"/api/vision/videos/{video['id']}", headers=club["auth"])).json()
+
+
+async def test_en_cola_no_hay_estimado(cliente, mp4):
+    club = await _club(cliente, "a")
+    video = await _video_subido(cliente, club, mp4)
+    assert (await _estado(cliente, club, video))["tiempo_restante_s"] is None  # SUBIDO
+    await _lanzar(cliente, club, video)
+    estado = await _estado(cliente, club, video)
+    assert estado["iniciado_en"] is None
+    assert estado["tiempo_restante_s"] is None
+
+
+async def test_tomado_pero_sin_avance_no_hay_estimado(cliente, mp4):
+    club = await _club(cliente, "a")
+    video = await _video_subido(cliente, club, mp4)
+    await _lanzar(cliente, club, video)
+    await _tomar(cliente, club["auth"])
+    estado = await _estado(cliente, club, video)
+    assert estado["iniciado_en"] is not None
+    assert estado["tiempo_restante_s"] is None
+
+
+@pytest.mark.parametrize(("progreso", "hace_s", "esperado_s"), [
+    (25, 60, 180),    # un cuarto en 1 min: faltan 3
+    (50, 600, 600),   # la mitad en 10 min: faltan 10
+    (90, 900, 100),
+])
+async def test_estimado_al_ritmo_que_lleva(cliente, mp4, progreso, hace_s, esperado_s):
+    club = await _club(cliente, "a")
+    video = await _video_subido(cliente, club, mp4)
+    await _lanzar(cliente, club, video)
+    await _tomar(cliente, club["auth"])
+    await _lote(cliente, club, video, progreso, [])
+    await _empezado_hace(video["id"], hace_s)
+
+    estado = await _estado(cliente, club, video)
+    assert estado["progreso_pct"] == progreso
+    # Unos segundos de margen por lo que tarda la propia prueba.
+    assert esperado_s <= estado["tiempo_restante_s"] <= esperado_s + 10
+
+
+async def test_terminado_faltan_cero(cliente, mp4):
+    club = await _club(cliente, "a")
+    video = await _video_subido(cliente, club, mp4)
+    await _lanzar(cliente, club, video)
+    await _tomar(cliente, club["auth"])
+    r = await cliente.post(f"/api/vision/videos/{video['id']}/terminar", headers=club["auth"],
+                           json={"ok": True})
+    assert r.json()["progreso_pct"] == 100
+    assert r.json()["tiempo_restante_s"] == 0
+
+
+async def test_cancelado_no_hay_estimado(cliente, mp4):
+    club = await _club(cliente, "a")
+    video = await _video_subido(cliente, club, mp4)
+    await _lanzar(cliente, club, video)
+    await _tomar(cliente, club["auth"])
+    await _lote(cliente, club, video, 40, [])
+    await cliente.delete(f"/api/vision/videos/{video['id']}/procesar", headers=club["auth"])
+    estado = await _estado(cliente, club, video)
+    assert estado["iniciado_en"] is None
+    assert estado["tiempo_restante_s"] is None
+
+
+async def test_retomar_un_trabajo_abandonado_reinicia_progreso_y_reloj(cliente, mp4):
+    club = await _club(cliente, "a")
+    video = await _video_subido(cliente, club, mp4)
+    await _lanzar(cliente, club, video)
+    await _tomar(cliente, club["auth"])
+    await _lote(cliente, club, video, 70, [])
+
+    viejo = datetime.now(UTC) - procesamiento.PLAZO_SIN_NOTICIAS - timedelta(minutes=1)
+    async with SessionLocal() as db:
+        await db.execute(update(Video).where(Video.id == video["id"]).values(
+            tomado_en=viejo, iniciado_en=viejo))
+        await db.commit()
+    await _tomar(cliente, club["auth"])
+
+    estado = await _estado(cliente, club, video)
+    assert estado["progreso_pct"] == 0  # el nuevo worker empieza de cero
+    inicio = datetime.fromisoformat(estado["iniciado_en"].replace("Z", "+00:00"))
+    if inicio.tzinfo is None:
+        inicio = inicio.replace(tzinfo=UTC)
+    assert datetime.now(UTC) - inicio < timedelta(minutes=1)
+    await _lote(cliente, club, video, 10, [])
+    assert (await _estado(cliente, club, video))["progreso_pct"] == 10

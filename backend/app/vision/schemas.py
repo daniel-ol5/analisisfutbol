@@ -123,6 +123,25 @@ class Modelo(ModeloCrear):
     id: int
     activo: bool
     entrenado_en: datetime
+    activado_en: datetime | None = Field(default=None,
+        description="Ultima vez que se activo esta version")
+    motivo_activacion: str | None = Field(default=None,
+        description="T-064: por que se activo aunque tuviera metricas peores (volver atras)")
+
+
+class ActivarModelo(BaseModel):
+    """T-064: una version con metricas peores que la activa no se activa, salvo
+    que se fuerce a proposito (volver atras, criterio de T-059) y se diga por que."""
+
+    forzar: bool = False
+    motivo: str | None = Field(default=None, max_length=300,
+        examples=["v4 confunde a los arbitros con jugadores; se vuelve a v3"])
+
+    @model_validator(mode="after")
+    def _forzar_con_motivo(self) -> Self:
+        if self.forzar and not (self.motivo or "").strip():
+            raise ValueError("Para activar una version peor hay que indicar el motivo")
+        return self
 
 
 # ---------- CU-27, CU-28 Video ----------
@@ -165,6 +184,10 @@ class Video(BaseModel):
     estado: EstadoVideo
     progreso_pct: int = Field(default=0, ge=0, le=100,
         description="Progreso del PROCESAMIENTO (CU-27), no de la carga")
+    iniciado_en: datetime | None = Field(default=None,
+        description="Cuando un worker empezo a procesarlo; null mientras espera en cola")
+    tiempo_restante_s: int | None = Field(default=None, ge=0,
+        description="HU-25. Estimado al ritmo actual; null en cola o sin avance, 0 al terminar")
     mensaje_error: str | None = None
     creado_en: datetime
     procesado_en: datetime | None = None

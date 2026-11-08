@@ -2181,6 +2181,7 @@
           "P3 · Visión por Computadora"
         ],
         "summary": "CU-29 · Activar una version (solo una activa por vez)",
+        "description": "El cuerpo es opcional. Sin cuerpo (o con forzar=false) se rechaza una version con mAP o IDF1 peores que la activa (T-064). Con forzar=true y un motivo se activa igual, y el motivo queda registrado (volver atras, T-059).",
         "operationId": "activar_modelo_api_vision_modelos__modelo_id__activar_post",
         "security": [
           {
@@ -2198,6 +2199,23 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/ActivarModelo"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Datos"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -2218,6 +2236,9 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "T-064: tiene metricas peores que la version activa. Para volver atras, enviar forzar=true con el motivo"
           },
           "422": {
             "description": "Validation Error",
@@ -5102,6 +5123,33 @@
   },
   "components": {
     "schemas": {
+      "ActivarModelo": {
+        "properties": {
+          "forzar": {
+            "type": "boolean",
+            "title": "Forzar",
+            "default": false
+          },
+          "motivo": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Motivo",
+            "examples": [
+              "v4 confunde a los arbitros con jugadores; se vuelve a v3"
+            ]
+          }
+        },
+        "type": "object",
+        "title": "ActivarModelo",
+        "description": "T-064: una version con metricas peores que la activa no se activa, salvo\nque se fuerce a proposito (volver atras, criterio de T-059) y se diga por que."
+      },
       "Alineacion": {
         "properties": {
           "id": {
@@ -7516,6 +7564,31 @@
             "type": "string",
             "format": "date-time",
             "title": "Entrenado En"
+          },
+          "activado_en": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Activado En",
+            "description": "Ultima vez que se activo esta version"
+          },
+          "motivo_activacion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Motivo Activacion",
+            "description": "T-064: por que se activo aunque tuviera metricas peores (volver atras)"
           }
         },
         "type": "object",
@@ -9239,6 +9312,32 @@
             "title": "Progreso Pct",
             "description": "Progreso del PROCESAMIENTO (CU-27), no de la carga",
             "default": 0
+          },
+          "iniciado_en": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Iniciado En",
+            "description": "Cuando un worker empezo a procesarlo; null mientras espera en cola"
+          },
+          "tiempo_restante_s": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tiempo Restante S",
+            "description": "HU-25. Estimado al ritmo actual; null en cola o sin avance, 0 al terminar"
           },
           "mensaje_error": {
             "anyOf": [

@@ -8,7 +8,7 @@ Responsables segun el Sprint Planning:
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header, Request, Response, status
+from fastapi import APIRouter, Body, Depends, Header, Request, Response, status
 from fastapi.responses import FileResponse
 
 from app.core.deps import Actual, Db, requiere_rol
@@ -17,6 +17,7 @@ from app.partido.service import AlmacenPosiciones, obtener_almacen_posiciones
 from app.vision import procesamiento, service, videos
 from app.vision.almacen import AlmacenVideos, obtener_almacen_videos
 from app.vision.schemas import (
+    ActivarModelo,
     Calibracion,
     CalibracionGuardar,
     ErrorCalibracion,
@@ -110,9 +111,18 @@ async def registrar_modelo(datos: ModeloCrear, usuario: Actual, db: Db) -> Model
 
 @router.post("/modelos/{modelo_id}/activar", response_model=Modelo,
              dependencies=[Depends(requiere_rol("ADMIN", "ANALISTA"))],
-             summary="CU-29 · Activar una version (solo una activa por vez)")
-async def activar_modelo(modelo_id: int, usuario: Actual, db: Db) -> Modelo:
-    modelo = await service.activar_modelo(db, usuario, modelo_id)
+             responses={409: {"description": "T-064: tiene metricas peores que la version "
+                                             "activa. Para volver atras, enviar forzar=true "
+                                             "con el motivo"}},
+             summary="CU-29 · Activar una version (solo una activa por vez)",
+             description=(
+                 "El cuerpo es opcional. Sin cuerpo (o con forzar=false) se rechaza una version "
+                 "con mAP o IDF1 peores que la activa (T-064). Con forzar=true y un motivo se "
+                 "activa igual, y el motivo queda registrado (volver atras, T-059)."
+             ))
+async def activar_modelo(modelo_id: int, usuario: Actual, db: Db,
+                         datos: Annotated[ActivarModelo | None, Body()] = None) -> Modelo:
+    modelo = await service.activar_modelo(db, usuario, modelo_id, datos)
     return Modelo.model_validate(modelo)
 
 
