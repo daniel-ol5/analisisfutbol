@@ -6207,6 +6207,16 @@
       },
       "EventoManual": {
         "properties": {
+          "uuid": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Uuid"
+          },
+          "capturado_en": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Capturado En"
+          },
           "tipo": {
             "$ref": "#/components/schemas/TipoEventoManual"
           },
@@ -6259,26 +6269,83 @@
             "title": "Convertida En Roja",
             "description": "True cuando una segunda amarilla se convirtio automaticamente",
             "default": false
+          },
+          "creado_en": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Creado En"
+          },
+          "creado_por_id": {
+            "type": "integer",
+            "title": "Creado Por Id"
+          },
+          "anulado_en": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Anulado En"
+          },
+          "anulado_por_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Anulado Por Id"
           }
         },
         "type": "object",
         "required": [
+          "uuid",
+          "capturado_en",
           "tipo",
           "minuto",
           "id",
-          "partido_id"
+          "partido_id",
+          "creado_en",
+          "creado_por_id"
         ],
         "title": "EventoManual"
       },
       "EventoManualCrear": {
         "properties": {
+          "uuid": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Uuid",
+            "description": "Idempotencia para reintentos y T-070"
+          },
+          "capturado_en": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capturado En",
+            "description": "Instante de captura en el cliente; el servidor lo completa si se omite"
+          },
           "tipo": {
             "$ref": "#/components/schemas/TipoEventoManual"
           },
           "minuto": {
             "anyOf": [
               {
-                "type": "integer"
+                "type": "integer",
+                "maximum": 150.0,
+                "minimum": 0.0
               },
               {
                 "type": "null"
@@ -7200,7 +7267,84 @@
         ],
         "title": "Mensaje"
       },
-      "MensajeWorker": {
+      "MensajeWorker-Input": {
+        "properties": {
+          "partido": {
+            "type": "integer",
+            "title": "Partido"
+          },
+          "t": {
+            "type": "number",
+            "title": "T",
+            "description": "Segundos desde el inicio del partido"
+          },
+          "jugadores": {
+            "items": {
+              "$ref": "#/components/schemas/PosicionDetectada"
+            },
+            "type": "array",
+            "title": "Jugadores"
+          },
+          "balon": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PosicionDetectada"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "calidad": {
+            "$ref": "#/components/schemas/IndicadorCalidad"
+          }
+        },
+        "type": "object",
+        "required": [
+          "partido",
+          "t",
+          "jugadores",
+          "calidad"
+        ],
+        "title": "MensajeWorker",
+        "description": "Lo que el worker de vision envia al backend cinco veces por segundo.\n\nUnos 23 puntos por mensaje, entre 5 y 10 KB/s. El video nunca sale de la\ncancha: solo viajan estas coordenadas.",
+        "example": {
+          "balon": {
+            "conf": 0.62,
+            "equipo": "DESCONOCIDO",
+            "tid": 0,
+            "x": 55.1,
+            "y": 33.0
+          },
+          "calidad": {
+            "balon_visible": true,
+            "degradado": false,
+            "fps": 5.0,
+            "jugadores_detectados": 21,
+            "retraso_s": 0.4,
+            "worker_conectado": true
+          },
+          "jugadores": [
+            {
+              "conf": 0.91,
+              "equipo": "LOCAL",
+              "tid": 7,
+              "x": 52.3,
+              "y": 31.8
+            },
+            {
+              "conf": 0.88,
+              "equipo": "VISITANTE",
+              "tid": 12,
+              "x": 61.0,
+              "y": 44.2
+            }
+          ],
+          "partido": 42,
+          "t": 1873.4
+        }
+      },
+      "MensajeWorker-Output": {
         "properties": {
           "partido": {
             "type": "integer",
@@ -8198,7 +8342,7 @@
           },
           "muestras": {
             "items": {
-              "$ref": "#/components/schemas/MensajeWorker"
+              "$ref": "#/components/schemas/MensajeWorker-Output"
             },
             "type": "array",
             "title": "Muestras"
@@ -8756,7 +8900,7 @@
           },
           "muestras": {
             "items": {
-              "$ref": "#/components/schemas/MensajeWorker"
+              "$ref": "#/components/schemas/MensajeWorker-Input"
             },
             "type": "array",
             "maxItems": 500,
