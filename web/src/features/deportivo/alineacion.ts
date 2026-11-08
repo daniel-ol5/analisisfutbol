@@ -286,7 +286,7 @@ export function problemas(estado: EstadoAlineacion, plantel: readonly Jugador[])
   if (titulares.length !== TITULARES) {
     const faltan = TITULARES - titulares.length;
     lista.push(
-      `Faltan ${faltan} titular${faltan === 1 ? "" : "es"} (hay ${titulares.length} de ${TITULARES}).`,
+      `${faltan === 1 ? "Falta 1 titular" : `Faltan ${faltan} titulares`} (hay ${titulares.length} de ${TITULARES}).`,
     );
   }
 
