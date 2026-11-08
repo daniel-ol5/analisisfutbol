@@ -213,3 +213,9 @@
   font-size: var(--fs-xs);
   color: var(--text-3);
 }
+
+.mod-forzar-error {
+  margin: 4px 0 0;
+  font-size: var(--fs-sm);
+  color: var(--danger, #c0392b);
+}

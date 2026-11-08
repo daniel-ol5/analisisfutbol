@@ -373,6 +373,10 @@ export function ModelosPage() {
                 No activar
               </button>
             </div>
+            {/* Si falla el intento forzado, el error va aquí: la alerta general queda oculta. */}
+            {mutacionActivar.isError && mutacionActivar.variables?.forzarCon !== undefined && (
+              <p className="mod-forzar-error">{mensajeErrorActivar(mutacionActivar.error)}</p>
+            )}
           </form>
         </div>
       ) : (
