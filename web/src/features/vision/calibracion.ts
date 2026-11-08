@@ -4,7 +4,7 @@
  * Lo que no está cerrado en el contrato o en un ADR se declara aquí como
  * constante con nombre y comentario TODO, para poder ajustarlo en un único sitio.
  */
-import type { HitoCancha, ParCalibracion, Punto } from "./types";
+import type { CalibracionGuardar, HitoCancha, ParCalibracion, Punto } from "./types";
 
 /**
  * TODO: confirmar con el líder del proyecto la convención del sistema de
@@ -361,4 +361,56 @@ export function obtenerRolSesionActual(): string | null {
 
 export function rolPuedeGuardarCalibracion(rol: string | null): boolean {
   return rol !== null && ROLES_PUEDEN_CALIBRAR.includes(rol);
+}
+
+// ---------- Validación del error (CU-21, T-031) ----------
+
+/**
+ * Máximo permitido para el error medio, en metros. SOLO se usa para mostrarlo en
+ * pantalla: duplica `UMBRAL_ERROR_MEDIO_M` de `backend/app/vision/homografia.py`
+ * (el contrato no lo expone como campo). La decisión de «válida / no válida» sale
+ * SIEMPRE del campo `valida` que devuelve el servidor, nunca de comparar aquí.
+ * TODO: si el backend cambia el umbral, actualizar este valor.
+ */
+export const UMBRAL_ERROR_MEDIO_M = 2;
+
+/** Espera tras el último cambio antes de llamar a `/validar` (evita saturar al servidor). */
+export const RETARDO_VALIDACION_MS = 600;
+
+/** Formatea metros con coma decimal y la cantidad de decimales pedida (por defecto 2). */
+export function formatearMetros(valor: number, decimales = 2): string {
+  return new Intl.NumberFormat("es", {
+    minimumFractionDigits: decimales,
+    maximumFractionDigits: decimales,
+  }).format(valor);
+}
+
+/**
+ * Cuerpo que se envía al backend. Lo usan tanto «Validar» como «Guardar» para que
+ * ambos manden exactamente lo mismo (el orden de los pares es el que define
+ * `punto_peor`, índice base 0 sobre esta lista).
+ */
+export function construirCuerpoCalibracion(
+  pares: readonly ParCalibracion[],
+  largoM: number,
+  anchoM: number,
+): CalibracionGuardar {
+  return {
+    largo_m: redondear2(largoM),
+    ancho_m: redondear2(anchoM),
+    puntos_imagen: pares.map((p) => p.imagen),
+    puntos_cancha: pares.map((p) => p.cancha),
+  };
+}
+
+/**
+ * Devuelve `punto_peor` (base 0) solo si es un índice válido sobre la lista de
+ * pares actual: `0 <= punto_peor < cantidadPares`. Si no, `null` y no se resalta nada.
+ */
+export function indicePeorValido(
+  puntoPeor: number | null | undefined,
+  cantidadPares: number,
+): number | null {
+  if (typeof puntoPeor !== "number" || !Number.isInteger(puntoPeor)) return null;
+  return puntoPeor >= 0 && puntoPeor < cantidadPares ? puntoPeor : null;
 }

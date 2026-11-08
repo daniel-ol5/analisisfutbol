@@ -30,10 +30,12 @@ export interface VisorCuadroProps {
   parSeleccionadoId: string | null;
   etiquetaDestinoActual: string;
   /**
-   * Punto de extensión para T-031: índice base 0 sobre `pares` del punto con
-   * mayor error de reproyección (`ErrorCalibracion.punto_peor`).
+   * Índice base 0 sobre `pares` del punto con mayor error de reproyección
+   * (`ErrorCalibracion.punto_peor`). Ya debe venir comprobado (`indicePeorValido`).
    */
   indicePeor?: number | null;
+  /** Estilo de alerta (calibración NO válida) o suave (válida) para el peor punto. */
+  peorEnAlerta?: boolean;
   onCargarDimensiones: (ancho: number, alto: number) => void;
   onClicNuevoPunto: (puntoPx: Punto) => void;
   onSeleccionarPar: (parId: string) => void;
@@ -49,6 +51,7 @@ export function VisorCuadro({
   parSeleccionadoId,
   etiquetaDestinoActual,
   indicePeor = null,
+  peorEnAlerta = true,
   onCargarDimensiones,
   onClicNuevoPunto,
   onSeleccionarPar,
@@ -204,12 +207,31 @@ export function VisorCuadro({
                     <g
                       key={par.id}
                       className={`cal-marcador ${seleccionado ? "es-seleccionado" : ""} ${
-                        esPeor ? "es-peor" : ""
+                        esPeor ? `es-peor ${peorEnAlerta ? "es-alerta" : "es-suave"}` : ""
                       }`}
                       transform={`translate(${par.imagen.x}, ${par.imagen.y})`}
                       onPointerDown={(e) => alBajarEnMarcador(e, par.id)}
                     >
-                      <title>{`#${idx + 1} ${par.etiqueta} (${par.imagen.x} px, ${par.imagen.y} px) — Arrastra para corregir`}</title>
+                      <title>{`#${idx + 1} ${par.etiqueta} (${par.imagen.x} px, ${par.imagen.y} px)${
+                        esPeor ? " — Mayor error de la calibración" : ""
+                      } — Arrastra para corregir`}</title>
+                      {esPeor && (
+                        <>
+                          <circle
+                            r={r * 2.1}
+                            className="cal-peor-anillo"
+                            strokeWidth={Math.max(2, radioBase * 0.2)}
+                          />
+                          <text
+                            y={r * 2.1 + tamFuente * 1.1}
+                            textAnchor="middle"
+                            fontSize={tamFuente}
+                            className="cal-peor-rotulo"
+                          >
+                            ▲ Mayor error
+                          </text>
+                        </>
+                      )}
                       <circle r={r * 1.45} className="cal-marcador-halo" />
                       <circle
                         r={r}

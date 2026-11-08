@@ -583,3 +583,244 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* ----- Validación del error (CU-21, T-031) ----- */
+
+.cal-resultado {
+  margin: 0 0 24px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.cal-resultado-cabecera {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  margin-bottom: 8px;
+}
+
+.cal-resultado-cabecera h2 {
+  margin: 0;
+  font-size: var(--fs-base);
+  font-weight: var(--fw-bold);
+}
+
+.cal-resultado-estado {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 46px;
+  margin: 0 0 10px;
+  padding: 8px 12px;
+  border: 2px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  font-size: var(--fs-base);
+  color: var(--text-2);
+}
+
+.cal-resultado-estado.es-valida {
+  border-color: var(--ok);
+  background: var(--ok-bg);
+  color: var(--ok);
+}
+
+.cal-resultado-estado.es-invalida {
+  border-color: var(--risk);
+  background: var(--risk-bg);
+  color: var(--risk);
+}
+
+.cal-resultado-estado.es-aviso {
+  border-color: var(--warn);
+  background: var(--warn-bg);
+  color: var(--warn);
+}
+
+.cal-resultado-estado.es-espera {
+  border-style: dashed;
+}
+
+.cal-resultado-icono {
+  width: 1.4em;
+  font-size: 1.3em;
+  font-weight: var(--fw-black);
+  text-align: center;
+}
+
+.cal-resultado-cifras {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0 0 10px;
+}
+
+.cal-resultado-cifras > div {
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--ground);
+}
+
+.cal-resultado-cifras dt {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-3);
+}
+
+.cal-resultado-cifras dd {
+  margin: 2px 0 0;
+  font-family: var(--font-mono);
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-bold);
+}
+
+.cal-resultado-peor {
+  min-height: 1.6em;
+  margin: 0 0 8px;
+  font-weight: var(--fw-bold);
+}
+
+.cal-resultado-bloqueo {
+  margin: 0 0 8px;
+  padding: 8px 12px;
+  border: 2px solid var(--risk);
+  border-radius: var(--radius-sm);
+  background: var(--risk-bg);
+  color: var(--risk);
+  font-weight: var(--fw-bold);
+}
+
+.cal-resultado-bloqueo.es-oculto {
+  visibility: hidden;
+}
+
+.cal-resultado-mensaje {
+  min-height: 4.8em;
+  margin: 0 0 12px;
+  font-size: var(--fs-md);
+  color: var(--text-2);
+}
+
+.cal-guia-correccion {
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  font-size: var(--fs-md);
+  color: var(--text-2);
+}
+
+.cal-guia-correccion h3 {
+  margin: 0 0 6px;
+  font-size: var(--fs-md);
+  font-weight: var(--fw-bold);
+  color: var(--text);
+}
+
+.cal-guia-correccion ul {
+  margin: 0 0 8px;
+  padding-left: 20px;
+}
+
+.cal-guia-correccion p {
+  margin: 0;
+}
+
+.cal-guia-correccion a {
+  color: var(--pitch);
+  text-decoration: underline;
+}
+
+/* Texto solo para lectores de pantalla (anuncio del resultado final). */
+.cal-sr-solo {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* ----- Peor punto: forma y texto, no solo color ----- */
+
+.cal-peor-anillo {
+  fill: none;
+  stroke: var(--risk);
+  stroke-dasharray: 8 5;
+}
+
+.es-peor.es-suave .cal-peor-anillo {
+  stroke: var(--warn);
+}
+
+.cal-peor-rotulo {
+  fill: #fff;
+  font-family: var(--font-mono);
+  font-weight: var(--fw-bold);
+  paint-order: stroke;
+  stroke: #0c1512;
+  stroke-width: 3px;
+}
+
+.cal-marcador-cancha .cal-peor-anillo {
+  stroke-width: 0.8;
+  stroke-dasharray: 1.6 1.2;
+}
+
+.cal-peor-rotulo-cancha {
+  fill: var(--risk);
+  font-family: var(--font-mono);
+  font-size: 2.4px;
+  font-weight: var(--fw-bold);
+}
+
+.es-peor.es-suave .cal-peor-rotulo-cancha {
+  fill: var(--warn);
+}
+
+.cal-marcador.es-peor.es-suave .cal-marcador-circulo {
+  stroke: var(--warn);
+}
+
+.cal-marcador-cancha.es-peor.es-suave .cal-marcador-cancha-circulo {
+  fill: var(--warn);
+}
+
+.cal-tabla tbody tr.es-peor-fila {
+  box-shadow: inset 4px 0 0 var(--risk);
+}
+
+.cal-tabla tbody tr.es-peor-fila.es-suave {
+  box-shadow: inset 4px 0 0 var(--warn);
+}
+
+.cal-insignia-peor {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 8px;
+  border: 1px solid var(--risk);
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  color: var(--risk);
+}
+
+.es-peor-fila.es-suave .cal-insignia-peor {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+
+@media (max-width: 640px) {
+  .cal-resultado-cifras {
+    grid-template-columns: 1fr;
+  }
+}
