@@ -24,6 +24,7 @@ from app.core.pendiente import RESPUESTA_501, pendiente
 from app.core.realtime import Hub, canal_partido, obtener_hub
 from app.core.security import decodificar, token_ingesta
 from app.core.ws import Cierre, cerrar
+from app.partido import service
 from app.partido.schemas import (
     AsignarTrack,
     Descuento,
@@ -38,45 +39,74 @@ from app.partido.schemas import (
 )
 from app.partido.service import (
     AlmacenPosiciones,
+    RelojSistema,
     RepositorioPartidos,
     obtener_almacen_posiciones,
+    obtener_reloj,
     obtener_repositorio_partidos,
 )
 
 router = APIRouter(responses=RESPUESTA_501)
 
+HubDep = Annotated[Hub, Depends(obtener_hub)]
+RelojDep = Annotated[RelojSistema, Depends(obtener_reloj)]
+
+
+async def _difundir_estado(hub: Hub, club_id: int, partido_id: int, estado: EstadoEnVivo) -> None:
+    await hub.difundir(
+        canal_partido(club_id, partido_id),
+        {"tipo": "estado", "datos": estado.model_dump(mode="json")},
+    )
+
 
 # ---------------- CU-30, CU-31 · Control del partido ----------------
 
 @router.post("/{partido_id}/iniciar", response_model=EstadoEnVivo,
+             dependencies=[Depends(requiere_rol("ADMIN", "ANALISTA"))],
              summary="CU-30, CU-31 · Iniciar el partido y fijar la direccion de ataque")
-async def iniciar(partido_id: int, datos: IniciarPartido, usuario: Actual, db: Db) -> EstadoEnVivo:
+async def iniciar(partido_id: int, datos: IniciarPartido, usuario: Actual, db: Db,
+                  hub: HubDep, reloj: RelojDep) -> EstadoEnVivo:
     # Regla: un partido sin calibracion valida (error medio > 2 m) no puede iniciarse.
-    pendiente("CU-30", "Sprint 3", "Jhon")
+    actual = await service.iniciar_partido(db, usuario, partido_id, datos, ahora=reloj)
+    await _difundir_estado(hub, usuario.club_id, partido_id, actual)
+    return actual
 
 
 @router.post("/{partido_id}/entretiempo", response_model=EstadoEnVivo,
+             dependencies=[Depends(requiere_rol("ADMIN", "ANALISTA"))],
              summary="CU-30 · Cerrar el primer tiempo e iniciar el segundo")
-async def entretiempo(partido_id: int, usuario: Actual, db: Db) -> EstadoEnVivo:
-    pendiente("CU-30", "Sprint 3", "Jhon")
+async def entretiempo(partido_id: int, usuario: Actual, db: Db,
+                      hub: HubDep, reloj: RelojDep) -> EstadoEnVivo:
+    actual = await service.entretiempo_partido(db, usuario, partido_id, ahora=reloj)
+    await _difundir_estado(hub, usuario.club_id, partido_id, actual)
+    return actual
 
 
 @router.post("/{partido_id}/descuento", response_model=EstadoEnVivo,
+             dependencies=[Depends(requiere_rol("ADMIN", "ANALISTA"))],
              summary="CU-30 · Agregar tiempo de descuento")
-async def descuento(partido_id: int, datos: Descuento, usuario: Actual, db: Db) -> EstadoEnVivo:
-    pendiente("CU-30", "Sprint 3", "Jhon")
+async def descuento(partido_id: int, datos: Descuento, usuario: Actual, db: Db,
+                    hub: HubDep, reloj: RelojDep) -> EstadoEnVivo:
+    actual = await service.registrar_descuento(db, usuario, partido_id, datos, ahora=reloj)
+    await _difundir_estado(hub, usuario.club_id, partido_id, actual)
+    return actual
 
 
 @router.post("/{partido_id}/finalizar", response_model=EstadoEnVivo,
+             dependencies=[Depends(requiere_rol("ADMIN", "ANALISTA"))],
              summary="CU-30 · Finalizar el partido")
-async def finalizar(partido_id: int, usuario: Actual, db: Db) -> EstadoEnVivo:
-    pendiente("CU-30", "Sprint 3", "Jhon")
+async def finalizar(partido_id: int, usuario: Actual, db: Db,
+                    hub: HubDep, reloj: RelojDep) -> EstadoEnVivo:
+    actual = await service.finalizar_partido(db, usuario, partido_id, ahora=reloj)
+    await _difundir_estado(hub, usuario.club_id, partido_id, actual)
+    return actual
 
 
 @router.get("/{partido_id}/estado", response_model=EstadoEnVivo,
             summary="CU-30, CU-39 · Estado actual del partido y calidad del procesamiento")
-async def estado(partido_id: int, usuario: Actual, db: Db) -> EstadoEnVivo:
-    pendiente("CU-30", "Sprint 3", "Jhon")
+async def estado(partido_id: int, usuario: Actual, db: Db,
+                 reloj: RelojDep) -> EstadoEnVivo:
+    return await service.obtener_estado_partido(db, usuario, partido_id, ahora=reloj)
 
 
 # ---------------- CU-36, CU-37, CU-38 · Eventos manuales ----------------
@@ -147,7 +177,6 @@ def _es_ping(texto: str | None) -> bool:
     return isinstance(datos, dict) and datos.get("tipo") == "ping"
 
 
-HubDep = Annotated[Hub, Depends(obtener_hub)]
 PartidosDep = Annotated[RepositorioPartidos, Depends(obtener_repositorio_partidos)]
 
 
