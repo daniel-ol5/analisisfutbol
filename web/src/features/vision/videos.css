@@ -1,0 +1,225 @@
+/* Video del partido (CU-27, CU-28 · T-062). Prefijo vid-; usa tokens de index.css. */
+
+.vid-pagina {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 40px 24px 80px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.vid-pagina h1 {
+  font-size: var(--fs-xl);
+  font-weight: var(--fw-black);
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+
+.vid-intro {
+  margin: 0 0 6px;
+  color: var(--text-2);
+  max-width: 760px;
+}
+
+.vid-barra-superior {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.vid-barra-superior .ui-campo {
+  flex: 1 1 320px;
+  margin: 0;
+}
+
+.vid-nota {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--text-3);
+}
+
+.vid-vacio {
+  margin: 8px 0;
+  color: var(--text-3);
+}
+
+.vid-ok {
+  margin: 0;
+  color: var(--ok);
+  font-weight: var(--fw-bold);
+}
+
+/* ----- Lista de videos ----- */
+
+.vid-lista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.vid-tarjeta {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.vid-tarjeta-cabecera {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.vid-tarjeta-cabecera > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.vid-nombre {
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.vid-detalle {
+  font-size: var(--fs-sm);
+  color: var(--text-3);
+}
+
+.vid-metadatos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 28px;
+  margin: 0;
+}
+
+.vid-metadatos div {
+  display: flex;
+  flex-direction: column;
+}
+
+.vid-metadatos dt {
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-3);
+}
+
+.vid-metadatos dd {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-weight: var(--fw-bold);
+  color: var(--text);
+}
+
+/* ----- Progreso ----- */
+
+.vid-estado {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.vid-estado-fila {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+}
+
+.vid-progreso {
+  position: relative;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--surface-muted);
+  overflow: hidden;
+}
+
+.vid-progreso span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--pitch);
+  transition: width 0.4s ease;
+}
+
+.vid-progreso--indeterminado span {
+  width: 30%;
+  animation: vid-espera 1.4s ease-in-out infinite;
+}
+
+@keyframes vid-espera {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(340%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vid-progreso span {
+    transition: none;
+  }
+  .vid-progreso--indeterminado span {
+    animation: none;
+    width: 100%;
+    opacity: 0.35;
+  }
+}
+
+/* ----- Lanzar procesamiento ----- */
+
+.vid-procesar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.vid-procesar .vid-nota,
+.vid-procesar .ui-alerta {
+  flex-basis: 100%;
+}
+
+.vid-check,
+.vid-color {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+}
+
+.vid-color input {
+  width: 36px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: none;
+}
+
+.vid-color span {
+  font-family: var(--font-mono);
+}

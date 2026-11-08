@@ -8,8 +8,6 @@ const CASOS = [
   "CU-21 Validar error de calibración",
   "CU-22 Reutilizar calibración",
   "CU-23 Corregir distorsión",
-  "CU-27 Procesar video grabado",
-  "CU-28 Cargar video",
 ];
 
 export function VisionPage() {

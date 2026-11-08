@@ -88,4 +88,61 @@ export interface Modelo extends ModeloCrear {
   /** A lo sumo una versión activa por club; la usa el worker en el siguiente procesamiento. */
   activo: boolean;
   entrenado_en: string;
+  /** Última vez que se activó. */
+  activado_en?: string | null;
+  /** T-064: por qué se activó aunque tuviera métricas peores (volver atrás). */
+  motivo_activacion?: string | null;
+}
+
+/**
+ * Cuerpo opcional de `POST /vision/modelos/{id}/activar` (T-064). Una versión con
+ * métricas peores que la activa se rechaza (409) salvo que se fuerce con un motivo.
+ */
+export interface ActivarModelo {
+  forzar: boolean;
+  motivo: string;
+}
+
+// ---------- CU-27, CU-28 Video del partido (T-060, T-061, T-062) ----------
+
+export type EstadoVideo = "CARGANDO" | "SUBIDO" | "PROCESANDO" | "PROCESADO" | "ERROR";
+
+/** Cuerpo de `POST /vision/partidos/{id}/videos`: se declara el archivo sin enviarlo. */
+export interface VideoIniciar {
+  nombre: string;
+  tipo: string;
+  tamano_bytes: number;
+}
+
+/** Respuesta de los endpoints de video. */
+export interface Video {
+  id: number;
+  partido_id: number;
+  modelo_id: number | null;
+  archivo_url: string;
+  nombre: string;
+  tipo: string;
+  tamano_bytes: number;
+  /** Para retomar una carga cortada: el siguiente trozo empieza en este byte. */
+  bytes_recibidos: number;
+  duracion_s: number | null;
+  fps: number | null;
+  resolucion: string | null;
+  estado: EstadoVideo;
+  /** Progreso del PROCESAMIENTO, no de la carga. */
+  progreso_pct: number;
+  /** Cuándo un worker empezó a procesarlo; null mientras espera en cola. */
+  iniciado_en: string | null;
+  /** HU-25: null en cola o sin avance, 0 al terminar. */
+  tiempo_restante_s: number | null;
+  mensaje_error: string | null;
+  creado_en: string;
+  procesado_en: string | null;
+}
+
+/** Cuerpo de `POST /vision/videos/{id}/procesar`. */
+export interface LanzarProceso {
+  modelo_id?: number | null;
+  /** Camiseta del rival, `#RRGGBB`; sin ella el worker separa los equipos por K-means. */
+  color_rival?: string | null;
 }
