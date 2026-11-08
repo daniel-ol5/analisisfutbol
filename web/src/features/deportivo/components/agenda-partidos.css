@@ -250,3 +250,19 @@
     position: static;
   }
 }
+
+/* CU-17: columna derecha con "en vivo" y el acceso a la alineación. */
+.agenda-lateral {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+@media (max-width: 720px) {
+  .agenda-lateral {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+}

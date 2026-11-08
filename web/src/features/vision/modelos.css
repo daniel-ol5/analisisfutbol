@@ -178,3 +178,44 @@
   text-align: center;
   color: var(--text-2);
 }
+
+/* ----- T-064: activación rechazada por métricas peores ----- */
+
+.mod-alerta-aviso {
+  border-color: var(--warn);
+  background: var(--warn-bg);
+}
+
+.mod-forzar {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.mod-forzar label {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-bold);
+  color: var(--text-2);
+}
+
+.mod-forzar-acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.mod-motivo {
+  display: block;
+  margin-top: 4px;
+  max-width: 220px;
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+}
+
+.mod-forzar-error {
+  margin: 4px 0 0;
+  font-size: var(--fs-sm);
+  color: var(--danger, #c0392b);
+}

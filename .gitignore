@@ -38,6 +38,12 @@ movil/ios/.symlinks/
 # Un .pt de 150 MB en el historial lo vuelve inmanejable para 6 personas.
 *.pt
 *.pth
+
+# Videos de partido (T-060): varios GB cada uno, van al almacén, nunca al repo.
+backend/almacen/
+*.mp4
+*.mov
+*.mkv
 *.onnx
 *.engine
 runs/

@@ -11,13 +11,21 @@ import 'modelos.dart';
 Future<dynamic> ping() => cliente.get('/seguridad/ping');
 
 /// CU-02 · Inicia sesión y guarda el token de forma segura.
-Future<Map<String, dynamic>> iniciarSesion(String email, String password) async {
-  final respuesta = await cliente.post(
-    '/seguridad/login',
-    cuerpo: {'email': email, 'password': password},
-  ) as Map<String, dynamic>;
+Future<Map<String, dynamic>> iniciarSesion(
+  String email,
+  String password,
+) async {
+  final respuesta =
+      await cliente.post(
+            '/seguridad/login',
+            cuerpo: {'email': email, 'password': password},
+          )
+          as Map<String, dynamic>;
 
-  await _guardar(respuesta);
+  await Almacenamiento.guardarNuevaSesion(
+    respuesta['access_token'] as String,
+    respuesta['refresh_token'] as String,
+  );
   return respuesta;
 }
 
@@ -65,10 +73,12 @@ Future<Perfil> editarPerfil({
   required String nombre,
   required String apellido,
 }) async {
-  final json = await cliente.patch('/seguridad/yo', cuerpo: {
-    'nombre': nombre,
-    'apellido': apellido,
-  }) as Map<String, dynamic>;
+  final json =
+      await cliente.patch(
+            '/seguridad/yo',
+            cuerpo: {'nombre': nombre, 'apellido': apellido},
+          )
+          as Map<String, dynamic>;
   await Almacenamiento.guardarUsuario(json);
   return Perfil.fromJson(json);
 }
@@ -81,14 +91,17 @@ Future<void> cambiarPassword({
   required String actual,
   required String nueva,
 }) async {
-  final sesion = await cliente.post('/seguridad/yo/password', cuerpo: {
-    'password_actual': actual,
-    'password_nueva': nueva,
-  }) as Map<String, dynamic>;
+  final sesion =
+      await cliente.post(
+            '/seguridad/yo/password',
+            cuerpo: {'password_actual': actual, 'password_nueva': nueva},
+          )
+          as Map<String, dynamic>;
   await _guardar(sesion);
 }
 
-Future<void> _guardar(Map<String, dynamic> sesion) => Almacenamiento.guardarSesion(
+Future<void> _guardar(Map<String, dynamic> sesion) =>
+    Almacenamiento.guardarSesion(
       sesion['access_token'] as String,
       sesion['refresh_token'] as String,
     );

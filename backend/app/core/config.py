@@ -32,6 +32,12 @@ class Settings(BaseSettings):
     smtp_password: str = ""
     smtp_remitente: str = "Área Técnica <no-responder@areatecnica.local>"
 
+    # T-060: carga de video por partes. Disco local detrás de AlmacenVideos
+    # (PROVISORIO hasta tener almacenamiento de objetos; ver vision/almacen.py).
+    videos_dir: str = "./almacen/videos"
+    video_max_bytes: int = 16 * 1024**3       # 16 GiB: un partido en 4K entra holgado
+    video_max_trozo_bytes: int = 64 * 1024**2  # tope de cada PUT; el cliente usa 8 MiB
+
     @property
     def origenes(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]

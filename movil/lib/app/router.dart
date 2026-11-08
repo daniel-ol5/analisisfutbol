@@ -12,8 +12,8 @@ import '../shared/api/almacenamiento.dart';
 import '../features/seguridad/pagina.dart';
 import '../features/seguridad/perfil_pagina.dart';
 import '../features/deportivo/pagina.dart';
+import '../features/deportivo/agenda/agenda_pagina.dart';
 import '../features/deportivo/alineacion/alineacion_pagina.dart';
-import '../features/deportivo/alineacion/elegir_partido_pagina.dart';
 import '../features/vision/pagina.dart';
 import '../features/partido/pagina.dart';
 import '../features/analisis/pagina.dart';
@@ -41,8 +41,8 @@ final router = GoRouter(
       routes: [
         GoRoute(path: '/', builder: (_, _) => const Inicio()),
         GoRoute(path: '/perfil', builder: (_, _) => const PerfilPagina()),
-        // T-053. PROVISORIO hasta T-052: /partidos será la agenda.
-        GoRoute(path: '/partidos', builder: (_, _) => const ElegirPartidoPagina()),
+        // T-052 agenda; cada partido abre su alineación (T-053).
+        GoRoute(path: '/partidos', builder: (_, _) => const AgendaPagina()),
         GoRoute(
           path: '/partidos/:id/alineacion',
           builder: (_, estado) => AlineacionPagina(

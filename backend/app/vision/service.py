@@ -4,6 +4,8 @@ Este módulo no conoce FastAPI: recibe una sesión y datos, devuelve objetos o
 lanza excepciones de dominio. Así se prueba sin levantar el servidor.
 """
 
+from datetime import UTC, datetime
+
 from fastapi import HTTPException, status
 from sqlalchemy import update
 from sqlalchemy.exc import IntegrityError
@@ -19,7 +21,7 @@ from app.vision.homografia import (
     es_valida,
 )
 from app.vision.models import Calibracion, ModeloML
-from app.vision.schemas import CalibracionGuardar, ErrorCalibracion, ModeloCrear
+from app.vision.schemas import ActivarModelo, CalibracionGuardar, ErrorCalibracion, ModeloCrear
 
 
 async def _buscar_calibracion(
@@ -150,24 +152,77 @@ async def registrar_modelo(
     return modelo
 
 
-async def activar_modelo(db: AsyncSession, usuario: UsuarioActual, modelo_id: int) -> ModeloML:
-    """CU-29 (T-059): activa una version; a lo sumo una activa por club.
+# T-064: las métricas que se comparan al activar, con su nombre para el mensaje.
+METRICAS = {
+    "map50_jugador": "mAP@50 jugador",
+    "map50_balon": "mAP@50 balón",
+    "idf1": "IDF1",
+}
 
-    Permite "volver atras" sin reentrenar: activar una version anterior
-    alcanza, el worker usa la que este marcada como `activo` en el siguiente
-    procesamiento (T-063 en el frontend). 404 si no existe o es de otro club.
+
+def metricas_que_empeoran(nueva: ModeloML, vigente: ModeloML) -> list[str]:
+    """T-064: qué métricas de `nueva` son peores que las de `vigente`.
+
+    Se compara solo lo que la vigente tiene medido. Si la vigente tiene una
+    métrica y la nueva no la informa, no se puede asegurar que no empeore:
+    cuenta como peor.
     """
+    peores = []
+    for campo, nombre in METRICAS.items():
+        antes = getattr(vigente, campo)
+        ahora = getattr(nueva, campo)
+        if antes is None:
+            continue
+        if ahora is None:
+            peores.append(f"{nombre} sin medir (la activa tiene {antes:.2f})")
+        elif ahora < antes:
+            peores.append(f"{nombre} {ahora:.2f} < {antes:.2f}")
+    return peores
+
+
+async def activar_modelo(
+    db: AsyncSession,
+    usuario: UsuarioActual,
+    modelo_id: int,
+    datos: ActivarModelo | None = None,
+) -> ModeloML:
+    """CU-29 (T-059, T-064): activa una version; a lo sumo una activa por club.
+
+    T-064: una version con metricas peores que la vigente no se activa (409).
+    Para "volver atras" sin reentrenar (T-059) se fuerza con `forzar` y un
+    motivo, que queda registrado junto con quien lo hizo. El worker usa la
+    version activa en el siguiente procesamiento. 404 si no existe o es de
+    otro club.
+    """
+    datos = datos or ActivarModelo()
     modelo = verificar_pertenencia(
         (await db.execute(del_club(ModeloML, usuario).where(ModeloML.id == modelo_id)))
         .scalar_one_or_none(),
         usuario,
     )
+    vigente = (
+        await db.execute(
+            del_club(ModeloML, usuario).where(ModeloML.activo, ModeloML.id != modelo.id)
+        )
+    ).scalar_one_or_none()
+    peores = metricas_que_empeoran(modelo, vigente) if vigente else []
+    if peores and not datos.forzar:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"La versión {modelo.version} tiene métricas peores que la activa "
+            f"({vigente.nombre} {vigente.version}): {'; '.join(peores)}. "
+            "Para activarla igual (volver atrás), indica el motivo.",
+        )
     # Primero se desactivan todas las del club (incluida esta, no importa) y
     # despues se activa solo esta: nunca hay un instante con dos activas.
     await db.execute(
         update(ModeloML).where(ModeloML.club_id == usuario.club_id).values(activo=False)
     )
     modelo.activo = True
+    modelo.activado_en = datetime.now(UTC)
+    modelo.activado_por_id = usuario.id
+    # El motivo solo tiene sentido si hizo falta forzar.
+    modelo.motivo_activacion = datos.motivo.strip() if peores and datos.motivo else None
     await db.commit()
     await db.refresh(modelo)
     return modelo
