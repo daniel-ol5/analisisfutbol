@@ -300,7 +300,11 @@ class TarjetaPartido extends StatelessWidget {
                 key: Key('resultado-${p.id}'),
                 style: t.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900))
             : const Icon(Icons.chevron_right),
-        onTap: () => context.go('/partidos/${p.id}/alineacion'),
+        onTap: () => context.go(
+          p.estado == 'EN_CURSO'
+              ? '/partidos/${p.id}/eventos'
+              : '/partidos/${p.id}/alineacion',
+        ),
       ),
     );
   }
