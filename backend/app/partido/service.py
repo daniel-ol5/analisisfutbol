@@ -5,19 +5,258 @@ lanza excepciones de dominio. Así se prueba sin levantar el servidor.
 """
 
 import logging
+from collections.abc import Callable
+from datetime import UTC, datetime
 from typing import Any, Protocol
 
-from sqlalchemy import insert
+from fastapi import HTTPException, status
+from sqlalchemy import func, insert, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.database import SessionLocal
 from app.core.deps import UsuarioActual
-from app.core.tenancy import verificar_pertenencia
-from app.deportivo.models import Partido
-from app.partido.schemas import MensajeWorker
+from app.core.tenancy import del_club, verificar_pertenencia
+from app.deportivo.models import Alineacion, AlineacionJugador, Jugador, Partido
+from app.deportivo.schemas import EstadoPartido
+from app.partido.models import EventoManual as EventoManualModelo
+from app.partido.schemas import EventoManualCrear, Lado, MensajeWorker, TipoEventoManual
 
 log = logging.getLogger(__name__)
+
+RelojSistema = Callable[[], datetime]
+
+
+def ahora_utc() -> datetime:
+    return datetime.now(UTC)
+
+
+def _en_utc(instante: datetime) -> datetime:
+    if instante.tzinfo is None:
+        return instante.replace(tzinfo=UTC)
+    return instante.astimezone(UTC)
+
+
+# ---------------- CU-36, CU-37, CU-38 · Eventos manuales (T-066) ----------------
+
+
+async def _partido_del_club(
+    db: AsyncSession, usuario: UsuarioActual, partido_id: int
+) -> Partido:
+    stmt = del_club(Partido, usuario).where(Partido.id == partido_id)
+    partido = (await db.execute(stmt)).scalar_one_or_none()
+    return verificar_pertenencia(partido, usuario)
+
+
+def _lado_propio(partido: Partido) -> Lado:
+    return Lado.LOCAL if partido.es_local else Lado.VISITANTE
+
+
+async def _exigir_jugador_alineado(
+    db: AsyncSession, partido: Partido, jugador_id: int
+) -> Jugador:
+    stmt = (
+        select(Jugador)
+        .join(AlineacionJugador, AlineacionJugador.jugador_id == Jugador.id)
+        .join(Alineacion, Alineacion.id == AlineacionJugador.alineacion_id)
+        .where(
+            Alineacion.partido_id == partido.id,
+            Jugador.id == jugador_id,
+            Jugador.club_id == partido.club_id,
+            Jugador.equipo_id == partido.equipo_id,
+        )
+    )
+    jugador = (await db.execute(stmt)).scalar_one_or_none()
+    if jugador is None:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "El jugador no pertenece a la alineacion de este partido",
+        )
+    return jugador
+
+
+async def _validar_jugadores(
+    db: AsyncSession, partido: Partido, datos: EventoManualCrear
+) -> None:
+    es_equipo_propio = datos.equipo == _lado_propio(partido)
+    if not es_equipo_propio:
+        if datos.jugador_id is not None or datos.jugador_entra_id is not None:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+                "El rival no tiene un plantel registrado; no se aceptan ids del equipo propio",
+            )
+        return
+
+    if datos.jugador_id is None:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "El evento del equipo propio requiere jugador_id",
+        )
+    await _exigir_jugador_alineado(db, partido, datos.jugador_id)
+
+    if datos.tipo == TipoEventoManual.SUSTITUCION:
+        if datos.jugador_entra_id is None:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+                "La sustitucion del equipo propio requiere jugador_entra_id",
+            )
+        await _exigir_jugador_alineado(db, partido, datos.jugador_entra_id)
+
+
+async def _evento_por_uuid(
+    db: AsyncSession, usuario: UsuarioActual, uuid: str
+) -> EventoManualModelo | None:
+    stmt = del_club(EventoManualModelo, usuario).where(EventoManualModelo.uuid == uuid)
+    return (await db.execute(stmt)).scalar_one_or_none()
+
+
+def _mismo_evento(
+    existente: EventoManualModelo, partido_id: int, datos: EventoManualCrear
+) -> bool:
+    return (
+        existente.partido_id == partido_id
+        and existente.tipo == datos.tipo.value
+        and existente.equipo == datos.equipo.value
+        and existente.jugador_id == datos.jugador_id
+        and existente.jugador_entra_id == datos.jugador_entra_id
+        and (datos.minuto is None or existente.minuto == datos.minuto)
+    )
+
+
+async def listar_eventos_manuales(
+    db: AsyncSession, usuario: UsuarioActual, partido_id: int
+) -> list[EventoManualModelo]:
+    await _partido_del_club(db, usuario, partido_id)
+    stmt = (
+        del_club(EventoManualModelo, usuario)
+        .where(
+            EventoManualModelo.partido_id == partido_id,
+            EventoManualModelo.anulado_en.is_(None),
+        )
+        .order_by(EventoManualModelo.minuto, EventoManualModelo.creado_en, EventoManualModelo.id)
+    )
+    return list((await db.execute(stmt)).scalars().all())
+
+
+async def registrar_evento_manual(
+    db: AsyncSession,
+    usuario: UsuarioActual,
+    partido_id: int,
+    datos: EventoManualCrear,
+    ahora: RelojSistema = ahora_utc,
+) -> EventoManualModelo:
+    """Registra un evento una sola vez, incluso si el cliente repite su UUID."""
+    uuid = str(datos.uuid)
+    existente = await _evento_por_uuid(db, usuario, uuid)
+    if existente is not None:
+        if not _mismo_evento(existente, partido_id, datos):
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "El UUID ya fue utilizado por un evento diferente",
+            )
+        return existente
+
+    partido = await _partido_del_club(db, usuario, partido_id)
+    if partido.estado != EstadoPartido.EN_CURSO.value:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"No se pueden registrar eventos en un partido {partido.estado}",
+        )
+    await _validar_jugadores(db, partido, datos)
+
+    instante = _en_utc(ahora())
+    minuto = partido.minuto_actual if datos.minuto is None else datos.minuto
+    convertida_en_roja = False
+    if datos.tipo == TipoEventoManual.AMARILLA and datos.jugador_id is not None:
+        amarillas = await db.scalar(
+            select(func.count())
+            .select_from(EventoManualModelo)
+            .where(
+                EventoManualModelo.club_id == usuario.club_id,
+                EventoManualModelo.partido_id == partido.id,
+                EventoManualModelo.jugador_id == datos.jugador_id,
+                EventoManualModelo.tipo == TipoEventoManual.AMARILLA.value,
+                EventoManualModelo.anulado_en.is_(None),
+            )
+        )
+        convertida_en_roja = bool(amarillas)
+
+    evento = EventoManualModelo(
+        club_id=usuario.club_id,
+        partido_id=partido.id,
+        uuid=uuid,
+        tipo=datos.tipo.value,
+        equipo=datos.equipo.value,
+        jugador_id=datos.jugador_id,
+        jugador_entra_id=datos.jugador_entra_id,
+        minuto=minuto,
+        origen="MANUAL",
+        convertida_en_roja=convertida_en_roja,
+        capturado_en=_en_utc(datos.capturado_en) if datos.capturado_en else instante,
+        creado_en=instante,
+        creado_por_id=usuario.id,
+    )
+    db.add(evento)
+
+    if datos.tipo == TipoEventoManual.GOL:
+        if datos.equipo == _lado_propio(partido):
+            partido.goles_favor += 1
+        else:
+            partido.goles_contra += 1
+
+    await db.commit()
+    await db.refresh(evento)
+    return evento
+
+
+async def deshacer_evento_manual(
+    db: AsyncSession,
+    usuario: UsuarioActual,
+    evento_id: int,
+    ahora: RelojSistema = ahora_utc,
+) -> None:
+    stmt = del_club(EventoManualModelo, usuario).where(
+        EventoManualModelo.id == evento_id,
+        EventoManualModelo.anulado_en.is_(None),
+    )
+    evento = (await db.execute(stmt)).scalar_one_or_none()
+    evento = verificar_pertenencia(evento, usuario)
+
+    ultimo_stmt = (
+        del_club(EventoManualModelo, usuario)
+        .where(
+            EventoManualModelo.partido_id == evento.partido_id,
+            EventoManualModelo.anulado_en.is_(None),
+        )
+        .order_by(EventoManualModelo.creado_en.desc(), EventoManualModelo.id.desc())
+        .limit(1)
+    )
+    ultimo = (await db.execute(ultimo_stmt)).scalar_one()
+    if ultimo.id != evento.id:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Solo se puede deshacer el ultimo evento activo del partido",
+        )
+
+    instante = _en_utc(ahora())
+    edad_s = (instante - _en_utc(evento.creado_en)).total_seconds()
+    if edad_s > 60:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "El plazo de 60 segundos para deshacer el evento ya vencio",
+        )
+
+    partido = await _partido_del_club(db, usuario, evento.partido_id)
+    if evento.tipo == TipoEventoManual.GOL.value:
+        lado = Lado(evento.equipo)
+        if lado == _lado_propio(partido):
+            partido.goles_favor = max(0, partido.goles_favor - 1)
+        else:
+            partido.goles_contra = max(0, partido.goles_contra - 1)
+
+    evento.anulado_en = instante
+    evento.anulado_por_id = usuario.id
+    await db.commit()
 
 
 # ---------------- Acceso a partidos (T-032) ----------------
