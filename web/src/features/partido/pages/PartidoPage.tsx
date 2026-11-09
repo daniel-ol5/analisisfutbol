@@ -25,6 +25,12 @@ import {
 } from "../api";
 import { useCanalVivo } from "../hooks/useCanalVivo";
 import { useRelojPartido } from "../hooks/useRelojPartido";
+import { useSupervisionCalidad } from "../hooks/useSupervisionCalidad";
+import {
+  FPS_ESPERADO,
+  TRACKS_ESPERADOS_REFERENCIA,
+  type MuestraSupervisionCalidad,
+} from "../lib/calidad";
 import {
   INTERVALO_SONDEO_CON_WS_MS,
   INTERVALO_SONDEO_SIN_WS_MS,
@@ -120,6 +126,23 @@ export function PartidoPage() {
 
   // Canal WebSocket `/api/partido/{id}/vivo` (Fase 2B)
   const canalVivo = useCanalVivo(partidoIdActivo, queryClient);
+  const muestraSupervision = useMemo<MuestraSupervisionCalidad>(
+    () => ({
+      canal: canalVivo.estado,
+      calidad: canalVivo.calidad,
+      recibidaEnMs: canalVivo.ultimaTelemetriaEnMs,
+      tracksActivos: canalVivo.tracksActivos,
+      latenciaWsMs: canalVivo.latenciaMs,
+    }),
+    [
+      canalVivo.calidad,
+      canalVivo.estado,
+      canalVivo.latenciaMs,
+      canalVivo.tracksActivos,
+      canalVivo.ultimaTelemetriaEnMs,
+    ],
+  );
+  const supervisionCalidad = useSupervisionCalidad(partidoIdActivo, muestraSupervision);
 
   // Sondeo HTTP de respaldo: 15 s con WS conectado y 2 s cuando está reconectando o caído
   const intervaloSondeoMs: number | false =
@@ -732,46 +755,86 @@ export function PartidoPage() {
             )}
           </section>
 
-          {/* Panel de calidad mínimo */}
+          {/* Panel de supervisión T-073 */}
           <section className="par-tarjeta par-calidad" aria-label="Calidad de procesamiento">
-            <h2 className="par-seccion-titulo">Calidad de procesamiento en vivo</h2>
+            <div className="par-calidad-cabecera">
+              <div>
+                <h2 className="par-seccion-titulo">Calidad de procesamiento en vivo</h2>
+                <p className="par-calidad-referencia">
+                  Referencia: {FPS_ESPERADO} Hz y aproximadamente {TRACKS_ESPERADOS_REFERENCIA}{" "}
+                  tracks (22 jugadores y balón).
+                </p>
+              </div>
+              <span
+                className={`par-worker-estado ${
+                  supervisionCalidad.workerConectado
+                    ? "par-worker-estado--conectado"
+                    : "par-worker-estado--desconectado"
+                }`}
+                role="status"
+              >
+                {supervisionCalidad.workerConectado ? "Worker conectado" : "Worker desconectado"}
+              </span>
+            </div>
             <ul className="par-calidad-lista">
               <li className="par-calidad-item">
-                <span>Worker de visión</span>
+                <span>FPS de inferencia</span>
                 <strong>
-                  {estadoVivo?.calidad.worker_conectado ? "Conectado" : "Desconectado"}
+                  {canalVivo.calidad
+                    ? `${canalVivo.calidad.fps.toFixed(1).replace(".", ",")} FPS`
+                    : "—"}
                 </strong>
+                <small>Esperado: {FPS_ESPERADO} FPS</small>
               </li>
               <li className="par-calidad-item">
-                <span>Cuadros por segundo</span>
+                <span>Latencia WebSocket</span>
                 <strong>
-                  {estadoVivo ? `${estadoVivo.calidad.fps.toFixed(1).replace(".", ",")} FPS` : "—"}
+                  {canalVivo.latenciaMs === null
+                    ? "Sin medición"
+                    : `${Math.round(canalVivo.latenciaMs)} ms`}
                 </strong>
+                <small>Ida y vuelta de ping/pong real</small>
               </li>
               <li className="par-calidad-item">
                 <span>Jugadores detectados</span>
-                <strong>{estadoVivo?.calidad.jugadores_detectados ?? 0}</strong>
+                <strong>{canalVivo.calidad?.jugadores_detectados ?? "—"}</strong>
+                <small>Alerta si son menos de 16 durante 10 s</small>
+              </li>
+              <li className="par-calidad-item">
+                <span>Tracks activos</span>
+                <strong>{canalVivo.tracksActivos ?? "—"}</strong>
+                <small>Referencia aproximada: {TRACKS_ESPERADOS_REFERENCIA}</small>
               </li>
               <li className="par-calidad-item">
                 <span>Balón visible</span>
-                <strong>{estadoVivo?.calidad.balon_visible ? "Sí" : "No"}</strong>
+                <strong>
+                  {canalVivo.calidad === null ? "—" : canalVivo.calidad.balon_visible ? "Sí" : "No"}
+                </strong>
+                <small>Alerta después de 30 s de ausencia</small>
               </li>
               <li className="par-calidad-item">
-                <span>Retraso</span>
+                <span>Retraso reportado</span>
                 <strong>
-                  {estadoVivo
-                    ? `${estadoVivo.calidad.retraso_s.toFixed(1).replace(".", ",")} s`
+                  {canalVivo.calidad
+                    ? `${canalVivo.calidad.retraso_s.toFixed(2).replace(".", ",")} s`
                     : "—"}
                 </strong>
+                <small>Dato del worker, distinto de la latencia WebSocket</small>
               </li>
             </ul>
 
-            {estadoVivo?.calidad.degradado && (
-              <p className="par-calidad-degradado" role="status">
-                <strong>Procesamiento degradado:</strong>{" "}
-                {estadoVivo.calidad.motivo ?? "Calidad reducida reportada por el worker."}
-              </p>
-            )}
+            <div className="par-calidad-alertas" aria-live="polite">
+              {supervisionCalidad.alertas.length === 0 ? (
+                <p className="par-calidad-correcta">Procesamiento dentro de los umbrales.</p>
+              ) : (
+                supervisionCalidad.alertas.map((alerta) => (
+                  <div className="par-calidad-alerta" role="alert" key={alerta.codigo}>
+                    <strong>{alerta.titulo}</strong>
+                    <span>{alerta.detalle}</span>
+                  </div>
+                ))
+              )}
+            </div>
           </section>
         </>
       )}
