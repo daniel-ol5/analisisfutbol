@@ -10,7 +10,7 @@ from sqlalchemy import func, select
 from app.core.database import SessionLocal
 from app.deportivo.models import Jugador, Partido
 from app.main import app
-from app.partido.models import EventoManual
+from app.partido.models import EventoManual, RelojPartido
 from scripts.seed_dev import sembrar_deportivo_demo
 
 BASE = "http://test"
@@ -111,6 +111,26 @@ async def test_registrar_gol_actualiza_marcador_y_toma_minuto_del_partido(client
     async with SessionLocal() as db:
         partido = await db.get(Partido, club["partido_id"])
         assert (partido.goles_favor, partido.goles_contra) == (1, 0)
+
+
+async def test_registrar_evento_toma_minuto_del_reloj_persistente(cliente):
+    club = await _club_con_partido(cliente, "reloj")
+    async with SessionLocal() as db:
+        db.add(
+            RelojPartido(
+                club_id=club["club_id"],
+                partido_id=club["partido_id"],
+                parte=1,
+                en_curso=False,
+                acumulado_s=37 * 60,
+            )
+        )
+        await db.commit()
+
+    respuesta = await _registrar(cliente, club, "AMARILLA")
+
+    assert respuesta.status_code == 201, respuesta.text
+    assert respuesta.json()["minuto"] == 37
 
 
 async def test_tarjetas_primera_amarilla_segunda_roja_y_roja_directa(cliente):
