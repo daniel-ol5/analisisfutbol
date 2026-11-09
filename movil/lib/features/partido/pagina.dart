@@ -16,6 +16,7 @@ import '../deportivo/agenda/modelos.dart';
 import '../deportivo/alineacion/api.dart' as alineacion_api;
 import '../deportivo/alineacion/modelos.dart';
 import 'api.dart' as partido_api;
+import 'cola_eventos.dart';
 import 'modelos.dart';
 
 typedef ObtenerPartidos = Future<List<Partido>> Function();
@@ -23,6 +24,10 @@ typedef ObtenerAlineacion = Future<Alineacion> Function(int partidoId);
 typedef RegistrarEvento =
     Future<EventoManual> Function(int partidoId, EventoCrear evento);
 typedef DeshacerEvento = Future<void> Function(int eventoId);
+typedef ContarPendientes = Future<int> Function(int partidoId);
+typedef SincronizarPendientes =
+    Future<ResultadoSincronizacion> Function(int partidoId);
+typedef DescartarPendiente = Future<void> Function(String uuid);
 
 class PartidoPagina extends StatefulWidget {
   const PartidoPagina({
@@ -32,6 +37,9 @@ class PartidoPagina extends StatefulWidget {
     this.obtenerAlineacion = alineacion_api.obtenerAlineacion,
     this.registrar = partido_api.registrarEvento,
     this.deshacer = partido_api.deshacerEvento,
+    this.contarPendientes = partido_api.contarPendientes,
+    this.sincronizarPendientes = partido_api.sincronizarPendientes,
+    this.descartarPendiente = partido_api.descartarPendiente,
   });
 
   /// null abre el único partido EN_CURSO; la ruta de agenda pasa un id.
@@ -40,12 +48,16 @@ class PartidoPagina extends StatefulWidget {
   final ObtenerAlineacion obtenerAlineacion;
   final RegistrarEvento registrar;
   final DeshacerEvento deshacer;
+  final ContarPendientes contarPendientes;
+  final SincronizarPendientes sincronizarPendientes;
+  final DescartarPendiente descartarPendiente;
 
   @override
   State<PartidoPagina> createState() => _PartidoPaginaState();
 }
 
-class _PartidoPaginaState extends State<PartidoPagina> {
+class _PartidoPaginaState extends State<PartidoPagina>
+    with WidgetsBindingObserver {
   Partido? _partido;
   Alineacion? _alineacion;
   final Set<int> _enCancha = {};
@@ -57,19 +69,34 @@ class _PartidoPaginaState extends State<PartidoPagina> {
   bool _enviando = false;
   String? _error;
   Timer? _venceDeshacer;
+  Timer? _reintentoSincronizacion;
   int _golesFavor = 0;
   int _golesContra = 0;
+  int _pendientes = 0;
+  bool _sincronizando = false;
 
   @override
   void initState() {
     super.initState();
-    _cargar();
+    WidgetsBinding.instance.addObserver(this);
+    _cargar().then((_) => _actualizarPendientes());
+    _reintentoSincronizacion = Timer.periodic(
+      const Duration(seconds: 15),
+      (_) => _sincronizar(),
+    );
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _venceDeshacer?.cancel();
+    _reintentoSincronizacion?.cancel();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _sincronizar();
   }
 
   Future<void> _cargar() async {
@@ -254,6 +281,7 @@ class _PartidoPaginaState extends State<PartidoPagina> {
             ..add(evento.jugadorEntraId!);
         }
       });
+      await _actualizarPendientes();
       _programarVencimiento();
       _confirmar(evento);
     } on ErrorApi catch (e) {
@@ -273,7 +301,9 @@ class _PartidoPaginaState extends State<PartidoPagina> {
   }
 
   void _confirmar(EventoManual evento) {
-    final detalle = evento.convertidaEnRoja
+    final detalle = evento.pendiente
+        ? '${evento.tipo.etiqueta} guardado sin conexión. Se sincronizará automáticamente.'
+        : evento.convertidaEnRoja
         ? 'Segunda amarilla: convertida en roja.'
         : '${evento.tipo.etiqueta} registrado en el minuto ${evento.minuto}.';
     final mensajero = ScaffoldMessenger.of(context);
@@ -294,7 +324,11 @@ class _PartidoPaginaState extends State<PartidoPagina> {
     if (!_puedeDeshacer || _enviando || _ultimoEvento?.id != evento.id) return;
     setState(() => _enviando = true);
     try {
-      await widget.deshacer(evento.id);
+      if (evento.pendiente && evento.uuid != null) {
+        await widget.descartarPendiente(evento.uuid!);
+      } else {
+        await widget.deshacer(evento.id);
+      }
       if (!mounted) return;
       setState(() {
         if (evento.tipo == TipoEvento.gol) {
@@ -314,6 +348,7 @@ class _PartidoPaginaState extends State<PartidoPagina> {
         _ultimoEvento = null;
         _puedeDeshacer = false;
       });
+      await _actualizarPendientes();
       _venceDeshacer?.cancel();
       _avisar('Evento deshecho.');
     } on ErrorApi catch (e) {
@@ -338,6 +373,51 @@ class _PartidoPaginaState extends State<PartidoPagina> {
       );
   }
 
+  Future<void> _actualizarPendientes() async {
+    final partido = _partido;
+    if (partido == null) return;
+    try {
+      final cantidad = await widget.contarPendientes(partido.id);
+      if (mounted) setState(() => _pendientes = cantidad);
+    } catch (_) {
+      // Sin perfil local o base temporalmente no disponible: se reintenta.
+    }
+  }
+
+  Future<void> _sincronizar({bool anunciar = false}) async {
+    final partido = _partido;
+    if (partido == null || _sincronizando || _pendientes == 0) return;
+    _sincronizando = true;
+    if (mounted) setState(() {});
+    try {
+      final resultado = await widget.sincronizarPendientes(partido.id);
+      if (!mounted) return;
+      setState(() => _pendientes = resultado.pendientes);
+      if (anunciar || resultado.confirmados > 0) {
+        final texto = resultado.confirmados > 0
+            ? '${resultado.confirmados} evento(s) sincronizado(s).'
+            : 'No se pudo sincronizar. Los eventos siguen guardados.';
+        _avisar(texto, error: resultado.error != null && anunciar);
+      }
+    } catch (_) {
+      if (anunciar) {
+        _avisar(
+          'No se pudo sincronizar. Los eventos siguen guardados.',
+          error: true,
+        );
+      }
+    } finally {
+      _sincronizando = false;
+      if (mounted) setState(() {});
+    }
+  }
+
+  Future<void> _recargar() async {
+    await _cargar();
+    await _actualizarPendientes();
+    await _sincronizar();
+  }
+
   @override
   Widget build(BuildContext context) {
     final partido = _partido;
@@ -350,9 +430,24 @@ class _PartidoPaginaState extends State<PartidoPagina> {
           tooltip: 'Volver a partidos',
           onPressed: () => context.go('/partidos'),
         ),
+        actions: [
+          TextButton.icon(
+            key: const Key('eventos-pendientes'),
+            onPressed: _pendientes > 0 && !_sincronizando
+                ? () => _sincronizar(anunciar: true)
+                : null,
+            icon: _sincronizando
+                ? const SizedBox.square(
+                    dimension: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.cloud_upload_outlined),
+            label: Text('Pendientes: $_pendientes'),
+          ),
+        ],
       ),
       body: RefreshIndicator(
-        onRefresh: _cargar,
+        onRefresh: _recargar,
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
           children: [

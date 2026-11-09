@@ -10,7 +10,7 @@ from sqlalchemy import func, select
 from app.core.database import SessionLocal
 from app.deportivo.models import Jugador, Partido
 from app.main import app
-from app.partido.models import EventoManual
+from app.partido.models import EventoManual, RelojPartido
 from scripts.seed_dev import sembrar_deportivo_demo
 
 BASE = "http://test"
@@ -111,6 +111,26 @@ async def test_registrar_gol_actualiza_marcador_y_toma_minuto_del_partido(client
     async with SessionLocal() as db:
         partido = await db.get(Partido, club["partido_id"])
         assert (partido.goles_favor, partido.goles_contra) == (1, 0)
+
+
+async def test_registrar_evento_toma_minuto_del_reloj_persistente(cliente):
+    club = await _club_con_partido(cliente, "reloj")
+    async with SessionLocal() as db:
+        db.add(
+            RelojPartido(
+                club_id=club["club_id"],
+                partido_id=club["partido_id"],
+                parte=1,
+                en_curso=False,
+                acumulado_s=37 * 60,
+            )
+        )
+        await db.commit()
+
+    respuesta = await _registrar(cliente, club, "AMARILLA")
+
+    assert respuesta.status_code == 201, respuesta.text
+    assert respuesta.json()["minuto"] == 37
 
 
 async def test_tarjetas_primera_amarilla_segunda_roja_y_roja_directa(cliente):
@@ -231,6 +251,76 @@ async def test_uuid_hace_idempotente_el_registro_y_rechaza_otro_contenido(client
         partido = await db.get(Partido, club["partido_id"])
         assert cantidad == 1
         assert partido.goles_favor == 1
+
+
+async def test_sincronizar_cola_respeta_orden_y_no_duplica_reintentos(cliente):
+    club = await _club_con_partido(cliente, "sincronizar")
+    async with SessionLocal() as db:
+        db.add(
+            RelojPartido(
+                club_id=club["club_id"],
+                partido_id=club["partido_id"],
+                parte=1,
+                en_curso=True,
+                inicio_utc=datetime(2026, 11, 8, 16, tzinfo=UTC),
+                acumulado_s=0,
+            )
+        )
+        await db.commit()
+    temprano = str(uuid4())
+    tarde = str(uuid4())
+    cola = [
+        {
+            "uuid": tarde,
+            "capturado_en": "2026-11-08T16:25:00Z",
+            "tipo": "ROJA",
+            "equipo": "LOCAL",
+            "jugador_id": club["jugadores"][10],
+        },
+        {
+            "uuid": temprano,
+            "capturado_en": "2026-11-08T16:20:00Z",
+            "tipo": "AMARILLA",
+            "equipo": "LOCAL",
+            "jugador_id": club["jugadores"][9],
+        },
+    ]
+    url = f"{_url(club)}/sincronizar"
+
+    primera = await cliente.post(url, headers=club["auth"], json=cola)
+    repetida = await cliente.post(url, headers=club["auth"], json=cola)
+
+    assert primera.status_code == repetida.status_code == 200
+    assert [evento["uuid"] for evento in primera.json()] == [temprano, tarde]
+    assert [evento["minuto"] for evento in primera.json()] == [20, 25]
+    assert [evento["id"] for evento in repetida.json()] == [
+        evento["id"] for evento in primera.json()
+    ]
+    async with SessionLocal() as db:
+        cantidad = await db.scalar(select(func.count()).select_from(EventoManual))
+        assert cantidad == 2
+
+
+async def test_sincronizar_cola_exige_rol_y_aislamiento_del_partido(cliente):
+    club = await _club_con_partido(cliente, "sync_permisos")
+    otro = await _club_con_partido(cliente, "sync_otro")
+    analista = await _auth_rol(cliente, club, "ANALISTA", "sync_rechazado")
+    cola = [
+        {
+            "uuid": str(uuid4()),
+            "capturado_en": "2026-11-08T16:20:00Z",
+            "tipo": "GOL",
+            "equipo": "LOCAL",
+            "jugador_id": club["jugadores"][9],
+        }
+    ]
+    url = f"{_url(club)}/sincronizar"
+
+    sin_permiso = await cliente.post(url, headers=analista, json=cola)
+    otro_club = await cliente.post(url, headers=otro["auth"], json=cola)
+
+    assert sin_permiso.status_code == 403
+    assert otro_club.status_code == 404
 
 
 async def test_deshacer_ultimo_evento_dentro_de_60_segundos_revierte_gol(cliente):

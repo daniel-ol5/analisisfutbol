@@ -11,7 +11,7 @@
  */
 import { useMutation } from "@tanstack/react-query";
 import { useEffect, useId, useMemo, useRef, useState, type ChangeEvent } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
 import "@/features/vision/calibracion.css";
 import { estadoHttp, mensajeDeError } from "@/shared/lib/errors";
@@ -61,7 +61,10 @@ export function CalibracionPage() {
   const [dimensiones, setDimensiones] = useState<{ ancho: number; alto: number } | null>(null);
 
   // Parámetros del partido y dimensiones reales editables (CU-20)
-  const [partidoIdTexto, setPartidoIdTexto] = useState("1");
+  const [searchParams] = useSearchParams();
+  const [partidoIdTexto, setPartidoIdTexto] = useState(
+    () => searchParams.get("partidoId")?.trim() || "1",
+  );
   const [largoTexto, setLargoTexto] = useState(String(LARGO_CANCHA_DEFECTO_M));
   const [anchoTexto, setAnchoTexto] = useState(String(ANCHO_CANCHA_DEFECTO_M));
 

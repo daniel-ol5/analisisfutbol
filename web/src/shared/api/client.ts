@@ -21,6 +21,8 @@ export const api = axios.create({
 export interface AdaptadorAuth {
   /** Token de acceso vigente, o null si no hay sesión. */
   obtenerToken: () => string | null;
+  /** Rol del usuario autenticado, o null si no hay sesión. */
+  obtenerRol?: () => string | null;
   /** Se invoca ante un 401 en una ruta protegida. */
   alSesionCaida: () => void;
 }
@@ -29,6 +31,16 @@ let adaptador: AdaptadorAuth | null = null;
 
 export function registrarAdaptadorAuth(nuevo: AdaptadorAuth): void {
   adaptador = nuevo;
+}
+
+/** Token de acceso vigente en la sesión activa, o null si no hay sesión. */
+export function obtenerTokenAcceso(): string | null {
+  return adaptador?.obtenerToken() ?? null;
+}
+
+/** Rol del usuario en la sesión activa, o null si no hay sesión. */
+export function obtenerRolActual(): string | null {
+  return adaptador?.obtenerRol?.() ?? null;
 }
 
 /**

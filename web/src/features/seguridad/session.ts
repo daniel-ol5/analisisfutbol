@@ -96,6 +96,7 @@ function irAlLogin(): void {
 
 registrarAdaptadorAuth({
   obtenerToken: () => obtenerSesion()?.access_token ?? null,
+  obtenerRol: () => obtenerSesion()?.usuario.rol ?? null,
   alSesionCaida: () => {
     cerrarSesion();
     irAlLogin();
