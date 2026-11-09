@@ -114,30 +114,36 @@ async def estado(partido_id: int, usuario: Actual, db: Db,
 @router.get("/{partido_id}/eventos", response_model=list[EventoManual],
             summary="CU-36 a CU-38 · Listar eventos cargados a mano")
 async def listar_eventos(partido_id: int, usuario: Actual, db: Db) -> list[EventoManual]:
-    pendiente("CU-36", "Sprint 3", "Susana")
+    return await service.listar_eventos_manuales(db, usuario, partido_id)
 
 
 @router.post("/{partido_id}/eventos", response_model=EventoManual,
              status_code=status.HTTP_201_CREATED,
+             dependencies=[Depends(requiere_rol("ADMIN", "DT", "ASISTENTE"))],
              summary="CU-36 a CU-38 · Registrar gol, tarjeta o sustitucion")
 async def registrar_evento(partido_id: int, datos: EventoManualCrear,
                            usuario: Actual, db: Db) -> EventoManual:
     # Regla: una segunda amarilla al mismo jugador se convierte en roja automaticamente.
-    pendiente("CU-36", "Sprint 3", "Susana")
+    return await service.registrar_evento_manual(db, usuario, partido_id, datos)
 
 
 @router.delete("/eventos/{evento_id}", status_code=status.HTTP_204_NO_CONTENT,
+               dependencies=[Depends(requiere_rol("ADMIN", "DT", "ASISTENTE"))],
                summary="CU-38 · Deshacer el ultimo evento cargado")
 async def deshacer_evento(evento_id: int, usuario: Actual, db: Db) -> None:
-    pendiente("CU-38", "Sprint 3", "Susana")
+    await service.deshacer_evento_manual(db, usuario, evento_id)
 
 
 @router.post("/{partido_id}/eventos/sincronizar", response_model=list[EventoManual],
+             dependencies=[Depends(requiere_rol("ADMIN", "DT", "ASISTENTE"))],
              summary="CU-33 · Sincronizar la cola de eventos capturados sin conexion")
 async def sincronizar_cola(partido_id: int, eventos: list[EventoManualCrear],
-                           usuario: Actual, db: Db) -> list[EventoManual]:
+                           usuario: Actual, db: Db,
+                           reloj: RelojDep) -> list[EventoManual]:
     # Regla: llegan en orden y no se duplican, aunque el envio se repita.
-    pendiente("CU-33", "Sprint 3", "Susana")
+    return await service.sincronizar_eventos_manuales(
+        db, usuario, partido_id, eventos, ahora=reloj
+    )
 
 
 # ---------------- CU-34, CU-35 · Identificadores ----------------

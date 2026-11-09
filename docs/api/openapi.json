@@ -6207,6 +6207,16 @@
       },
       "EventoManual": {
         "properties": {
+          "uuid": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Uuid"
+          },
+          "capturado_en": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Capturado En"
+          },
           "tipo": {
             "$ref": "#/components/schemas/TipoEventoManual"
           },
@@ -6259,26 +6269,83 @@
             "title": "Convertida En Roja",
             "description": "True cuando una segunda amarilla se convirtio automaticamente",
             "default": false
+          },
+          "creado_en": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Creado En"
+          },
+          "creado_por_id": {
+            "type": "integer",
+            "title": "Creado Por Id"
+          },
+          "anulado_en": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Anulado En"
+          },
+          "anulado_por_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Anulado Por Id"
           }
         },
         "type": "object",
         "required": [
+          "uuid",
+          "capturado_en",
           "tipo",
           "minuto",
           "id",
-          "partido_id"
+          "partido_id",
+          "creado_en",
+          "creado_por_id"
         ],
         "title": "EventoManual"
       },
       "EventoManualCrear": {
         "properties": {
+          "uuid": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Uuid",
+            "description": "Idempotencia para reintentos y T-070"
+          },
+          "capturado_en": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capturado En",
+            "description": "Instante de captura en el cliente; el servidor lo completa si se omite"
+          },
           "tipo": {
             "$ref": "#/components/schemas/TipoEventoManual"
           },
           "minuto": {
             "anyOf": [
               {
-                "type": "integer"
+                "type": "integer",
+                "maximum": 150.0,
+                "minimum": 0.0
               },
               {
                 "type": "null"
