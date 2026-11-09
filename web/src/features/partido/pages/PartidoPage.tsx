@@ -8,7 +8,7 @@
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useId, useMemo, useState, type ChangeEvent } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
 
 import "@/features/partido/partido.css";
 import { obtenerRolActual } from "@/shared/api/client";
@@ -23,6 +23,7 @@ import {
   obtenerPartidoControl,
   registrarDescuentoPartido,
 } from "../api";
+import { PanelAsignacionTracks } from "../components/PanelAsignacionTracks";
 import { useCanalVivo } from "../hooks/useCanalVivo";
 import { useRelojPartido } from "../hooks/useRelojPartido";
 import { useSupervisionCalidad } from "../hooks/useSupervisionCalidad";
@@ -77,7 +78,10 @@ export function PartidoPage() {
   const idSelectPartido = useId();
   const idInputDescuento = useId();
   const queryClient = useQueryClient();
+  const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
+
+  const enVistaAsignar = location.pathname.replace(/\/+$/, "").endsWith("/asignar");
 
   // Rol actual leído a través del adaptador registrado en shared/api/client.ts
   const rolActual = obtenerRolActual();
@@ -337,10 +341,15 @@ export function PartidoPage() {
     <div className="par-pagina">
       <header className="par-cabecera">
         <div>
-          <h1>Control del partido en vivo</h1>
+          <h1>
+            {enVistaAsignar
+              ? "Asignación de jugadores a identificadores"
+              : "Control del partido en vivo"}
+          </h1>
           <p className="par-subtitulo">
-            Inicio del partido con dirección de ataque, entretiempo, tiempo de descuento y cierre
-            del cronómetro (CU-30, CU-31).
+            {enVistaAsignar
+              ? "Asociación de cada identificador detectado (track) a un jugador del plantel, con vigencia temporal y reasignación tras oclusiones (CU-34, CU-35)."
+              : "Inicio del partido con dirección de ataque, entretiempo, tiempo de descuento y cierre del cronómetro (CU-30, CU-31)."}
           </p>
         </div>
 
@@ -369,11 +378,29 @@ export function PartidoPage() {
         </div>
       </header>
 
+      <nav className="par-tabs" aria-label="Secciones del partido">
+        <Link
+          to={`/partido${partidoIdActivo !== null ? `?partidoId=${partidoIdActivo}` : ""}`}
+          className={`par-tab ${!enVistaAsignar ? "par-tab--activa" : ""}`}
+          aria-current={!enVistaAsignar ? "page" : undefined}
+        >
+          Control y cronómetro
+        </Link>
+        <Link
+          to={`/partido/asignar${partidoIdActivo !== null ? `?partidoId=${partidoIdActivo}` : ""}`}
+          className={`par-tab ${enVistaAsignar ? "par-tab--activa" : ""}`}
+          aria-current={enVistaAsignar ? "page" : undefined}
+        >
+          Asignar identificadores
+        </Link>
+      </nav>
+
       {!puedeOperar && (
         <div className="par-aviso-rol" role="note">
           Modo lectura ({rolActual ?? "sin rol"}): solo los roles <strong>ADMIN</strong> y{" "}
-          <strong>ANALISTA</strong> pueden iniciar, pausar, agregar descuento o finalizar el
-          partido. Los controles están deshabilitados para evitar errores de permisos (403).
+          <strong>ANALISTA</strong> pueden iniciar, pausar, agregar descuento, finalizar el partido
+          o asignar jugadores a identificadores. Los controles están deshabilitados para evitar
+          errores de permisos (403).
         </div>
       )}
 
@@ -436,6 +463,13 @@ export function PartidoPage() {
             <code>?partidoId=&lt;id&gt;</code> en la dirección.
           </p>
         </section>
+      ) : enVistaAsignar ? (
+        <PanelAsignacionTracks
+          partidoId={partidoIdActivo}
+          equipoId={partidoActual?.equipo_id ?? null}
+          partido={partidoActual}
+          puedeOperar={puedeOperar}
+        />
       ) : (
         <>
           <div className="par-tablero">
@@ -755,86 +789,46 @@ export function PartidoPage() {
             )}
           </section>
 
-          {/* Panel de supervisión T-073 */}
+          {/* Panel de calidad mínimo */}
           <section className="par-tarjeta par-calidad" aria-label="Calidad de procesamiento">
-            <div className="par-calidad-cabecera">
-              <div>
-                <h2 className="par-seccion-titulo">Calidad de procesamiento en vivo</h2>
-                <p className="par-calidad-referencia">
-                  Referencia: {FPS_ESPERADO} Hz y aproximadamente {TRACKS_ESPERADOS_REFERENCIA}{" "}
-                  tracks (22 jugadores y balón).
-                </p>
-              </div>
-              <span
-                className={`par-worker-estado ${
-                  supervisionCalidad.workerConectado
-                    ? "par-worker-estado--conectado"
-                    : "par-worker-estado--desconectado"
-                }`}
-                role="status"
-              >
-                {supervisionCalidad.workerConectado ? "Worker conectado" : "Worker desconectado"}
-              </span>
-            </div>
+            <h2 className="par-seccion-titulo">Calidad de procesamiento en vivo</h2>
             <ul className="par-calidad-lista">
               <li className="par-calidad-item">
-                <span>FPS de inferencia</span>
+                <span>Worker de visión</span>
                 <strong>
-                  {canalVivo.calidad
-                    ? `${canalVivo.calidad.fps.toFixed(1).replace(".", ",")} FPS`
-                    : "—"}
+                  {estadoVivo?.calidad.worker_conectado ? "Conectado" : "Desconectado"}
                 </strong>
-                <small>Esperado: {FPS_ESPERADO} FPS</small>
               </li>
               <li className="par-calidad-item">
-                <span>Latencia WebSocket</span>
+                <span>Cuadros por segundo</span>
                 <strong>
-                  {canalVivo.latenciaMs === null
-                    ? "Sin medición"
-                    : `${Math.round(canalVivo.latenciaMs)} ms`}
+                  {estadoVivo ? `${estadoVivo.calidad.fps.toFixed(1).replace(".", ",")} FPS` : "—"}
                 </strong>
-                <small>Ida y vuelta de ping/pong real</small>
               </li>
               <li className="par-calidad-item">
                 <span>Jugadores detectados</span>
-                <strong>{canalVivo.calidad?.jugadores_detectados ?? "—"}</strong>
-                <small>Alerta si son menos de 16 durante 10 s</small>
-              </li>
-              <li className="par-calidad-item">
-                <span>Tracks activos</span>
-                <strong>{canalVivo.tracksActivos ?? "—"}</strong>
-                <small>Referencia aproximada: {TRACKS_ESPERADOS_REFERENCIA}</small>
+                <strong>{estadoVivo?.calidad.jugadores_detectados ?? 0}</strong>
               </li>
               <li className="par-calidad-item">
                 <span>Balón visible</span>
-                <strong>
-                  {canalVivo.calidad === null ? "—" : canalVivo.calidad.balon_visible ? "Sí" : "No"}
-                </strong>
-                <small>Alerta después de 30 s de ausencia</small>
+                <strong>{estadoVivo?.calidad.balon_visible ? "Sí" : "No"}</strong>
               </li>
               <li className="par-calidad-item">
-                <span>Retraso reportado</span>
+                <span>Retraso</span>
                 <strong>
-                  {canalVivo.calidad
-                    ? `${canalVivo.calidad.retraso_s.toFixed(2).replace(".", ",")} s`
+                  {estadoVivo
+                    ? `${estadoVivo.calidad.retraso_s.toFixed(1).replace(".", ",")} s`
                     : "—"}
                 </strong>
-                <small>Dato del worker, distinto de la latencia WebSocket</small>
               </li>
             </ul>
 
-            <div className="par-calidad-alertas" aria-live="polite">
-              {supervisionCalidad.alertas.length === 0 ? (
-                <p className="par-calidad-correcta">Procesamiento dentro de los umbrales.</p>
-              ) : (
-                supervisionCalidad.alertas.map((alerta) => (
-                  <div className="par-calidad-alerta" role="alert" key={alerta.codigo}>
-                    <strong>{alerta.titulo}</strong>
-                    <span>{alerta.detalle}</span>
-                  </div>
-                ))
-              )}
-            </div>
+            {estadoVivo?.calidad.degradado && (
+              <p className="par-calidad-degradado" role="status">
+                <strong>Procesamiento degradado:</strong>{" "}
+                {estadoVivo.calidad.motivo ?? "Calidad reducida reportada por el worker."}
+              </p>
+            )}
           </section>
         </>
       )}

@@ -1,7 +1,7 @@
 """crear tabla reloj_partido
 
 Revision ID: f1a8c3e79b24
-Revises: e9c1b7f4a260
+Revises: 8f6c2d9a4b10, c9f3a1d7e2b5
 Create Date: 2026-11-07 15:00:00.000000
 
 """
@@ -13,7 +13,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "f1a8c3e79b24"
-down_revision: str | Sequence[str] | None = "e9c1b7f4a260"
+down_revision: str | Sequence[str] | None = ("8f6c2d9a4b10", "c9f3a1d7e2b5")
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

@@ -67,3 +67,68 @@ export interface ResumenPartidoControl {
 
 /** Estados posibles del canal WebSocket `/api/partido/{id}/vivo` (Fase 2B). */
 export type EstadoCanalVivo = "CONECTADO" | "RECONECTANDO" | "SIN_CONEXION" | "SESION_VENCIDA";
+
+// ---------- CU-34, CU-35 · Asignación de identificadores (T-072) ----------
+
+export type EquipoDetectado = "LOCAL" | "VISITANTE" | "ARBITRO" | "DESCONOCIDO";
+
+export interface TrackDetectado {
+  track_id: number;
+  equipo_detectado: EquipoDetectado;
+  jugador_id: number | null;
+  desde_t: number;
+  hasta_t: number | null;
+  confianza: number;
+}
+
+export interface AsignarTrackPayload {
+  jugador_id: number | null;
+}
+
+/**
+ * Muestra ligera de un `tid` visto en vivo (para la unión con los tramos
+ * vigentes de `GET /tracks?solo_activos=true` en la Fase 2B).
+ */
+export interface TrackEnVivoLigero {
+  tid: number;
+  equipo: EquipoDetectado;
+  conf: number;
+  t: number;
+}
+
+/**
+ * Fila resultante de unir los tramos vigentes de base de datos con los `tid`
+ * vistos en vivo. Un track sin tramo vigente se muestra «Sin asignar» y sigue
+ * siendo asignable con `PUT /partido/{id}/tracks/{track_id}`.
+ */
+export interface TrackUnificadoVista {
+  track_id: number;
+  equipo_detectado: EquipoDetectado;
+  jugador_id: number | null;
+  desde_t: number | null;
+  confianza: number;
+  tieneTramoVigente: boolean;
+}
+
+export type PosicionJugadorPlantel = "ARQ" | "DEF" | "MED" | "DEL";
+
+export type PieHabilJugadorPlantel = "IZQ" | "DER" | "AMBOS";
+
+/**
+ * Proyección propia de `Jugador` (`GET /deportivo/equipos/{equipo_id}/jugadores`,
+ * `backend/app/deportivo/schemas.py:91-124`) para no importar tipos desde
+ * `features/deportivo`.
+ */
+export interface JugadorPlantelPartido {
+  id: number;
+  equipo_id: number;
+  nombre: string;
+  apellido: string;
+  dorsal: number;
+  posicion: PosicionJugadorPlantel;
+  pie_habil: PieHabilJugadorPlantel;
+  altura_cm: number;
+  peso_kg: number | null;
+  fecha_nacimiento: string | null;
+  activo: boolean;
+}
