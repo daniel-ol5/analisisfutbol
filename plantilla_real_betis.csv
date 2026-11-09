@@ -1,0 +1,31 @@
+nombre;apellido;dorsal;altura_cm;posicion;pie_habil;peso_kg;fecha_nacimiento
+Marc;Bartra;5;183;DEF;DER;70;1991-01-15
+Isco;Alarcón;22;175;MED;DER;79;1992-04-21
+Héctor;Bellerín;2;178;DEF;DER;74;1995-03-19
+Diego;Llorente;3;185;DEF;DER;76;1993-08-16
+Dani;Ceballos;25;178;MED;DER;70;1996-08-07
+Giovani;Lo Celso;20;175;MED;IZQ;74;1996-04-09
+Álvaro;Fidalgo;15;173;MED;DER;54;1997-04-09
+Pablo;Fornals;8;178;MED;DER;67;1996-02-22
+Marc;Roca;21;183;MED;IZQ;77;1996-11-26
+Francisco;García;11;165;DEF;IZQ;69;1999-08-14
+Diego;Conde;13;188;ARQ;DER;76;1998-10-28
+Rodrigo;Riquelme;17;173;MED;DER;66;2000-04-02
+Aitor;Ruibal;24;175;DEL;DER;74;1996-03-22
+Junior;Firpo;23;183;DEF;IZQ;78;1996-08-22
+Cucho;Hernández;9;175;DEL;DER;73;1999-04-20
+Troy;Parrott;19;183;DEL;DER;79;2002-02-04
+Álvaro;Valles Rosa;1;188;ARQ;DER;78;1997-07-25
+Antony;Santos;7;170;DEL;IZQ;63;2000-02-24
+Iker;Losada;14;173;DEL;DER;70;2001-08-01
+Natan;De Souza;4;183;DEF;IZQ;92;2001-02-06
+Abdessamad;Ezzalzouli;10;175;DEL;DER;73;2001-12-17
+Nelson;Deossa;18;178;MED;IZQ;79;2000-02-06
+Facundo;Bernal Cruz;6;185;MED;DER;73;2003-08-21
+Diego;Gómez;16;180;DEF;DER;79;2003-03-27
+Manuel;González Pallares;31;188;ARQ;DER;81;2007-04-10
+José;Antonio;27;178;DEL;DER;;2007-05-15
+Ricardo;Fúnez;37;173;MED;DER;;2007-06-20
+Álvaro;de Pablo;40;185;ARQ;DER;;2002-03-12
+Ángel;Ortiz;12;165;MED;DER;63;2004-07-25
+

@@ -226,7 +226,9 @@ PosicionesDep = Annotated[AlmacenPosiciones, Depends(obtener_almacen_posiciones)
                  "con `GET /videos/{id}`."
              ))
 async def procesar_video(video_id: int, datos: LanzarProceso, usuario: Actual, db: Db) -> Video:
-    return Video.model_validate(await procesamiento.lanzar(db, usuario, video_id, datos))
+    video = await procesamiento.lanzar(db, usuario, video_id, datos)
+    procesamiento.programar_worker_si_corresponde(video.id, usuario)
+    return Video.model_validate(video)
 
 
 @router.delete("/videos/{video_id}/procesar", status_code=status.HTTP_204_NO_CONTENT,
@@ -253,7 +255,6 @@ async def tomar_trabajo(usuario: Actual, db: Db) -> Trabajo | Response:
 
 
 @router.get("/videos/{video_id}/archivo",
-            dependencies=[PUEDEN_PROCESAR],
             response_class=FileResponse,
             responses={
                 **_RESPUESTA_404,
@@ -261,11 +262,29 @@ async def tomar_trabajo(usuario: Actual, db: Db) -> Trabajo | Response:
                       "description": "El video; admite `Range` para reanudar la descarga"},
                 409: {"description": "El video todavía no terminó de subirse"},
             },
-            summary="T-061 · Worker: descargar el video")
+            summary="T-061 · Worker / Visor: descargar o reproducir el video")
 async def descargar_video(video_id: int, usuario: Actual, db: Db,
                           almacen: AlmacenDep) -> FileResponse:
     ruta = await procesamiento.archivo(db, usuario, video_id, almacen)
-    return FileResponse(ruta, media_type="application/octet-stream")
+    return FileResponse(ruta, media_type="video/mp4")
+
+
+@router.post("/partidos/{partido_id}/transmitir-vivo", status_code=status.HTTP_202_ACCEPTED,
+             summary="CU-24, CU-40, CU-41 · Iniciar emisión sincronizada a 5 Hz con visor de video/cámara")
+async def iniciar_transmision_vivo(partido_id: int, usuario: Actual,
+                                   t_inicio_s: float = 0.0,
+                                   duracion_s: float = 60.0) -> dict[str, object]:
+    procesamiento.programar_transmision_vivo_partido(
+        partido_id, usuario, duracion_s=duracion_s, t_inicio_s=t_inicio_s
+    )
+    return {"ok": True, "partido_id": partido_id, "t_inicio_s": t_inicio_s, "duracion_s": duracion_s}
+
+
+@router.post("/partidos/{partido_id}/pausar-vivo", status_code=status.HTTP_200_OK,
+             summary="CU-24, CU-40 · Pausar emisión sincronizada cuando el video o cámara se pausa")
+async def pausar_transmision_vivo(partido_id: int, usuario: Actual) -> dict[str, object]:
+    await procesamiento.pausar_transmision_vivo_partido(partido_id, usuario.club_id)
+    return {"ok": True, "partido_id": partido_id, "estado": "pausado"}
 
 
 @router.post("/videos/{video_id}/resultados", response_model=Video,

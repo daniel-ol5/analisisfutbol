@@ -15,6 +15,7 @@ import {
   actualizarUsuario as guardarUsuarioEnSesion,
   iniciarSesion,
   obtenerSesion,
+  useSesion,
 } from "./session";
 import type { ActualizarUsuario } from "./types";
 
@@ -66,7 +67,11 @@ export function useEliminarUsuario() {
 }
 
 export function usePerfil() {
-  return useQuery({ queryKey: CLAVE_PERFIL, queryFn: obtenerPerfil });
+  const sesion = useSesion();
+  return useQuery({
+    queryKey: [...CLAVE_PERFIL, sesion?.usuario.id ?? null],
+    queryFn: obtenerPerfil,
+  });
 }
 
 /** Al guardar, actualiza la caché y la sesión (la cabecera muestra el nombre nuevo). */
@@ -75,7 +80,7 @@ export function useEditarPerfil() {
   return useMutation({
     mutationFn: editarPerfil,
     onSuccess: (usuario) => {
-      cliente.setQueryData(CLAVE_PERFIL, usuario);
+      cliente.setQueryData([...CLAVE_PERFIL, usuario.id], usuario);
       guardarUsuarioEnSesion(usuario);
       return cliente.invalidateQueries({ queryKey: CLAVE_USUARIOS });
     },

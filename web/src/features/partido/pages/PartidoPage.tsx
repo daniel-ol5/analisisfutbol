@@ -27,11 +27,7 @@ import { PanelAsignacionTracks } from "../components/PanelAsignacionTracks";
 import { useCanalVivo } from "../hooks/useCanalVivo";
 import { useRelojPartido } from "../hooks/useRelojPartido";
 import { useSupervisionCalidad } from "../hooks/useSupervisionCalidad";
-import {
-  FPS_ESPERADO,
-  TRACKS_ESPERADOS_REFERENCIA,
-  type MuestraSupervisionCalidad,
-} from "../lib/calidad";
+import type { MuestraSupervisionCalidad } from "../lib/calidad";
 import {
   INTERVALO_SONDEO_CON_WS_MS,
   INTERVALO_SONDEO_SIN_WS_MS,
@@ -146,7 +142,7 @@ export function PartidoPage() {
       canalVivo.ultimaTelemetriaEnMs,
     ],
   );
-  const supervisionCalidad = useSupervisionCalidad(partidoIdActivo, muestraSupervision);
+  useSupervisionCalidad(partidoIdActivo, muestraSupervision);
 
   // Sondeo HTTP de respaldo: 15 s con WS conectado y 2 s cuando está reconectando o caído
   const intervaloSondeoMs: number | false =

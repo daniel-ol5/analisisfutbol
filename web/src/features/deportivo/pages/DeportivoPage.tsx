@@ -25,7 +25,18 @@ export function DeportivoPage() {
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
+    <div
+      className="deportivo-pagina"
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: 22,
+        width: "100%",
+        maxWidth: 1160,
+        margin: "0 auto",
+        padding: "36px 28px 80px",
+      }}
+    >
       {/* Cabecera del Módulo Deportivo */}
       <header className="page-head" style={{ marginBottom: 0 }}>
         <span className="kicker">P2 · GESTIÓN DEPORTIVA (CU-09 … CU-17)</span>

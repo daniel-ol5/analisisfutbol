@@ -355,7 +355,7 @@ export function Layout() {
             {usuario && <BotonCerrarSesion className="ui-btn ui-btn--secundario" />}
           </div>
         </header>
-        <div className="layout-contenido">
+        <div className="layout-contenido" key={usuario?.id ?? "anon"}>
           <Outlet />
         </div>
       </div>

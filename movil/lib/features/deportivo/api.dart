@@ -260,6 +260,7 @@ Future<Jugador> crearJugador(
   required String pieHabil,
   required int alturaCm,
   double? pesoKg,
+  String? fechaNacimiento,
 }) async {
   final r = await cliente.post('/deportivo/jugadores', cuerpo: {
     'equipo_id': equipoId,
@@ -270,6 +271,8 @@ Future<Jugador> crearJugador(
     'pie_habil': pieHabil,
     'altura_cm': alturaCm,
     'peso_kg': pesoKg,
+    if (fechaNacimiento != null && fechaNacimiento.isNotEmpty)
+      'fecha_nacimiento': fechaNacimiento,
   }) as Map<String, dynamic>;
 
   final jugador = Jugador.fromJson(r);
@@ -302,6 +305,7 @@ Future<Jugador> editarJugador(
   String? pieHabil,
   int? alturaCm,
   double? pesoKg,
+  String? fechaNacimiento,
   bool? activo,
 }) async {
   final pesoRedondeado = pesoKg?.round();
@@ -313,6 +317,7 @@ Future<Jugador> editarJugador(
     'pie_habil': ?pieHabil,
     'altura_cm': ?alturaCm,
     'peso_kg': ?pesoRedondeado,
+    'fecha_nacimiento': ?fechaNacimiento,
     'activo': ?activo,
   };
 

@@ -773,6 +773,8 @@ class _DeportivoPaginaState extends State<DeportivoPagina> {
         text: jugadorEditar?.pesoKg != null
             ? '${jugadorEditar!.pesoKg}'
             : '');
+    final ctrlFechaNacimiento = TextEditingController(
+        text: jugadorEditar?.fechaNacimiento ?? '');
     String posicion = jugadorEditar?.posicion ?? 'MED';
     String pie = jugadorEditar?.pieHabil ?? 'DER';
     bool guardando = false;
@@ -945,6 +947,36 @@ class _DeportivoPaginaState extends State<DeportivoPagina> {
                         border: OutlineInputBorder(),
                       ),
                     ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: ctrlFechaNacimiento,
+                      readOnly: true,
+                      decoration: InputDecoration(
+                        labelText: 'Fecha de nacimiento (opcional)',
+                        hintText: 'YYYY-MM-DD',
+                        border: const OutlineInputBorder(),
+                        suffixIcon: IconButton(
+                          icon: const Icon(Icons.calendar_today_outlined),
+                          onPressed: () async {
+                            final ahora = DateTime.now();
+                            final inicial = DateTime.tryParse(ctrlFechaNacimiento.text) ??
+                                DateTime(2000, 1, 1);
+                            final seleccion = await showDatePicker(
+                              context: ctx,
+                              initialDate: inicial,
+                              firstDate: DateTime(1960),
+                              lastDate: ahora,
+                            );
+                            if (seleccion != null) {
+                              final mes = seleccion.month.toString().padLeft(2, '0');
+                              final dia = seleccion.day.toString().padLeft(2, '0');
+                              ctrlFechaNacimiento.text =
+                                  '${seleccion.year}-$mes-$dia';
+                            }
+                          },
+                        ),
+                      ),
+                    ),
                     if (errorLocal != null) ...[
                       const SizedBox(height: 12),
                       Container(
@@ -997,6 +1029,8 @@ class _DeportivoPaginaState extends State<DeportivoPagina> {
                                     });
                                     try {
                                       final pesoTxt = ctrlPeso.text.trim();
+                                      final fechaTxt = ctrlFechaNacimiento.text.trim();
+                                      final fechaNac = fechaTxt.isEmpty ? null : fechaTxt;
                                       final Jugador res;
                                       if (jugadorEditar != null) {
                                         res = await editarJugador(
@@ -1013,6 +1047,7 @@ class _DeportivoPaginaState extends State<DeportivoPagina> {
                                           pesoKg: pesoTxt.isEmpty
                                               ? null
                                               : double.parse(pesoTxt),
+                                          fechaNacimiento: fechaNac,
                                         );
                                       } else {
                                         res = await crearJugador(
@@ -1028,6 +1063,7 @@ class _DeportivoPaginaState extends State<DeportivoPagina> {
                                           pesoKg: pesoTxt.isEmpty
                                               ? null
                                               : double.parse(pesoTxt),
+                                          fechaNacimiento: fechaNac,
                                         );
                                       }
                                       if (ctx.mounted) {
@@ -1071,6 +1107,7 @@ class _DeportivoPaginaState extends State<DeportivoPagina> {
     ctrlDorsal.dispose();
     ctrlAltura.dispose();
     ctrlPeso.dispose();
+    ctrlFechaNacimiento.dispose();
 
     if (resultado != null && mounted) {
       await _cargarJugadores();
@@ -1149,6 +1186,13 @@ class _DeportivoPaginaState extends State<DeportivoPagina> {
               'Altura: ${j.alturaCm} cm${j.pesoKg != null ? " · Peso: ${j.pesoKg} kg" : ""}',
               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
             ),
+            if (j.fechaNacimiento != null && j.fechaNacimiento!.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Text(
+                'Nacimiento: ${j.fechaNacimiento}',
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+              ),
+            ],
             const SizedBox(height: 20),
             Row(
               children: [

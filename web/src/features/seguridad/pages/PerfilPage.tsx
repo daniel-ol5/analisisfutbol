@@ -56,7 +56,7 @@ export function PerfilPage() {
               )}
             </dl>
             {HABILITAR_EDICION_PERFIL ? (
-              <FormularioPerfil usuario={perfil.data} />
+              <FormularioPerfil key={perfil.data.id} usuario={perfil.data} />
             ) : (
               <Alert tono="info">La edición del perfil todavía no está disponible.</Alert>
             )}

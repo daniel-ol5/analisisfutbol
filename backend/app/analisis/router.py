@@ -18,6 +18,7 @@ from app.analisis.schemas import (
     MetricasPartido,
     RedPases,
 )
+from app.analisis.service import calcular_mapa_calor
 from app.core.deps import Actual, Db
 from app.core.pendiente import RESPUESTA_501, pendiente
 
@@ -58,7 +59,15 @@ async def mapa_calor(partido_id: int, usuario: Actual, db: Db,
                      desde_minuto: int = 0,
                      hasta_minuto: int = 90) -> MapaCalor:
     # Regla: las coordenadas se normalizan por direccion de ataque antes de agregarse.
-    pendiente("CU-44", "Sprint 3", "Daniel")
+    return await calcular_mapa_calor(
+        partido_id=partido_id,
+        alcance=alcance,  # type: ignore[arg-type]
+        referencia_id=referencia_id,
+        desde_minuto=desde_minuto,
+        hasta_minuto=hasta_minuto,
+        usuario=usuario,
+        db=db,
+    )
 
 
 # ---------------- CU-47, CU-48 · Linea de tiempo y red de pases ----------------

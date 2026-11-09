@@ -120,6 +120,13 @@ export interface Competicion {
   fecha_fin: string | null;
 }
 
+export interface CompeticionCrear {
+  nombre: string;
+  temporada: string;
+  fecha_inicio?: string | null;
+  fecha_fin?: string | null;
+}
+
 export type EstadoPartido =
   "PROGRAMADO" | "EN_CURSO" | "FINALIZADO" | "PROCESANDO" | "ANALIZADO" | "CANCELADO";
 

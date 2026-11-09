@@ -1,6 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { listarCompeticiones, listarEquipos, listarPartidos, programarPartido } from "./api";
+import {
+  crearCompeticion,
+  listarCompeticiones,
+  listarEquipos,
+  listarPartidos,
+  programarPartido,
+} from "./api";
 import type { FiltrosPartidos } from "./types";
 
 export const CLAVE_EQUIPOS = ["deportivo", "equipos"] as const;
@@ -28,6 +34,14 @@ export function useCompeticiones(habilitado = true) {
     queryKey: CLAVE_COMPETICIONES,
     queryFn: listarCompeticiones,
     enabled: habilitado,
+  });
+}
+
+export function useCrearCompeticion() {
+  const cliente = useQueryClient();
+  return useMutation({
+    mutationFn: crearCompeticion,
+    onSuccess: () => cliente.invalidateQueries({ queryKey: CLAVE_COMPETICIONES }),
   });
 }
 

@@ -135,3 +135,24 @@ export async function lanzarProceso(videoId: number, datos: LanzarProceso): Prom
 export async function cancelarProceso(videoId: number): Promise<void> {
   await api.delete(`/vision/videos/${videoId}/procesar`);
 }
+
+/** Obtiene el binario del video subido para reproducirlo en el visor táctico en vivo. */
+export async function descargarArchivoVideo(videoId: number): Promise<Blob> {
+  const { data } = await api.get<Blob>(`/vision/videos/${videoId}/archivo`, {
+    responseType: "blob",
+  });
+  return data;
+}
+
+/** Inicia la transmisión sincronizada a 5 Hz para acompañar al video o cámara en vivo. */
+export async function iniciarTransmisionVivoPartido(
+  partidoId: number,
+  duracionS = 90,
+): Promise<{ ok: boolean; partido_id: number; duracion_s: number }> {
+  const { data } = await api.post<{ ok: boolean; partido_id: number; duracion_s: number }>(
+    `/vision/partidos/${partidoId}/transmitir-vivo`,
+    null,
+    { params: { duracion_s: duracionS } },
+  );
+  return data;
+}
