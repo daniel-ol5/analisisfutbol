@@ -112,9 +112,12 @@ export interface TrackUnificadoVista {
 
 export type PosicionJugadorPlantel = "ARQ" | "DEF" | "MED" | "DEL";
 
+export type PieHabilJugadorPlantel = "IZQ" | "DER" | "AMBOS";
+
 /**
- * Proyección propia de `Jugador` (`GET /deportivo/equipos/{id}/jugadores`)
- * para no importar tipos desde `features/deportivo`.
+ * Proyección propia de `Jugador` (`GET /deportivo/equipos/{equipo_id}/jugadores`,
+ * `backend/app/deportivo/schemas.py:91-124`) para no importar tipos desde
+ * `features/deportivo`.
  */
 export interface JugadorPlantelPartido {
   id: number;
@@ -123,5 +126,9 @@ export interface JugadorPlantelPartido {
   apellido: string;
   dorsal: number;
   posicion: PosicionJugadorPlantel;
+  pie_habil: PieHabilJugadorPlantel;
+  altura_cm: number;
+  peso_kg: number | null;
+  fecha_nacimiento: string | null;
   activo: boolean;
 }

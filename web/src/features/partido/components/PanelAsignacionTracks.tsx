@@ -25,6 +25,7 @@ import type {
 
 export interface PanelAsignacionTracksProps {
   partidoId: number;
+  equipoId: number | null;
   partido: ResumenPartidoControl | undefined;
   puedeOperar: boolean;
   /** En Fase 2A se recibe vacío; en Fase 2B se conectará con los `tid` vistos en vivo. */
@@ -59,12 +60,12 @@ function formatearJugadorCorto(j: JugadorPlantelPartido): string {
 
 export function PanelAsignacionTracks({
   partidoId,
+  equipoId,
   partido,
   puedeOperar,
   tracksEnVivo = VACIO_VIVO,
 }: PanelAsignacionTracksProps) {
   const esLocal = partido?.es_local ?? true;
-  const equipoId = partido?.equipo_id ?? null;
 
   // Sondeo de tracks vigentes cada 5 s
   const tracksQuery = useQuery({
@@ -73,10 +74,10 @@ export function PanelAsignacionTracks({
     refetchInterval: INTERVALO_REFRESCO_TRACKS_MS,
   });
 
-  // Plantel activo del equipo del partido
+  // Plantel activo del equipo del partido (GET /deportivo/equipos/{equipo_id}/jugadores?activos=true&orden=dorsal)
   const plantelQuery = useQuery({
     queryKey: ["partido", "plantel-equipo", equipoId],
-    queryFn: () => listarJugadoresPlantelPartido(equipoId as number),
+    queryFn: () => listarJugadoresPlantelPartido(equipoId as number, true, "dorsal"),
     enabled: equipoId !== null,
   });
 
@@ -530,7 +531,9 @@ export function PanelAsignacionTracks({
             Haz clic en un jugador con track activo para resaltarlo en la lista.
           </p>
 
-          {plantel.length === 0 ? (
+          {equipoId === null || plantelQuery.isLoading ? (
+            <p className="par-subtitulo">Cargando plantel del equipo…</p>
+          ) : plantel.length === 0 ? (
             <p className="par-subtitulo">No hay jugadores activos registrados en este equipo.</p>
           ) : (
             <ul className="par-plantel-lista">

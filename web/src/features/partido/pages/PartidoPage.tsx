@@ -443,6 +443,7 @@ export function PartidoPage() {
       ) : enVistaAsignar ? (
         <PanelAsignacionTracks
           partidoId={partidoIdActivo}
+          equipoId={partidoActual?.equipo_id ?? null}
           partido={partidoActual}
           puedeOperar={puedeOperar}
         />

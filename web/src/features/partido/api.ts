@@ -75,11 +75,13 @@ export async function asignarTrackPartido(
 
 export async function listarJugadoresPlantelPartido(
   equipoId: number,
+  activos = true,
+  orden: "dorsal" | "posicion" | "apellido" = "dorsal",
 ): Promise<JugadorPlantelPartido[]> {
   const { data } = await api.get<JugadorPlantelPartido[]>(
     `/deportivo/equipos/${equipoId}/jugadores`,
     {
-      params: { activos: true, orden: "dorsal" },
+      params: { activos, orden },
     },
   );
   return data;
