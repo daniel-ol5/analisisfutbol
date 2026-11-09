@@ -6,8 +6,9 @@ que es la pieza que permite a Web y Movil construir en paralelo (Pb-26).
 
 from datetime import datetime
 from enum import StrEnum
+from uuid import UUID, uuid4
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.deportivo.schemas import Direccion
 
@@ -71,23 +72,46 @@ class IndicadorCalidad(BaseModel):
 # ---------- CU-36, CU-37, CU-38 Eventos manuales ----------
 
 class EventoManualCrear(BaseModel):
+    uuid: UUID = Field(default_factory=uuid4, description="Idempotencia para reintentos y T-070")
+    capturado_en: datetime | None = Field(
+        default=None,
+        description="Instante de captura en el cliente; el servidor lo completa si se omite",
+    )
     tipo: TipoEventoManual
-    minuto: int | None = Field(default=None,
+    minuto: int | None = Field(default=None, ge=0, le=150,
         description="Si se omite, se toma del cronometro del partido")
     equipo: Lado = Lado.LOCAL
     jugador_id: int | None = None
     jugador_entra_id: int | None = Field(default=None,
         description="Solo para SUSTITUCION")
 
+    @model_validator(mode="after")
+    def validar_jugadores_segun_tipo(self) -> "EventoManualCrear":
+        if self.tipo != TipoEventoManual.SUSTITUCION and self.jugador_entra_id is not None:
+            raise ValueError("jugador_entra_id solo corresponde a una sustitucion")
+        if self.tipo == TipoEventoManual.SUSTITUCION:
+            uno_solo = (self.jugador_id is None) != (self.jugador_entra_id is None)
+            if uno_solo:
+                raise ValueError("Una sustitucion debe indicar ambos jugadores o ninguno")
+            if self.jugador_id is not None and self.jugador_id == self.jugador_entra_id:
+                raise ValueError("El jugador que sale y el que entra deben ser distintos")
+        return self
+
 
 class EventoManual(EventoManualCrear):
     model_config = ConfigDict(from_attributes=True)
     id: int
     partido_id: int
+    uuid: UUID
+    capturado_en: datetime
     minuto: int
     origen: str = "MANUAL"
     convertida_en_roja: bool = Field(default=False,
         description="True cuando una segunda amarilla se convirtio automaticamente")
+    creado_en: datetime
+    creado_por_id: int
+    anulado_en: datetime | None = None
+    anulado_por_id: int | None = None
 
 
 # ---------- CU-34, CU-35 Asignacion de identificadores ----------

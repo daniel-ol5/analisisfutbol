@@ -54,6 +54,10 @@ Widget _app(AgendaPagina pagina) => MaterialApp.router(
           path: '/partidos/:id/alineacion',
           builder: (_, e) => Text('alineacion ${e.pathParameters['id']}'),
         ),
+        GoRoute(
+          path: '/partidos/:id/eventos',
+          builder: (_, e) => Text('eventos ${e.pathParameters['id']}'),
+        ),
       ]),
     );
 
@@ -173,6 +177,18 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('alineacion 4'), findsOneWidget);
+    });
+
+    testWidgets('un partido en curso abre la botonera de eventos', (tester) async {
+      await _pantallaAlta(tester);
+      await tester.pumpWidget(_app(const AgendaPagina(
+          obtener: _desdeServidor, enCache: _sinCache, equipos: _unEquipo)));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('vs Always Ready'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('eventos 3'), findsOneWidget);
     });
 
     testWidgets('sin conexión muestra la última agenda guardada y su fecha', (tester) async {

@@ -24,6 +24,7 @@ from app.core.pendiente import RESPUESTA_501, pendiente
 from app.core.realtime import Hub, canal_partido, obtener_hub
 from app.core.security import decodificar, token_ingesta
 from app.core.ws import Cierre, cerrar
+from app.partido import service
 from app.partido.schemas import (
     AsignarTrack,
     Descuento,
@@ -38,45 +39,74 @@ from app.partido.schemas import (
 )
 from app.partido.service import (
     AlmacenPosiciones,
+    RelojSistema,
     RepositorioPartidos,
     obtener_almacen_posiciones,
+    obtener_reloj,
     obtener_repositorio_partidos,
 )
 
 router = APIRouter(responses=RESPUESTA_501)
 
+HubDep = Annotated[Hub, Depends(obtener_hub)]
+RelojDep = Annotated[RelojSistema, Depends(obtener_reloj)]
+
+
+async def _difundir_estado(hub: Hub, club_id: int, partido_id: int, estado: EstadoEnVivo) -> None:
+    await hub.difundir(
+        canal_partido(club_id, partido_id),
+        {"tipo": "estado", "datos": estado.model_dump(mode="json")},
+    )
+
 
 # ---------------- CU-30, CU-31 · Control del partido ----------------
 
 @router.post("/{partido_id}/iniciar", response_model=EstadoEnVivo,
+             dependencies=[Depends(requiere_rol("ADMIN", "ANALISTA"))],
              summary="CU-30, CU-31 · Iniciar el partido y fijar la direccion de ataque")
-async def iniciar(partido_id: int, datos: IniciarPartido, usuario: Actual, db: Db) -> EstadoEnVivo:
+async def iniciar(partido_id: int, datos: IniciarPartido, usuario: Actual, db: Db,
+                  hub: HubDep, reloj: RelojDep) -> EstadoEnVivo:
     # Regla: un partido sin calibracion valida (error medio > 2 m) no puede iniciarse.
-    pendiente("CU-30", "Sprint 3", "Jhon")
+    actual = await service.iniciar_partido(db, usuario, partido_id, datos, ahora=reloj)
+    await _difundir_estado(hub, usuario.club_id, partido_id, actual)
+    return actual
 
 
 @router.post("/{partido_id}/entretiempo", response_model=EstadoEnVivo,
+             dependencies=[Depends(requiere_rol("ADMIN", "ANALISTA"))],
              summary="CU-30 · Cerrar el primer tiempo e iniciar el segundo")
-async def entretiempo(partido_id: int, usuario: Actual, db: Db) -> EstadoEnVivo:
-    pendiente("CU-30", "Sprint 3", "Jhon")
+async def entretiempo(partido_id: int, usuario: Actual, db: Db,
+                      hub: HubDep, reloj: RelojDep) -> EstadoEnVivo:
+    actual = await service.entretiempo_partido(db, usuario, partido_id, ahora=reloj)
+    await _difundir_estado(hub, usuario.club_id, partido_id, actual)
+    return actual
 
 
 @router.post("/{partido_id}/descuento", response_model=EstadoEnVivo,
+             dependencies=[Depends(requiere_rol("ADMIN", "ANALISTA"))],
              summary="CU-30 · Agregar tiempo de descuento")
-async def descuento(partido_id: int, datos: Descuento, usuario: Actual, db: Db) -> EstadoEnVivo:
-    pendiente("CU-30", "Sprint 3", "Jhon")
+async def descuento(partido_id: int, datos: Descuento, usuario: Actual, db: Db,
+                    hub: HubDep, reloj: RelojDep) -> EstadoEnVivo:
+    actual = await service.registrar_descuento(db, usuario, partido_id, datos, ahora=reloj)
+    await _difundir_estado(hub, usuario.club_id, partido_id, actual)
+    return actual
 
 
 @router.post("/{partido_id}/finalizar", response_model=EstadoEnVivo,
+             dependencies=[Depends(requiere_rol("ADMIN", "ANALISTA"))],
              summary="CU-30 · Finalizar el partido")
-async def finalizar(partido_id: int, usuario: Actual, db: Db) -> EstadoEnVivo:
-    pendiente("CU-30", "Sprint 3", "Jhon")
+async def finalizar(partido_id: int, usuario: Actual, db: Db,
+                    hub: HubDep, reloj: RelojDep) -> EstadoEnVivo:
+    actual = await service.finalizar_partido(db, usuario, partido_id, ahora=reloj)
+    await _difundir_estado(hub, usuario.club_id, partido_id, actual)
+    return actual
 
 
 @router.get("/{partido_id}/estado", response_model=EstadoEnVivo,
             summary="CU-30, CU-39 · Estado actual del partido y calidad del procesamiento")
-async def estado(partido_id: int, usuario: Actual, db: Db) -> EstadoEnVivo:
-    pendiente("CU-30", "Sprint 3", "Jhon")
+async def estado(partido_id: int, usuario: Actual, db: Db,
+                 reloj: RelojDep) -> EstadoEnVivo:
+    return await service.obtener_estado_partido(db, usuario, partido_id, ahora=reloj)
 
 
 # ---------------- CU-36, CU-37, CU-38 · Eventos manuales ----------------
@@ -84,30 +114,36 @@ async def estado(partido_id: int, usuario: Actual, db: Db) -> EstadoEnVivo:
 @router.get("/{partido_id}/eventos", response_model=list[EventoManual],
             summary="CU-36 a CU-38 · Listar eventos cargados a mano")
 async def listar_eventos(partido_id: int, usuario: Actual, db: Db) -> list[EventoManual]:
-    pendiente("CU-36", "Sprint 3", "Susana")
+    return await service.listar_eventos_manuales(db, usuario, partido_id)
 
 
 @router.post("/{partido_id}/eventos", response_model=EventoManual,
              status_code=status.HTTP_201_CREATED,
+             dependencies=[Depends(requiere_rol("ADMIN", "DT", "ASISTENTE"))],
              summary="CU-36 a CU-38 · Registrar gol, tarjeta o sustitucion")
 async def registrar_evento(partido_id: int, datos: EventoManualCrear,
                            usuario: Actual, db: Db) -> EventoManual:
     # Regla: una segunda amarilla al mismo jugador se convierte en roja automaticamente.
-    pendiente("CU-36", "Sprint 3", "Susana")
+    return await service.registrar_evento_manual(db, usuario, partido_id, datos)
 
 
 @router.delete("/eventos/{evento_id}", status_code=status.HTTP_204_NO_CONTENT,
+               dependencies=[Depends(requiere_rol("ADMIN", "DT", "ASISTENTE"))],
                summary="CU-38 · Deshacer el ultimo evento cargado")
 async def deshacer_evento(evento_id: int, usuario: Actual, db: Db) -> None:
-    pendiente("CU-38", "Sprint 3", "Susana")
+    await service.deshacer_evento_manual(db, usuario, evento_id)
 
 
 @router.post("/{partido_id}/eventos/sincronizar", response_model=list[EventoManual],
+             dependencies=[Depends(requiere_rol("ADMIN", "DT", "ASISTENTE"))],
              summary="CU-33 · Sincronizar la cola de eventos capturados sin conexion")
 async def sincronizar_cola(partido_id: int, eventos: list[EventoManualCrear],
-                           usuario: Actual, db: Db) -> list[EventoManual]:
+                           usuario: Actual, db: Db,
+                           reloj: RelojDep) -> list[EventoManual]:
     # Regla: llegan en orden y no se duplican, aunque el envio se repita.
-    pendiente("CU-33", "Sprint 3", "Susana")
+    return await service.sincronizar_eventos_manuales(
+        db, usuario, partido_id, eventos, ahora=reloj
+    )
 
 
 # ---------------- CU-34, CU-35 · Identificadores ----------------
@@ -116,15 +152,20 @@ async def sincronizar_cola(partido_id: int, eventos: list[EventoManualCrear],
             summary="CU-34 · Identificadores detectados y su asignacion")
 async def listar_tracks(partido_id: int, usuario: Actual, db: Db,
                         solo_activos: bool = True) -> list[TrackDetectado]:
-    pendiente("CU-34", "Sprint 3", "Jhon")
+    return await service.listar_tracks_partido(
+        db, usuario, partido_id, solo_activos=solo_activos
+    )
 
 
 @router.put("/{partido_id}/tracks/{track_id}", response_model=TrackDetectado,
+            dependencies=[Depends(requiere_rol("ADMIN", "ANALISTA"))],
             summary="CU-34, CU-35 · Asignar o reasignar un identificador a un jugador")
 async def asignar_track(partido_id: int, track_id: int, datos: AsignarTrack,
-                        usuario: Actual, db: Db) -> TrackDetectado:
+                        usuario: Actual, db: Db, reloj: RelojDep) -> TrackDetectado:
     # Regla: reasignar tras una oclusion continua las metricas, no las reinicia.
-    pendiente("CU-34", "Sprint 3", "Jhon")
+    return await service.asignar_track_partido(
+        db, usuario, partido_id, track_id, datos, ahora=reloj
+    )
 
 
 # ---------------- Posiciones ----------------
@@ -147,7 +188,6 @@ def _es_ping(texto: str | None) -> bool:
     return isinstance(datos, dict) and datos.get("tipo") == "ping"
 
 
-HubDep = Annotated[Hub, Depends(obtener_hub)]
 PartidosDep = Annotated[RepositorioPartidos, Depends(obtener_repositorio_partidos)]
 
 
@@ -278,6 +318,7 @@ async def ingesta(ws: WebSocket, partido_id: int, hub: HubDep, partidos: Partido
             await hub.difundir(canal, {"tipo": "posiciones",
                                        "datos": mensaje.model_dump(mode="json")})
             await almacen.agregar(mensaje)
+            await service.registrar_tracks_ingesta(worker.club_id, mensaje)
     except (WebSocketDisconnect, RuntimeError):
         pass
     finally:

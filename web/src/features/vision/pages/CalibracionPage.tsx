@@ -9,14 +9,14 @@
  * Valida el error de la calibración con `/validar` (CU-21, T-031): automático con
  * retardo y manual; señala el punto con mayor error y avisa si no permite iniciar.
  */
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useEffect, useId, useMemo, useRef, useState, type ChangeEvent } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
 import "@/features/vision/calibracion.css";
 import { estadoHttp, mensajeDeError } from "@/shared/lib/errors";
 
-import { guardarCalibracion } from "../api";
+import { guardarCalibracion, listarPartidos } from "../api";
 import {
   ANCHO_CANCHA_DEFECTO_M,
   AVISO_PROPUESTA_CALIBRACION,
@@ -60,8 +60,33 @@ export function CalibracionPage() {
   const [nombreArchivo, setNombreArchivo] = useState<string | null>(null);
   const [dimensiones, setDimensiones] = useState<{ ancho: number; alto: number } | null>(null);
 
+  // Cámara en vivo (WebRTC / getUserMedia) para congelar un cuadro directamente
+  const [camaraActiva, setCamaraActiva] = useState(false);
+  const [camarasDisponibles, setCamarasDisponibles] = useState<MediaDeviceInfo[]>([]);
+  const [camaraDeviceId, setCamaraDeviceId] = useState<string>("");
+  const [errorCamara, setErrorCamara] = useState<string | null>(null);
+  const videoCamaraRef = useRef<HTMLVideoElement | null>(null);
+  const streamCamaraRef = useRef<MediaStream | null>(null);
+
   // Parámetros del partido y dimensiones reales editables (CU-20)
-  const [partidoIdTexto, setPartidoIdTexto] = useState("1");
+  const [searchParams] = useSearchParams();
+  const paramPartidoInicial = searchParams.get("partidoId")?.trim() || null;
+  const [partidoIdTexto, setPartidoIdTexto] = useState(paramPartidoInicial || "1");
+  const partidosClub = useQuery({
+    queryKey: ["vision", "partidos"],
+    queryFn: listarPartidos,
+  });
+
+  // Si no se pasó ?partidoId en la URL y hay partidos del club, selecciona el primero del club
+  useEffect(() => {
+    if (paramPartidoInicial) return;
+    const lista = partidosClub.data;
+    if (!lista || lista.length === 0) return;
+    const actualExiste = lista.some((p) => String(p.id) === partidoIdTexto);
+    if (!actualExiste) {
+      setPartidoIdTexto(String(lista[0].id));
+    }
+  }, [paramPartidoInicial, partidosClub.data, partidoIdTexto]);
   const [largoTexto, setLargoTexto] = useState(String(LARGO_CANCHA_DEFECTO_M));
   const [anchoTexto, setAnchoTexto] = useState(String(ANCHO_CANCHA_DEFECTO_M));
 
@@ -96,6 +121,97 @@ export function CalibracionPage() {
       }
     };
   }, [imagenUrl]);
+
+  // Limpieza del stream de cámara al desmontar la página
+  useEffect(() => {
+    return () => {
+      if (streamCamaraRef.current) {
+        streamCamaraRef.current.getTracks().forEach((t) => t.stop());
+        streamCamaraRef.current = null;
+      }
+    };
+  }, []);
+
+  async function abrirCamaraEnVivo(deviceIdPreferido?: string) {
+    setErrorCamara(null);
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setErrorCamara("Tu navegador no permite acceder a cámaras de video (getUserMedia).");
+      return;
+    }
+    try {
+      if (streamCamaraRef.current) {
+        streamCamaraRef.current.getTracks().forEach((t) => t.stop());
+      }
+      const idElegido = deviceIdPreferido ?? camaraDeviceId;
+      const constraints: MediaStreamConstraints = {
+        video: idElegido
+          ? { deviceId: { exact: idElegido }, width: { ideal: 1920 }, height: { ideal: 1080 } }
+          : { width: { ideal: 1920 }, height: { ideal: 1080 } },
+        audio: false,
+      };
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      streamCamaraRef.current = stream;
+      setCamaraActiva(true);
+
+      const dispositivos = await navigator.mediaDevices.enumerateDevices();
+      const cams = dispositivos.filter((d) => d.kind === "videoinput");
+      setCamarasDisponibles(cams);
+      if (!idElegido && cams.length > 0 && cams[0]) {
+        setCamaraDeviceId(cams[0].deviceId);
+      }
+
+      requestAnimationFrame(() => {
+        if (videoCamaraRef.current) {
+          videoCamaraRef.current.srcObject = stream;
+          void videoCamaraRef.current.play();
+        }
+      });
+    } catch (err) {
+      setErrorCamara(
+        err instanceof Error
+          ? `No se pudo abrir la cámara: ${err.message}`
+          : "No se pudo acceder a la cámara conectada.",
+      );
+      setCamaraActiva(false);
+    }
+  }
+
+  function cerrarCamaraEnVivo() {
+    if (streamCamaraRef.current) {
+      streamCamaraRef.current.getTracks().forEach((t) => t.stop());
+      streamCamaraRef.current = null;
+    }
+    setCamaraActiva(false);
+  }
+
+  function congelarCuadroCamara() {
+    const videoEl = videoCamaraRef.current;
+    if (!videoEl || videoEl.videoWidth <= 0 || videoEl.videoHeight <= 0) {
+      setErrorCamara("La cámara aún no está entregando imagen de video.");
+      return;
+    }
+    const w = videoEl.videoWidth;
+    const h = videoEl.videoHeight;
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.drawImage(videoEl, 0, 0, w, h);
+
+    canvas.toBlob((blob) => {
+      if (!blob) return;
+      if (imagenUrl) {
+        URL.revokeObjectURL(imagenUrl);
+      }
+      const nuevaUrl = URL.createObjectURL(blob);
+      setImagenUrl(nuevaUrl);
+      setNombreArchivo(`captura_camara_${w}x${h}.png`);
+      setDimensiones({ ancho: w, alto: h });
+      limpiarEstadoEnvio();
+      cerrarCamaraEnVivo();
+    }, "image/png");
+  }
 
   // Hitos que todavía no tienen un par asignado
   const hitosDisponibles = useMemo(() => {
@@ -282,6 +398,52 @@ export function CalibracionPage() {
     setHitosSaltadosIds([]);
   }
 
+  function autocompletarPuntosValidos() {
+    limpiarEstadoEnvio();
+    guardarInstantanea(pares);
+
+    const anchoPx = dimensiones?.ancho ?? 1280;
+    const altoPx = dimensiones?.alto ?? 720;
+
+    if (!imagenUrl) {
+      const svgPrueba = `<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+        <rect width="1280" height="720" fill="#1b5e36"/>
+        <rect x="90" y="60" width="1100" height="600" fill="#217040" stroke="#ffffff" stroke-width="4"/>
+        <line x1="640" y1="60" x2="640" y2="660" stroke="#ffffff" stroke-width="4"/>
+        <circle cx="640" cy="360" r="85" fill="none" stroke="#ffffff" stroke-width="4"/>
+        <rect x="90" y="182" width="173" height="356" fill="none" stroke="#ffffff" stroke-width="4"/>
+        <rect x="1017" y="182" width="173" height="356" fill="none" stroke="#ffffff" stroke-width="4"/>
+      </svg>`;
+      const blob = new Blob([svgPrueba], { type: "image/svg+xml" });
+      setImagenUrl(URL.createObjectURL(blob));
+      setNombreArchivo("cuadro_referencia_cancha.svg");
+      setDimensiones({ ancho: 1280, alto: 720 });
+    }
+
+    const L = Number.isFinite(largoM) && largoM > 0 ? largoM : LARGO_CANCHA_DEFECTO_M;
+    const W = Number.isFinite(anchoM) && anchoM > 0 ? anchoM : ANCHO_CANCHA_DEFECTO_M;
+    const margenX = 90;
+    const margenY = 60;
+    const utilW = Math.max(200, anchoPx - margenX * 2);
+    const utilH = Math.max(150, altoPx - margenY * 2);
+
+    const hitosBase = plantilla.slice(0, MIN_PUNTOS_CALIBRACION);
+    const nuevos: ParCalibracion[] = hitosBase.map((hito) => ({
+      id: `par-${contadorIdRef.current++}`,
+      hitoId: hito.id,
+      etiqueta: hito.nombre,
+      imagen: {
+        x: redondear2(margenX + (hito.x / L) * utilW),
+        y: redondear2(margenY + ((W - hito.y) / W) * utilH),
+      },
+      cancha: { x: hito.x, y: hito.y },
+    }));
+
+    setModoLibre(false);
+    setPares(nuevos);
+    setParSeleccionadoId(nuevos[nuevos.length - 1]?.id ?? null);
+  }
+
   // Atajos de teclado globales (solo cuando el foco NO está en input, textarea o select)
   useEffect(() => {
     function alPresionarTecla(e: KeyboardEvent) {
@@ -389,30 +551,57 @@ export function CalibracionPage() {
         aria-label="Configuración de imagen y medidas de cancha"
       >
         <div className="cal-campo">
-          <label htmlFor={idArchivo}>Cuadro congelado (imagen local)</label>
-          <input
-            id={idArchivo}
-            type="file"
-            accept="image/*"
-            onChange={alCambiarArchivo}
-            className="cal-input-archivo"
-          />
+          <label htmlFor={idArchivo}>Fuente del cuadro (Imagen o Cámara en vivo)</label>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <input
+              id={idArchivo}
+              type="file"
+              accept="image/*"
+              onChange={alCambiarArchivo}
+              className="cal-input-archivo"
+            />
+            <button
+              type="button"
+              className={`cal-btn ${camaraActiva ? "es-activo" : ""}`}
+              onClick={() => (camaraActiva ? cerrarCamaraEnVivo() : void abrirCamaraEnVivo())}
+            >
+              {camaraActiva ? "Cerrar cámara en vivo" : "Usar cámara en vivo"}
+            </button>
+          </div>
         </div>
 
-        <div className="cal-campo cal-campo-corto">
-          <label htmlFor={idPartido}>ID del partido</label>
-          <input
-            id={idPartido}
-            type="number"
-            min={1}
-            step={1}
-            value={partidoIdTexto}
-            onChange={(e) => {
-              setPartidoIdTexto(e.target.value);
-              limpiarEstadoEnvio();
-            }}
-            className="cal-input"
-          />
+        <div className="cal-campo">
+          <label htmlFor={idPartido}>Partido del club</label>
+          {partidosClub.data && partidosClub.data.length > 0 ? (
+            <select
+              id={idPartido}
+              value={partidoIdTexto}
+              onChange={(e) => {
+                setPartidoIdTexto(e.target.value);
+                limpiarEstadoEnvio();
+              }}
+              className="cal-input"
+            >
+              {partidosClub.data.map((p) => (
+                <option key={p.id} value={String(p.id)}>
+                  #{p.id} · vs {p.rival} · {p.sede} ({p.estado})
+                </option>
+              ))}
+            </select>
+          ) : (
+            <input
+              id={idPartido}
+              type="number"
+              min={1}
+              step={1}
+              value={partidoIdTexto}
+              onChange={(e) => {
+                setPartidoIdTexto(e.target.value);
+                limpiarEstadoEnvio();
+              }}
+              className="cal-input"
+            />
+          )}
         </div>
 
         <div className="cal-campo cal-campo-corto">
@@ -443,6 +632,91 @@ export function CalibracionPage() {
           />
         </div>
       </section>
+
+      {errorCamara && (
+        <div className="cal-alerta cal-alerta-error" role="alert">
+          <p>{errorCamara}</p>
+        </div>
+      )}
+
+      {camaraActiva && (
+        <section
+          className="cal-barra-config"
+          aria-label="Vista previa de cámara en vivo"
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: 12,
+            marginBottom: 16,
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              flexWrap: "wrap",
+              gap: 12,
+            }}
+          >
+            <div>
+              <strong>Cámara en vivo conectada</strong>
+              <p style={{ margin: "2px 0 0", fontSize: 13, color: "var(--text-2)" }}>
+                Enfoca la cancha y pulsa «Congelar cuadro para calibrar» para tomar la captura
+                exacta de la lente.
+              </p>
+            </div>
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              {camarasDisponibles.length > 1 && (
+                <select
+                  value={camaraDeviceId}
+                  onChange={(e) => {
+                    const nuevoId = e.target.value;
+                    setCamaraDeviceId(nuevoId);
+                    void abrirCamaraEnVivo(nuevoId);
+                  }}
+                  className="cal-input"
+                >
+                  {camarasDisponibles.map((cam, idx) => (
+                    <option key={cam.deviceId || idx} value={cam.deviceId}>
+                      {cam.label || `Cámara #${idx + 1}`}
+                    </option>
+                  ))}
+                </select>
+              )}
+              <button
+                type="button"
+                className="cal-btn-primario"
+                onClick={congelarCuadroCamara}
+              >
+                Congelar cuadro para calibrar
+              </button>
+              <button type="button" className="cal-btn" onClick={cerrarCamaraEnVivo}>
+                Cancelar
+              </button>
+            </div>
+          </div>
+
+          <div
+            style={{
+              width: "100%",
+              maxWidth: 860,
+              margin: "0 auto",
+              borderRadius: 8,
+              overflow: "hidden",
+              border: "1px solid var(--line)",
+              background: "#000",
+            }}
+          >
+            <video
+              ref={videoCamaraRef}
+              muted
+              playsInline
+              style={{ width: "100%", maxHeight: 440, display: "block", objectFit: "contain" }}
+            />
+          </div>
+        </section>
+      )}
 
       {validacion.erroresMedidas.length > 0 && (
         <div className="cal-alerta cal-alerta-error" role="alert">
@@ -491,6 +765,15 @@ export function CalibracionPage() {
               Saltar este punto
             </button>
           )}
+
+          <button
+            type="button"
+            className="cal-btn"
+            onClick={autocompletarPuntosValidos}
+            title="Genera 8 pares de referencia válidos listos para validar y guardar"
+          >
+            Autocompletar 8 puntos válidos
+          </button>
 
           <button
             type="button"

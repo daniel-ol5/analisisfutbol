@@ -1,0 +1,669 @@
+/* Estilos de la pantalla de Control del Partido en Web (CU-30, CU-31, T-068). */
+
+.par-pagina {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 36px 24px 72px;
+}
+
+.par-cabecera {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.par-cabecera h1 {
+  font-size: var(--fs-xl);
+  font-weight: var(--fw-black);
+  letter-spacing: -0.02em;
+  margin: 4px 0 8px;
+}
+
+.par-subtitulo {
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--fs-md);
+  max-width: 680px;
+}
+
+.par-selector-caja {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 280px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.par-selector-caja label {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-bold);
+  color: var(--text-2);
+}
+
+.par-select,
+.par-input-num {
+  padding: 8px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--ground);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-md);
+}
+
+.par-aviso-rol {
+  margin: 0 0 16px;
+  padding: 12px 16px;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--info);
+  border-radius: var(--radius-sm);
+  background: var(--info-bg);
+  color: var(--text);
+  font-size: var(--fs-md);
+}
+
+.par-alerta-error {
+  margin: 0 0 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--risk);
+  border-left: 4px solid var(--risk);
+  border-radius: var(--radius-sm);
+  background: var(--risk-bg);
+  color: var(--text);
+}
+
+.par-alerta-error-titulo {
+  margin: 0 0 6px;
+  font-weight: var(--fw-bold);
+  color: var(--risk);
+}
+
+.par-alerta-error-mensaje {
+  margin: 0 0 10px;
+  font-size: var(--fs-md);
+}
+
+.par-alerta-acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+/* ----- Tablero principal: cronómetro y marcador ----- */
+
+.par-tablero {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+@media (max-width: 780px) {
+  .par-tablero {
+    grid-template-columns: 1fr;
+  }
+}
+
+.par-tarjeta {
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.par-cronometro-cabecera {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.par-insignia-fase {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: var(--surface-muted);
+  color: var(--text-2);
+  border: 1px solid var(--line);
+}
+
+.par-insignia-fase--vivo {
+  background: var(--ok-bg);
+  color: var(--ok);
+  border-color: var(--pitch-border);
+}
+
+.par-insignia-fase--pausa {
+  background: var(--warn-bg);
+  color: var(--warn);
+  border-color: var(--warn);
+}
+
+.par-insignia-canal {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  border: 1px solid var(--line);
+  background: var(--surface-muted);
+  color: var(--text-2);
+}
+
+.par-insignia-canal--conectado {
+  background: var(--ok-bg);
+  color: var(--ok);
+  border-color: var(--pitch-border);
+}
+
+.par-insignia-canal--reconectando {
+  background: var(--warn-bg);
+  color: var(--warn);
+  border-color: var(--warn);
+}
+
+.par-insignia-canal--vencida {
+  background: var(--risk-bg);
+  color: var(--risk);
+  border-color: var(--risk);
+}
+
+.par-cronometro-digitos {
+  font-size: clamp(2.4rem, 5vw, 3.6rem);
+  font-weight: var(--fw-black);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+  margin: 8px 0;
+  color: var(--text);
+}
+
+.par-descuento-sesion {
+  margin: 8px 0 0;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  border: 1px solid var(--pitch-border);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-bold);
+  color: var(--pitch);
+  display: inline-block;
+}
+
+.par-meta-reloj {
+  margin: 8px 0 0;
+  font-size: var(--fs-sm);
+  color: var(--text-3);
+}
+
+.par-marcador-grid {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 12px;
+  text-align: center;
+  margin: 10px 0 14px;
+}
+
+.par-equipo-etiqueta {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-bold);
+  color: var(--text-2);
+  margin-bottom: 4px;
+}
+
+.par-goles-numero {
+  font-size: 2.4rem;
+  font-weight: var(--fw-black);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.par-marcador-sep {
+  font-size: 1.5rem;
+  font-weight: var(--fw-bold);
+  color: var(--text-3);
+}
+
+.par-posesion-fila {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+}
+
+/* ----- Controles por fase ----- */
+
+.par-seccion-titulo {
+  margin: 0 0 10px;
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-bold);
+}
+
+.par-ataque-opciones {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 12px 0;
+}
+
+.par-ataque-opcion {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--ground);
+  cursor: pointer;
+}
+
+.par-ataque-opcion--activa {
+  border-color: var(--pitch);
+  background: var(--surface-2);
+}
+
+.par-ataque-nota {
+  margin: 8px 0 14px;
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+}
+
+.par-acciones-fila {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  margin-top: 12px;
+}
+
+.par-descuento-bloque {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--ground);
+  margin-top: 14px;
+}
+
+.par-confirmacion-cierre {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--risk);
+  border-radius: var(--radius-sm);
+  background: var(--risk-bg);
+}
+
+.par-confirmacion-cierre p {
+  margin: 0 0 10px;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-bold);
+  color: var(--risk);
+}
+
+/* ----- Botones ----- */
+
+.par-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 9px 16px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-md);
+  font-weight: var(--fw-bold);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.par-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.par-btn--primario {
+  background: var(--pitch);
+  border-color: var(--pitch);
+  color: var(--on-pitch);
+}
+
+.par-btn--primario:hover:not(:disabled) {
+  background: var(--pitch-hover);
+}
+
+.par-btn--peligro {
+  background: var(--risk);
+  border-color: var(--risk);
+  color: #ffffff;
+}
+
+/* ----- Panel de calidad mínimo ----- */
+/* ----- Panel de supervisión de calidad T-073 ----- */
+
+.par-calidad {
+  margin-top: 18px;
+}
+
+.par-calidad-lista {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.par-calidad-item {
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--ground);
+  font-size: var(--fs-sm);
+}
+
+.par-calidad-item strong {
+  display: block;
+  color: var(--text);
+  margin-top: 2px;
+}
+
+.par-calidad-degradado {
+  margin: 10px 0 0;
+  padding: 8px 12px;
+  border-left: 4px solid var(--warn);
+  background: var(--warn-bg);
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-sm);
+  color: var(--text);
+}
+
+/* ----- Pestañas entre Control y Asignación de identificadores (T-072) ----- */
+
+.par-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 18px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 10px;
+}
+
+.par-tab {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text-2);
+  font-size: var(--fs-md);
+  font-weight: var(--fw-bold);
+  text-decoration: none;
+}
+
+.par-tab--activa {
+  background: var(--pitch);
+  border-color: var(--pitch);
+  color: var(--on-pitch);
+}
+
+/* ----- Pantalla de asignación de jugadores a identificadores (CU-34, CU-35, T-072) ----- */
+
+.par-aviso-metricas {
+  margin: 0 0 16px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--pitch);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: var(--fs-sm);
+  line-height: 1.45;
+}
+
+.par-aviso-suave {
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--warn);
+  border-left: 4px solid var(--warn);
+  border-radius: var(--radius-sm);
+  background: var(--warn-bg);
+  color: var(--text);
+  font-size: var(--fs-md);
+}
+
+.par-aviso-suave p {
+  margin: 0 0 8px;
+}
+
+.par-asignacion-layout {
+  display: grid;
+  grid-template-columns: 1.55fr 1fr;
+  gap: 16px;
+  align-items: start;
+}
+
+@media (max-width: 880px) {
+  .par-asignacion-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.par-tracks-lista {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.par-track-fila {
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--ground);
+  transition: border-color 0.15s ease;
+}
+
+.par-track-fila--resaltada {
+  border-color: var(--pitch);
+  background: var(--surface-2);
+  box-shadow: 0 0 0 2px var(--pitch-border);
+}
+
+.par-track-principal {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.par-track-identidad {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.par-track-id {
+  font-size: var(--fs-md);
+  font-weight: var(--fw-black);
+  font-variant-numeric: tabular-nums;
+}
+
+.par-badge-equipo {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  border: 1px solid var(--line);
+}
+
+.par-badge-equipo--propio {
+  background: var(--ok-bg);
+  color: var(--ok);
+  border-color: var(--pitch-border);
+}
+
+.par-badge-equipo--rival {
+  background: var(--warn-bg);
+  color: var(--warn);
+  border-color: var(--warn);
+}
+
+.par-badge-equipo--arbitro {
+  background: var(--info-bg);
+  color: var(--info);
+  border-color: var(--info);
+}
+
+.par-badge-equipo--desconocido {
+  background: var(--surface-muted);
+  color: var(--text-2);
+  border-color: var(--line);
+}
+
+.par-track-estado-actual {
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+}
+
+.par-track-controles {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.par-track-select {
+  flex: 1 1 220px;
+  min-width: 190px;
+}
+
+.par-track-confirmacion {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--warn);
+  border-left: 4px solid var(--warn);
+  border-radius: var(--radius-sm);
+  background: var(--warn-bg);
+}
+
+.par-track-confirmacion-texto {
+  margin: 0 0 8px;
+  font-size: var(--fs-sm);
+  color: var(--text);
+}
+
+/* ----- Lista lateral del plantel ----- */
+
+.par-plantel-lista {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.par-plantel-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--ground);
+  cursor: pointer;
+}
+
+.par-plantel-item:hover {
+  border-color: var(--line-strong);
+}
+
+.par-plantel-item--resaltado {
+  border-color: var(--pitch);
+  background: var(--surface-2);
+}
+
+.par-plantel-identidad {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.par-plantel-dorsal {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34px;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-muted);
+  border: 1px solid var(--line);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-black);
+  font-variant-numeric: tabular-nums;
+}
+
+.par-plantel-nombre {
+  font-size: var(--fs-md);
+  font-weight: var(--fw-bold);
+}
+
+.par-plantel-pos {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  color: var(--text-3);
+  padding: 2px 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+
+.par-plantel-track {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-bold);
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--surface-muted);
+  color: var(--text-2);
+  border: 1px solid var(--line);
+}
+
+.par-plantel-track--activo {
+  background: var(--ok-bg);
+  color: var(--ok);
+  border-color: var(--pitch-border);
+}

@@ -39,6 +39,9 @@ dependencies:
   flutter_secure_storage: ^9.2.4
   shared_preferences: ^2.3.3
   web_socket_channel: ^3.0.3
+  path: ^1.9.1
+  sqflite: ^2.4.2+1
+  uuid: ^4.6.0
 
 dependency_overrides:
   # Evita que path_provider_android 2.3+ y shared_preferences_android 2.5+
@@ -57,6 +60,7 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+  sqflite_common_ffi: ^2.4.0+3
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

@@ -1,5 +1,5 @@
 /** CU-02 · Iniciar sesión. */
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, type SubmitEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
@@ -18,6 +18,7 @@ interface Errores {
 
 export function LoginPage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [errores, setErrores] = useState<Errores>({});
@@ -25,6 +26,7 @@ export function LoginPage() {
   const mutacion = useMutation({
     mutationFn: login,
     onSuccess: (sesion) => {
+      queryClient.clear();
       iniciarSesion(sesion);
       navigate("/", { replace: true });
     },

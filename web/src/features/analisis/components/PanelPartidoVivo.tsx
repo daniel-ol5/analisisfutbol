@@ -15,6 +15,10 @@ import type { Equipo, Partido } from "@/features/deportivo/types";
 import { usePartidoEnVivo } from "../hooks/usePartidoEnVivo";
 import type { ConfiguracionPlano2D } from "../types";
 import { Plano2DCancha } from "./Plano2DCancha";
+import {
+  type ModoDisposicionVivo,
+  VisorVideoSincronizado,
+} from "./VisorVideoSincronizado";
 
 interface Props {
   partidoIdInicial?: number;
@@ -29,6 +33,7 @@ export function PanelPartidoVivo({ partidoIdInicial }: Props) {
   const [partidoSeleccionadoId, setPartidoSeleccionadoId] = useState<number>(
     partidoIdInicial ?? 1,
   );
+  const [modoDisposicion, setModoDisposicion] = useState<ModoDisposicionVivo>("apilado");
 
   const [configPlano, setConfigPlano] = useState<ConfiguracionPlano2D>({
     mostrarEtiquetas: "tid",
@@ -300,97 +305,118 @@ export function PanelPartidoVivo({ partidoIdInicial }: Props) {
         </div>
       </section>
 
-      {/* Barra de controles del radar 2D */}
-      <div className="panel-controles-plano">
-        <div className="panel-controles-grupo">
-          <label className="panel-control-etiqueta" htmlFor="select-etiquetas-plano">
-            Etiquetas:
-          </label>
-          <select
-            id="select-etiquetas-plano"
-            className="panel-control-select"
-            value={configPlano.mostrarEtiquetas}
-            onChange={(e) =>
-              setConfigPlano((prev) => ({
-                ...prev,
-                mostrarEtiquetas: e.target.value as "dorsal" | "tid" | "ninguno",
-              }))
-            }
-          >
-            <option value="tid">ID de Tracking (tid)</option>
-            <option value="dorsal">Dorsal</option>
-            <option value="ninguno">Sin etiquetas</option>
-          </select>
-        </div>
+      {/* Contenedor sincronizado: Video / Cámara en Vivo arriba (o en paralelo) + Radar 2D abajo */}
+      <div
+        className={`panel-vivo-sincro-grid panel-vivo-sincro-grid--${modoDisposicion}`}
+      >
+        <VisorVideoSincronizado
+          partidoId={partidoSeleccionadoId}
+          jugadores={datos?.jugadores ?? []}
+          balon={datos?.balon}
+          colorLocal={colorLocal}
+          colorVisitante={colorVisitante}
+          nombreLocal={nombreLocal}
+          nombreVisitante={nombreVisitante}
+          workerTransmitiendo={Boolean(calidad?.worker_conectado)}
+          modoDisposicion={modoDisposicion}
+          onCambiarModoDisposicion={setModoDisposicion}
+        />
 
-        <button
-          type="button"
-          className={`panel-toggle-btn ${configPlano.mostrarEstelaBalon ? "panel-toggle-btn--activo" : ""}`}
-          onClick={() =>
-            setConfigPlano((prev) => ({
-              ...prev,
-              mostrarEstelaBalon: !prev.mostrarEstelaBalon,
-            }))
-          }
-        >
-          {configPlano.mostrarEstelaBalon ? "Estela Balón: ON" : "Estela Balón: OFF"}
-        </button>
-
-        <button
-          type="button"
-          className={`panel-toggle-btn ${configPlano.invertirLados ? "panel-toggle-btn--activo" : ""}`}
-          onClick={() =>
-            setConfigPlano((prev) => ({
-              ...prev,
-              invertirLados: !prev.invertirLados,
-            }))
-          }
-        >
-          Invertir lados
-        </button>
-
-        <button
-          type="button"
-          className={`panel-toggle-btn ${configPlano.altoContraste ? "panel-toggle-btn--activo" : ""}`}
-          onClick={() =>
-            setConfigPlano((prev) => ({
-              ...prev,
-              altoContraste: !prev.altoContraste,
-            }))
-          }
-        >
-          {configPlano.altoContraste ? "Alto Contraste: ON" : "Alto Contraste: OFF"}
-        </button>
-      </div>
-
-      {/* Visualización del Plano 2D interactivo (CU-41 · T-078) */}
-      <section className="panel-vivo-cancha-wrapper" aria-label="Plano 2D en vivo de la cancha">
-        <div className="panel-cancha-relativa">
-          <Plano2DCancha
-            jugadores={datos?.jugadores ?? []}
-            balon={datos?.balon}
-            estelaBalon={estelaBalon}
-            configuracion={configPlano}
-            nombreLocal={nombreLocal}
-            nombreVisitante={nombreVisitante}
-            colorLocal={colorLocal}
-            colorVisitante={colorVisitante}
-          />
-
-          {/* Banner informativo mientras se esperan datos */}
-          {!datos && estadoConexion === "conectado" && (
-            <div className="plano-esperando-overlay">
-              <div className="plano-esperando-card">
-                <span className="plano-esperando-pulso" aria-hidden="true" />
-                <strong>Canal en vivo conectado (Partido #{partidoSeleccionadoId})</strong>
-                <p>
-                  Esperando flujo de posiciones del worker de visión o del emisor simulado (a 5 Hz).
-                </p>
-              </div>
+        <div className="panel-vivo-radar-columna">
+          {/* Barra de controles del radar 2D */}
+          <div className="panel-controles-plano">
+            <div className="panel-controles-grupo">
+              <label className="panel-control-etiqueta" htmlFor="select-etiquetas-plano">
+                Etiquetas Radar 2D:
+              </label>
+              <select
+                id="select-etiquetas-plano"
+                className="panel-control-select"
+                value={configPlano.mostrarEtiquetas}
+                onChange={(e) =>
+                  setConfigPlano((prev) => ({
+                    ...prev,
+                    mostrarEtiquetas: e.target.value as "dorsal" | "tid" | "ninguno",
+                  }))
+                }
+              >
+                <option value="tid">ID de Tracking (tid)</option>
+                <option value="dorsal">Dorsal</option>
+                <option value="ninguno">Sin etiquetas</option>
+              </select>
             </div>
-          )}
+
+            <button
+              type="button"
+              className={`panel-toggle-btn ${configPlano.mostrarEstelaBalon ? "panel-toggle-btn--activo" : ""}`}
+              onClick={() =>
+                setConfigPlano((prev) => ({
+                  ...prev,
+                  mostrarEstelaBalon: !prev.mostrarEstelaBalon,
+                }))
+              }
+            >
+              {configPlano.mostrarEstelaBalon ? "Estela Balón: ON" : "Estela Balón: OFF"}
+            </button>
+
+            <button
+              type="button"
+              className={`panel-toggle-btn ${configPlano.invertirLados ? "panel-toggle-btn--activo" : ""}`}
+              onClick={() =>
+                setConfigPlano((prev) => ({
+                  ...prev,
+                  invertirLados: !prev.invertirLados,
+                }))
+              }
+            >
+              Invertir lados
+            </button>
+
+            <button
+              type="button"
+              className={`panel-toggle-btn ${configPlano.altoContraste ? "panel-toggle-btn--activo" : ""}`}
+              onClick={() =>
+                setConfigPlano((prev) => ({
+                  ...prev,
+                  altoContraste: !prev.altoContraste,
+                }))
+              }
+            >
+              {configPlano.altoContraste ? "Alto Contraste: ON" : "Alto Contraste: OFF"}
+            </button>
+          </div>
+
+          {/* Visualización del Plano 2D interactivo (CU-41 · T-078) */}
+          <section className="panel-vivo-cancha-wrapper" aria-label="Plano 2D en vivo de la cancha">
+            <div className="panel-cancha-relativa">
+              <Plano2DCancha
+                jugadores={datos?.jugadores ?? []}
+                balon={datos?.balon}
+                estelaBalon={estelaBalon}
+                configuracion={configPlano}
+                nombreLocal={nombreLocal}
+                nombreVisitante={nombreVisitante}
+                colorLocal={colorLocal}
+                colorVisitante={colorVisitante}
+              />
+
+              {/* Banner informativo mientras se esperan datos */}
+              {!datos && estadoConexion === "conectado" && (
+                <div className="plano-esperando-overlay">
+                  <div className="plano-esperando-card">
+                    <span className="plano-esperando-pulso" aria-hidden="true" />
+                    <strong>Canal en vivo conectado (Partido #{partidoSeleccionadoId})</strong>
+                    <p>
+                      Pulsa «Reproducir y Analizar en Vivo (5 Hz)» en el visor de video superior
+                      para sincronizar el video o cámara con este Radar 2D.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </section>
         </div>
-      </section>
+      </div>
 
       {/* Telemetría y Supervisión de Calidad (CU-39) */}
       <footer className="panel-telemetria-seccion" aria-label="Telemetría y calidad de transmisión">
