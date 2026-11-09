@@ -277,9 +277,14 @@ async def registrar_evento_manual(
     await _validar_jugadores(db, partido, datos)
 
     instante = _en_utc(ahora())
+    capturado_en = (
+        _en_utc(datos.capturado_en) if datos.capturado_en is not None else instante
+    )
+    # Un cliente no puede adelantar el reloj del partido con una fecha futura.
+    instante_juego = min(capturado_en, instante)
     reloj = await _reloj_del_partido(db, usuario, partido.id)
     minuto_reloj = (
-        int(segundos_transcurridos(reloj, instante)) // 60
+        int(segundos_transcurridos(reloj, instante_juego)) // 60
         if reloj is not None
         else partido.minuto_actual
     )
@@ -310,7 +315,7 @@ async def registrar_evento_manual(
         minuto=minuto,
         origen="MANUAL",
         convertida_en_roja=convertida_en_roja,
-        capturado_en=_en_utc(datos.capturado_en) if datos.capturado_en else instante,
+        capturado_en=capturado_en,
         creado_en=instante,
         creado_por_id=usuario.id,
     )
@@ -325,6 +330,42 @@ async def registrar_evento_manual(
     await db.commit()
     await db.refresh(evento)
     return evento
+
+
+async def sincronizar_eventos_manuales(
+    db: AsyncSession,
+    usuario: UsuarioActual,
+    partido_id: int,
+    eventos: list[EventoManualCrear],
+    ahora: RelojSistema = ahora_utc,
+) -> list[EventoManualModelo]:
+    """Procesa la cola offline en orden de captura y conserva la idempotencia.
+
+    Cada elemento se confirma de manera independiente. Si la conexión se corta
+    después de una confirmación, el móvil puede reenviar toda la cola: el UUID
+    hace que los ya procesados devuelvan el mismo evento sin duplicarlo.
+    """
+    ordenados = sorted(
+        enumerate(eventos),
+        key=lambda par: (
+            _en_utc(par[1].capturado_en)
+            if par[1].capturado_en is not None
+            else datetime.max.replace(tzinfo=UTC),
+            par[0],
+        ),
+    )
+    sincronizados: list[EventoManualModelo] = []
+    for _, datos in ordenados:
+        sincronizados.append(
+            await registrar_evento_manual(
+                db,
+                usuario,
+                partido_id,
+                datos,
+                ahora=ahora,
+            )
+        )
+    return sincronizados
 
 
 async def deshacer_evento_manual(

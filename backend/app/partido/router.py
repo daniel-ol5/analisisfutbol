@@ -135,11 +135,15 @@ async def deshacer_evento(evento_id: int, usuario: Actual, db: Db) -> None:
 
 
 @router.post("/{partido_id}/eventos/sincronizar", response_model=list[EventoManual],
+             dependencies=[Depends(requiere_rol("ADMIN", "DT", "ASISTENTE"))],
              summary="CU-33 · Sincronizar la cola de eventos capturados sin conexion")
 async def sincronizar_cola(partido_id: int, eventos: list[EventoManualCrear],
-                           usuario: Actual, db: Db) -> list[EventoManual]:
+                           usuario: Actual, db: Db,
+                           reloj: RelojDep) -> list[EventoManual]:
     # Regla: llegan en orden y no se duplican, aunque el envio se repita.
-    pendiente("CU-33", "Sprint 3", "Susana")
+    return await service.sincronizar_eventos_manuales(
+        db, usuario, partido_id, eventos, ahora=reloj
+    )
 
 
 # ---------------- CU-34, CU-35 · Identificadores ----------------

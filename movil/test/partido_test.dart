@@ -5,6 +5,7 @@ import 'package:areatecnica/features/deportivo/agenda/modelos.dart';
 import 'package:areatecnica/features/deportivo/alineacion/modelos.dart';
 import 'package:areatecnica/features/partido/modelos.dart';
 import 'package:areatecnica/features/partido/pagina.dart';
+import 'package:areatecnica/features/partido/cola_eventos.dart';
 import 'package:areatecnica/shared/api/cliente.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -45,6 +46,10 @@ final _alineacion = Alineacion(
 Future<List<Partido>> _activos() async => [_partido()];
 Future<Alineacion> _formacion(int _) async => _alineacion;
 Future<void> _sinDeshacer(int _) async {}
+Future<void> _sinDescartar(String _) async {}
+Future<int> _sinPendientes(int _) async => 0;
+Future<ResultadoSincronizacion> _sinSincronizar(int _) async =>
+    const ResultadoSincronizacion(confirmados: 0, pendientes: 0);
 
 EventoManual _respuesta(
   int id,
@@ -73,6 +78,9 @@ Widget _app({
   ObtenerAlineacion obtenerAlineacion = _formacion,
   required RegistrarEvento registrar,
   DeshacerEvento deshacer = _sinDeshacer,
+  ContarPendientes contarPendientes = _sinPendientes,
+  SincronizarPendientes sincronizarPendientes = _sinSincronizar,
+  DescartarPendiente descartarPendiente = _sinDescartar,
 }) => MaterialApp(
   theme: temaSol,
   home: PartidoPagina(
@@ -80,6 +88,9 @@ Widget _app({
     obtenerAlineacion: obtenerAlineacion,
     registrar: registrar,
     deshacer: deshacer,
+    contarPendientes: contarPendientes,
+    sincronizarPendientes: sincronizarPendientes,
+    descartarPendiente: descartarPendiente,
   ),
 );
 
@@ -292,6 +303,110 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('El partido ya finalizó'), findsOneWidget);
+  });
+
+  testWidgets('muestra y permite descartar un evento guardado sin conexión', (
+    tester,
+  ) async {
+    await _pantallaAlta(tester);
+    var pendientes = 0;
+    String? descartado;
+    Future<EventoManual> registrar(int partidoId, EventoCrear evento) async {
+      final identificado = EventoCrear(
+        uuid: 'uuid-offline',
+        capturadoEn: DateTime.utc(2026, 11, 8, 16, 23),
+        tipo: evento.tipo,
+        equipo: evento.equipo,
+        jugadorId: evento.jugadorId,
+      );
+      pendientes = 1;
+      return EventoManual.pendiente(
+        partidoId: partidoId,
+        evento: identificado,
+        minutoEstimado: 23,
+      );
+    }
+
+    await tester.pumpWidget(
+      _app(
+        registrar: registrar,
+        contarPendientes: (_) async => pendientes,
+        descartarPendiente: (uuid) async {
+          descartado = uuid;
+          pendientes = 0;
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('evento-GOL')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('jugador-109')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Pendientes: 1'), findsOneWidget);
+    expect(find.textContaining('guardado sin conexión'), findsOneWidget);
+    await tester.tap(find.text('Deshacer'));
+    await tester.pumpAndSettle();
+
+    expect(descartado, 'uuid-offline');
+    expect(find.text('Pendientes: 0'), findsOneWidget);
+  });
+
+  testWidgets('el contador permite sincronizar manualmente la cola', (
+    tester,
+  ) async {
+    await _pantallaAlta(tester);
+    var pendientes = 2;
+    var sincronizaciones = 0;
+
+    await tester.pumpWidget(
+      _app(
+        registrar: (partidoId, evento) async => _respuesta(1, evento),
+        contarPendientes: (_) async => pendientes,
+        sincronizarPendientes: (_) async {
+          sincronizaciones++;
+          pendientes = 0;
+          return const ResultadoSincronizacion(confirmados: 2, pendientes: 0);
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Pendientes: 2'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('eventos-pendientes')));
+    await tester.pumpAndSettle();
+
+    expect(sincronizaciones, 1);
+    expect(find.text('Pendientes: 0'), findsOneWidget);
+    expect(find.textContaining('2 evento(s) sincronizado(s)'), findsOneWidget);
+  });
+
+  testWidgets('la cola se sincroniza automáticamente al recuperar conexión', (
+    tester,
+  ) async {
+    await _pantallaAlta(tester);
+    var pendientes = 1;
+    var sincronizaciones = 0;
+
+    await tester.pumpWidget(
+      _app(
+        registrar: (partidoId, evento) async => _respuesta(1, evento),
+        contarPendientes: (_) async => pendientes,
+        sincronizarPendientes: (_) async {
+          sincronizaciones++;
+          pendientes = 0;
+          return const ResultadoSincronizacion(confirmados: 1, pendientes: 0);
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Pendientes: 1'), findsOneWidget);
+
+    await tester.pump(const Duration(seconds: 15));
+    await tester.pumpAndSettle();
+
+    expect(sincronizaciones, 1);
+    expect(find.text('Pendientes: 0'), findsOneWidget);
   });
 
   testWidgets('sin partido activo no muestra una botonera utilizable', (
