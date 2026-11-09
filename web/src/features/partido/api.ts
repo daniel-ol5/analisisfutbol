@@ -4,10 +4,13 @@
 import { api } from "@/shared/api/client";
 
 import type {
+  AsignarTrackPayload,
   DescuentoPayload,
   EstadoEnVivo,
   IniciarPartidoPayload,
+  JugadorPlantelPartido,
   ResumenPartidoControl,
+  TrackDetectado,
 } from "./types";
 
 export async function obtenerEstadoPartido(partidoId: number): Promise<EstadoEnVivo> {
@@ -48,5 +51,36 @@ export async function listarPartidosControl(): Promise<ResumenPartidoControl[]> 
 
 export async function obtenerPartidoControl(partidoId: number): Promise<ResumenPartidoControl> {
   const { data } = await api.get<ResumenPartidoControl>(`/deportivo/partidos/${partidoId}`);
+  return data;
+}
+
+export async function listarTracksPartido(
+  partidoId: number,
+  soloActivos = true,
+): Promise<TrackDetectado[]> {
+  const { data } = await api.get<TrackDetectado[]>(`/partido/${partidoId}/tracks`, {
+    params: { solo_activos: soloActivos },
+  });
+  return data;
+}
+
+export async function asignarTrackPartido(
+  partidoId: number,
+  trackId: number,
+  cuerpo: AsignarTrackPayload,
+): Promise<TrackDetectado> {
+  const { data } = await api.put<TrackDetectado>(`/partido/${partidoId}/tracks/${trackId}`, cuerpo);
+  return data;
+}
+
+export async function listarJugadoresPlantelPartido(
+  equipoId: number,
+): Promise<JugadorPlantelPartido[]> {
+  const { data } = await api.get<JugadorPlantelPartido[]>(
+    `/deportivo/equipos/${equipoId}/jugadores`,
+    {
+      params: { activos: true, orden: "dorsal" },
+    },
+  );
   return data;
 }

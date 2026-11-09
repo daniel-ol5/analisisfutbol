@@ -8,7 +8,7 @@
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useId, useMemo, useState, type ChangeEvent } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
 
 import "@/features/partido/partido.css";
 import { obtenerRolActual } from "@/shared/api/client";
@@ -23,6 +23,7 @@ import {
   obtenerPartidoControl,
   registrarDescuentoPartido,
 } from "../api";
+import { PanelAsignacionTracks } from "../components/PanelAsignacionTracks";
 import { useCanalVivo } from "../hooks/useCanalVivo";
 import { useRelojPartido } from "../hooks/useRelojPartido";
 import {
@@ -71,7 +72,10 @@ export function PartidoPage() {
   const idSelectPartido = useId();
   const idInputDescuento = useId();
   const queryClient = useQueryClient();
+  const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
+
+  const enVistaAsignar = location.pathname.replace(/\/+$/, "").endsWith("/asignar");
 
   // Rol actual leído a través del adaptador registrado en shared/api/client.ts
   const rolActual = obtenerRolActual();
@@ -314,10 +318,15 @@ export function PartidoPage() {
     <div className="par-pagina">
       <header className="par-cabecera">
         <div>
-          <h1>Control del partido en vivo</h1>
+          <h1>
+            {enVistaAsignar
+              ? "Asignación de jugadores a identificadores"
+              : "Control del partido en vivo"}
+          </h1>
           <p className="par-subtitulo">
-            Inicio del partido con dirección de ataque, entretiempo, tiempo de descuento y cierre
-            del cronómetro (CU-30, CU-31).
+            {enVistaAsignar
+              ? "Asociación de cada identificador detectado (track) a un jugador del plantel, con vigencia temporal y reasignación tras oclusiones (CU-34, CU-35)."
+              : "Inicio del partido con dirección de ataque, entretiempo, tiempo de descuento y cierre del cronómetro (CU-30, CU-31)."}
           </p>
         </div>
 
@@ -346,11 +355,29 @@ export function PartidoPage() {
         </div>
       </header>
 
+      <nav className="par-tabs" aria-label="Secciones del partido">
+        <Link
+          to={`/partido${partidoIdActivo !== null ? `?partidoId=${partidoIdActivo}` : ""}`}
+          className={`par-tab ${!enVistaAsignar ? "par-tab--activa" : ""}`}
+          aria-current={!enVistaAsignar ? "page" : undefined}
+        >
+          Control y cronómetro
+        </Link>
+        <Link
+          to={`/partido/asignar${partidoIdActivo !== null ? `?partidoId=${partidoIdActivo}` : ""}`}
+          className={`par-tab ${enVistaAsignar ? "par-tab--activa" : ""}`}
+          aria-current={enVistaAsignar ? "page" : undefined}
+        >
+          Asignar identificadores
+        </Link>
+      </nav>
+
       {!puedeOperar && (
         <div className="par-aviso-rol" role="note">
           Modo lectura ({rolActual ?? "sin rol"}): solo los roles <strong>ADMIN</strong> y{" "}
-          <strong>ANALISTA</strong> pueden iniciar, pausar, agregar descuento o finalizar el
-          partido. Los controles están deshabilitados para evitar errores de permisos (403).
+          <strong>ANALISTA</strong> pueden iniciar, pausar, agregar descuento, finalizar el partido
+          o asignar jugadores a identificadores. Los controles están deshabilitados para evitar
+          errores de permisos (403).
         </div>
       )}
 
@@ -413,6 +440,12 @@ export function PartidoPage() {
             <code>?partidoId=&lt;id&gt;</code> en la dirección.
           </p>
         </section>
+      ) : enVistaAsignar ? (
+        <PanelAsignacionTracks
+          partidoId={partidoIdActivo}
+          partido={partidoActual}
+          puedeOperar={puedeOperar}
+        />
       ) : (
         <>
           <div className="par-tablero">
