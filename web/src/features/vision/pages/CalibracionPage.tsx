@@ -16,7 +16,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import "@/features/vision/calibracion.css";
 import { estadoHttp, mensajeDeError } from "@/shared/lib/errors";
 
-import { guardarCalibracion, listarPartidos } from "../api";
+import { detectarCalibracionIA, guardarCalibracion, listarPartidos } from "../api";
 import {
   ANCHO_CANCHA_DEFECTO_M,
   AVISO_PROPUESTA_CALIBRACION,
@@ -59,6 +59,9 @@ export function CalibracionPage() {
   const [imagenUrl, setImagenUrl] = useState<string | null>(null);
   const [nombreArchivo, setNombreArchivo] = useState<string | null>(null);
   const [dimensiones, setDimensiones] = useState<{ ancho: number; alto: number } | null>(null);
+  const [archivoBlob, setArchivoBlob] = useState<Blob | File | null>(null);
+  const [detectandoIA, setDetectandoIA] = useState(false);
+  const [mensajeIA, setMensajeIA] = useState<string | null>(null);
 
   // Cámara en vivo (WebRTC / getUserMedia) para congelar un cuadro directamente
   const [camaraActiva, setCamaraActiva] = useState(false);
@@ -206,6 +209,7 @@ export function CalibracionPage() {
       }
       const nuevaUrl = URL.createObjectURL(blob);
       setImagenUrl(nuevaUrl);
+      setArchivoBlob(blob);
       setNombreArchivo(`captura_camara_${w}x${h}.png`);
       setDimensiones({ ancho: w, alto: h });
       limpiarEstadoEnvio();
@@ -287,6 +291,7 @@ export function CalibracionPage() {
     }
     const nuevaUrl = URL.createObjectURL(archivo);
     setImagenUrl(nuevaUrl);
+    setArchivoBlob(archivo);
     setNombreArchivo(archivo.name);
     setDimensiones(null);
     limpiarEstadoEnvio();
@@ -442,6 +447,67 @@ export function CalibracionPage() {
     setModoLibre(false);
     setPares(nuevos);
     setParSeleccionadoId(nuevos[nuevos.length - 1]?.id ?? null);
+  }
+
+  async function detectarPuntosConIA() {
+    limpiarEstadoEnvio();
+    setMensajeIA(null);
+
+    let blobAEnviar: Blob | null = archivoBlob;
+    if (!blobAEnviar && imagenUrl) {
+      try {
+        const resp = await fetch(imagenUrl);
+        blobAEnviar = await resp.blob();
+      } catch {
+        blobAEnviar = null;
+      }
+    }
+
+    if (!blobAEnviar) {
+      setMensajeIA("Primero carga una imagen o congela un cuadro de la cámara para analizarlo con IA.");
+      return;
+    }
+
+    setDetectandoIA(true);
+    try {
+      const pid = validacion.partidoId ?? (Number(partidoIdTexto) || 1);
+      const data = await detectarCalibracionIA(
+        pid,
+        blobAEnviar,
+        largoM,
+        anchoM,
+      );
+
+      if (!data.es_valida || !data.puntos_imagen || data.puntos_imagen.length < 4) {
+        setMensajeIA(
+          `Solo se detectaron ${data.puntos_detectados} puntos (${data.puntos_inliers} válidos). Se requieren al menos 4 puntos visibles de la cancha.`
+        );
+        return;
+      }
+
+      guardarInstantanea(pares);
+      const nuevos: ParCalibracion[] = data.puntos_imagen.map((ptImg, idx) => {
+        const ptCnc = data.puntos_cancha[idx];
+        return {
+          id: `par-${contadorIdRef.current++}`,
+          hitoId: null,
+          etiqueta: `IA P${idx + 1}`,
+          imagen: { x: redondear2(ptImg.x), y: redondear2(ptImg.y) },
+          cancha: { x: redondear2(ptCnc.x), y: redondear2(ptCnc.y) },
+        };
+      });
+
+      setModoLibre(true);
+      setPares(nuevos);
+      setParSeleccionadoId(nuevos[0]?.id ?? null);
+      setMensajeIA(
+        `¡Excelente! ${nuevos.length} puntos reglamentarios detectados por IA con error medio de ${data.error_medio_m} m.`
+      );
+    } catch (err: unknown) {
+      setMensajeIA(`Error al detectar con IA: ${mensajeDeError(err)}`);
+    } finally {
+      setDetectandoIA(false);
+    }
   }
 
   // Atajos de teclado globales (solo cuando el foco NO está en input, textarea o select)
@@ -769,6 +835,24 @@ export function CalibracionPage() {
           <button
             type="button"
             className="cal-btn"
+            style={{
+              backgroundColor: "#0284c7",
+              color: "#ffffff",
+              fontWeight: 600,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+            }}
+            onClick={detectarPuntosConIA}
+            disabled={detectandoIA}
+            title="Analiza el cuadro con la red neuronal especializada para encontrar automáticamente las líneas y áreas de la cancha"
+          >
+            {detectandoIA ? "Detectando con IA..." : "⚡ Detectar puntos con IA"}
+          </button>
+
+          <button
+            type="button"
+            className="cal-btn"
             onClick={autocompletarPuntosValidos}
             title="Genera 8 pares de referencia válidos listos para validar y guardar"
           >
@@ -815,6 +899,21 @@ export function CalibracionPage() {
             Borrar todos
           </button>
         </div>
+        {mensajeIA && (
+          <div
+            style={{
+              marginTop: 10,
+              padding: "8px 14px",
+              borderRadius: 6,
+              fontSize: 13,
+              backgroundColor: mensajeIA.startsWith("¡Excelente!") ? "rgba(16, 185, 129, 0.15)" : "rgba(239, 68, 68, 0.15)",
+              color: mensajeIA.startsWith("¡Excelente!") ? "#10b981" : "#ef4444",
+              border: `1px solid ${mensajeIA.startsWith("¡Excelente!") ? "rgba(16, 185, 129, 0.3)" : "rgba(239, 68, 68, 0.3)"}`,
+            }}
+          >
+            {mensajeIA}
+          </div>
+        )}
       </section>
 
       {/* Paneles lado a lado: Cuadro de cámara y Plano de cancha */}

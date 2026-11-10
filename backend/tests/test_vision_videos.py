@@ -365,3 +365,13 @@ async def test_sin_token_no_se_sube_nada(cliente):
     r = await cliente.post(f"/api/vision/partidos/{club['partido_id']}/videos",
                            json={"nombre": "x.mp4", "tipo": "video/mp4", "tamano_bytes": 10})
     assert r.status_code == 401
+
+
+async def test_obtener_muestras_video(cliente):
+    club = await _club(cliente, "a")
+    ini = await _iniciar(cliente, club)
+    vid_id = ini.json()["id"]
+    r = await cliente.get(f"/api/vision/videos/{vid_id}/muestras", headers=club["auth"])
+    assert r.status_code == 200
+    assert isinstance(r.json(), list)
+

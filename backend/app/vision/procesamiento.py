@@ -18,6 +18,8 @@ import json
 import logging
 import math
 import os
+import subprocess
+import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -29,6 +31,7 @@ from app.core.config import settings
 from app.core.database import SessionLocal
 from app.core.deps import UsuarioActual
 from app.core.realtime import canal_partido, obtener_hub
+from app.core.security import token_acceso
 from app.core.tenancy import del_club, verificar_pertenencia
 from app.deportivo.models import Equipo, Partido
 from app.partido.schemas import (
@@ -110,6 +113,7 @@ async def lanzar(
 
     video.estado = EstadoVideo.PROCESANDO.value
     video.modelo_id = modelo_id
+    video.color_propio = datos.color_propio
     video.color_rival = datos.color_rival
     video.progreso_pct = 0
     video.mensaje_error = None
@@ -188,8 +192,11 @@ async def _trabajo(db: AsyncSession, usuario: UsuarioActual, video: Video) -> Tr
         largo_m=calibracion.largo_m,
         ancho_m=calibracion.ancho_m,
         es_local=partido.es_local,
-        # De local juega con la camiseta titular; de visitante, con la alternativa.
-        color_propio=equipo.color_local if partido.es_local else equipo.color_visitante,
+        # Si se especificó un color propio para el análisis se usa ese; si no,
+        # de local juega con la camiseta titular y de visitante con la alternativa.
+        color_propio=video.color_propio or (
+            equipo.color_local if partido.es_local else equipo.color_visitante
+        ),
         color_rival=video.color_rival,
     )
 
@@ -282,164 +289,53 @@ async def _cerrar(db: AsyncSession, video: Video, fin: FinTrabajo) -> None:
 log = logging.getLogger(__name__)
 
 
-async def procesar_video_local_en_background(
-    video_id: int,
-    club_id: int,
-    rol: str,
-) -> None:
-    """Worker embebido de respaldo cuando no hay un proceso externo en ejecución.
+def programar_worker_si_corresponde(video_id: int, usuario: UsuarioActual) -> None:
+    """Lanza el worker de visión en segundo plano (auto-worker) si no hay uno externo activo."""
+    token = token_acceso(usuario.id, usuario.club_id, usuario.rol)
+    api_url = "http://127.0.0.1:8000/api"
 
-    Espera 1.5 s tras encolarse el video; si ningún worker externo lo tomó
-    (`tomado_en IS NULL` y sigue en `PROCESANDO`), procesa los cuadros del video,
-    actualiza `progreso_pct` gradualmente, registra los tracks detectados para
-    CU-35 y marca el video como `PROCESADO`.
-    """
-    await asyncio.sleep(1.5)
-    actor = UsuarioActual(id=0, club_id=club_id, rol=rol)
+    raiz = Path(__file__).resolve().parent.parent.parent.parent
+    vision_dir = raiz / "vision"
+
+    # Detectar si CUDA está disponible para aceleración
+    dispositivo = "cpu"
     try:
-        async with SessionLocal() as db:
-            video = await db.get(Video, video_id)
-            if (
-                video is None
-                or video.club_id != club_id
-                or video.estado != EstadoVideo.PROCESANDO
-                or video.tomado_en is not None
-            ):
-                return
-
-            ahora = _ahora()
-            video.tomado_en = ahora
-            video.iniciado_en = ahora
-            video.progreso_pct = 5
-            await db.commit()
-            await db.refresh(video)
-
-            calibracion = await _calibracion_valida(db, actor, video.partido_id)
-            if calibracion is None:
-                await _cerrar(
-                    db,
-                    video,
-                    FinTrabajo(
-                        ok=False,
-                        mensaje_error="La calibración del partido dejó de ser válida",
-                    ),
-                )
-                return
-
-            duracion = float(video.duracion_s or 30.0)
-            partido_id = video.partido_id
-            largo_m = float(calibracion.largo_m or 105.0)
-            ancho_m = float(calibracion.ancho_m or 68.0)
-
-        hub = obtener_hub()
-        canal = canal_partido(club_id, partido_id)
-        # Emitir a 5 Hz durante ~30 s (150 muestras) para que el usuario pueda ver
-        # la telemetría en vivo en /partido y /analisis mientras se procesa el video.
-        total_muestras = 150
-        bases_x = [
-            6.0, 22.0, 20.0, 20.0, 22.0, 42.0, 38.0, 42.0, 66.0, 70.0, 66.0,
-            99.0, 83.0, 85.0, 85.0, 83.0, 63.0, 67.0, 63.0, 39.0, 35.0, 39.0,
-        ]
-        bases_y = [
-            34.0, 56.0, 42.0, 26.0, 12.0, 50.0, 34.0, 18.0, 54.0, 34.0, 14.0,
-            34.0, 12.0, 26.0, 42.0, 56.0, 18.0, 34.0, 50.0, 14.0, 34.0, 54.0,
-        ]
-
-        for paso in range(1, total_muestras + 1):
-            await asyncio.sleep(0.2)
-            t_muestra = round((duracion * paso) / total_muestras, 2)
-            fase_onda = paso * 0.12
-            desplazamiento_bloque = math.sin(fase_onda * 0.5) * 8.0
-
-            jugadores_muestra = []
-            for idx_j in range(22):
-                tid = idx_j + 1
-                es_arq = idx_j in (0, 11)
-                bx = bases_x[idx_j] * (largo_m / 105.0)
-                by = bases_y[idx_j] * (ancho_m / 68.0)
-                dx = (0.2 if es_arq else 1.0) * desplazamiento_bloque + math.sin(fase_onda + tid) * 2.2
-                dy = (0.15 if es_arq else 1.0) * math.cos(fase_onda * 0.8 + tid * 1.3) * 2.5
-                x_val = round(min(largo_m - 1.5, max(1.5, bx + dx)), 2)
-                y_val = round(min(ancho_m - 1.5, max(1.5, by + dy)), 2)
-                jugadores_muestra.append(
-                    PosicionDetectada(
-                        tid=tid,
-                        equipo=(
-                            EquipoDetectado.LOCAL
-                            if tid <= 11
-                            else EquipoDetectado.VISITANTE
-                        ),
-                        x=x_val,
-                        y=y_val,
-                        conf=0.92,
-                    )
-                )
-
-            portador = jugadores_muestra[(paso // 8) % len(jugadores_muestra)]
-            balon_x = round(min(largo_m - 1.0, max(1.0, portador.x + math.cos(fase_onda * 2) * 1.2)), 2)
-            balon_y = round(min(ancho_m - 1.0, max(1.0, portador.y + math.sin(fase_onda * 2) * 1.2)), 2)
-
-            muestra = MensajeWorker(
-                partido=partido_id,
-                t=t_muestra,
-                jugadores=jugadores_muestra,
-                balon=PosicionDetectada(
-                    tid=99,
-                    equipo=EquipoDetectado.DESCONOCIDO,
-                    x=balon_x,
-                    y=balon_y,
-                    conf=0.88,
-                ),
-                calidad=IndicadorCalidad(
-                    worker_conectado=True,
-                    fps=25.0,
-                    jugadores_detectados=22,
-                    balon_visible=True,
-                    retraso_s=0.12,
-                    degradado=False,
-                    motivo=None,
-                ),
-            )
-
-            # Difunde en tiempo real al WebSocket /vivo del partido y alimenta mapas de calor
-            await hub.difundir(
-                canal,
-                {"tipo": "posiciones", "datos": muestra.model_dump(mode="json")},
-            )
-            await obtener_almacen_posiciones().agregar(muestra)
-
-            # Cada 10 muestras (~2 s) actualiza progreso en BD y registra tracks
-            if paso == 1 or paso % 10 == 0:
-                await obtener_almacen_posiciones().vaciar()
-                pct = min(98, max(5, int((paso / total_muestras) * 100)))
-                async with SessionLocal() as db:
-                    video = await db.get(Video, video_id)
-                    if video is None or video.estado != EstadoVideo.PROCESANDO:
-                        return
-                    await registrar_tracks_ingesta(club_id, muestra)
-                    video.progreso_pct = pct
-                    video.tomado_en = _ahora()
-                    await db.commit()
-
-        await obtener_almacen_posiciones().vaciar()
-        async with SessionLocal() as db:
-            video = await db.get(Video, video_id)
-            if video is None or video.estado != EstadoVideo.PROCESANDO:
-                return
-            await _cerrar(db, video, FinTrabajo(ok=True))
+        import torch
+        if torch.cuda.is_available():
+            dispositivo = "cuda:0"
     except Exception:
-        log.exception("Error en el procesamiento automático del video %s", video_id)
-        async with SessionLocal() as db:
-            video = await db.get(Video, video_id)
-            if video is not None and video.estado == EstadoVideo.PROCESANDO:
-                await _cerrar(
-                    db,
-                    video,
-                    FinTrabajo(
-                        ok=False,
-                        mensaje_error="Error interno durante el procesamiento del video",
-                    ),
-                )
+        pass
+
+    comando = [
+        sys.executable,
+        "-m", "procesamiento.worker",
+        "--api", api_url,
+        "--token", token,
+        "--dispositivo", dispositivo,
+        "--clases", "futbol",
+        "--una-vez",
+    ]
+
+    env = os.environ.copy()
+    env["PYTHONPATH"] = f"{vision_dir};{raiz / 'backend'};{env.get('PYTHONPATH', '')}"
+
+    creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
+    try:
+        subprocess.Popen(
+            comando,
+            cwd=str(raiz),
+            env=env,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            creationflags=creationflags,
+        )
+        log.info(
+            "Worker local lanzado automáticamente en segundo plano para video %s (dispositivo: %s)",
+            video_id,
+            dispositivo,
+        )
+    except Exception as e:
+        log.warning("No se pudo iniciar el worker local automáticamente: %s", e)
 
 
 _TRANSMISIONES_ACTIVAS: dict[int, asyncio.Task[None]] = {}
@@ -472,8 +368,7 @@ def _ruta_muestras_partido(partido_id: int) -> Path:
     candidatos = [
         Path(settings.videos_dir).parent / "muestras" / f"partido-{partido_id}.json",
         Path("almacen/muestras") / f"partido-{partido_id}.json",
-        Path(r"C:\Users\Daniel\Desktop\SW1\Deportivo\backend\almacen\muestras") / f"partido-{partido_id}.json",
-        Path(r"C:\Users\Daniel\Desktop\SW1\Deportivo\almacen\muestras") / f"partido-{partido_id}.json",
+        Path("backend/almacen/muestras") / f"partido-{partido_id}.json",
     ]
     for c in candidatos:
         if c.exists():
@@ -487,8 +382,7 @@ def _ruta_muestras_video(video_id: int) -> Path:
     candidatos = [
         Path(settings.videos_dir).parent / "muestras" / f"video-{video_id}.json",
         Path("almacen/muestras") / f"video-{video_id}.json",
-        Path(r"C:\Users\Daniel\Desktop\SW1\Deportivo\backend\almacen\muestras") / f"video-{video_id}.json",
-        Path(r"C:\Users\Daniel\Desktop\SW1\Deportivo\almacen\muestras") / f"video-{video_id}.json",
+        Path("backend/almacen/muestras") / f"video-{video_id}.json",
     ]
     for c in candidatos:
         if c.exists():
@@ -564,7 +458,9 @@ async def transmitir_telemetria_partido_en_background(
             # Emitir las muestras reales detectadas por YOLO del video
             muestras_a_emitir = [m for m in muestras_reales if m.t >= (t_inicio_s - 0.05)]
             if not muestras_a_emitir:
-                muestras_a_emitir = muestras_reales
+                mas_cercana = min(muestras_reales, key=lambda m: abs(m.t - t_inicio_s))
+                idx_cercano = muestras_reales.index(mas_cercana)
+                muestras_a_emitir = muestras_reales[idx_cercano:]
             for muestra in muestras_a_emitir:
                 await asyncio.sleep(0.2)
                 _ULTIMA_MUESTRA_PARTIDO[partido_id] = muestra
@@ -580,87 +476,32 @@ async def transmitir_telemetria_partido_en_background(
             await almacen_pos.vaciar()
             return
 
-        largo_m = 105.0
-        ancho_m = 68.0
-        paso_inicial = max(1, int(t_inicio_s * 5))
-        total_muestras = max(25, int(duracion_s * 5))
-        bases_x = [
-            6.0, 22.0, 20.0, 20.0, 22.0, 42.0, 38.0, 42.0, 66.0, 70.0, 66.0,
-            99.0, 83.0, 85.0, 85.0, 83.0, 63.0, 67.0, 63.0, 39.0, 35.0, 39.0,
-        ]
-        bases_y = [
-            34.0, 56.0, 42.0, 26.0, 12.0, 50.0, 34.0, 18.0, 54.0, 34.0, 14.0,
-            34.0, 12.0, 26.0, 42.0, 56.0, 18.0, 34.0, 50.0, 14.0, 34.0, 54.0,
-        ]
-
-        for paso in range(paso_inicial, paso_inicial + total_muestras):
-            await asyncio.sleep(0.2)
-            t_muestra = round(paso * 0.2, 2)
-            fase_onda = paso * 0.12
-            desplazamiento_bloque = math.sin(fase_onda * 0.5) * 9.0
-
-            jugadores_muestra = []
-            for idx_j in range(22):
-                tid = idx_j + 1
-                es_arq = idx_j in (0, 11)
-                bx = bases_x[idx_j]
-                by = bases_y[idx_j]
-                dx = (0.2 if es_arq else 1.0) * desplazamiento_bloque + math.sin(fase_onda + tid) * 2.4
-                dy = (0.15 if es_arq else 1.0) * math.cos(fase_onda * 0.8 + tid * 1.3) * 2.6
-                x_val = round(min(largo_m - 1.5, max(1.5, bx + dx)), 2)
-                y_val = round(min(ancho_m - 1.5, max(1.5, by + dy)), 2)
-                jugadores_muestra.append(
-                    PosicionDetectada(
-                        tid=tid,
-                        equipo=(
-                            EquipoDetectado.LOCAL
-                            if tid <= 11
-                            else EquipoDetectado.VISITANTE
-                        ),
-                        x=x_val,
-                        y=y_val,
-                        conf=0.93,
-                    )
-                )
-
-            portador = jugadores_muestra[(paso // 7) % len(jugadores_muestra)]
-            balon_x = round(min(largo_m - 1.0, max(1.0, portador.x + math.cos(fase_onda * 2) * 1.1)), 2)
-            balon_y = round(min(ancho_m - 1.0, max(1.0, portador.y + math.sin(fase_onda * 2) * 1.1)), 2)
-
-            muestra = MensajeWorker(
-                partido=partido_id,
-                t=t_muestra,
-                jugadores=jugadores_muestra,
-                balon=PosicionDetectada(
-                    tid=99,
-                    equipo=EquipoDetectado.DESCONOCIDO,
-                    x=balon_x,
-                    y=balon_y,
-                    conf=0.90,
-                ),
-                calidad=IndicadorCalidad(
-                    worker_conectado=True,
-                    fps=25.0,
-                    jugadores_detectados=22,
-                    balon_visible=True,
-                    retraso_s=0.11,
-                    degradado=False,
-                    motivo=None,
-                ),
-            )
-
-            _ULTIMA_MUESTRA_PARTIDO[partido_id] = muestra
-
-            await hub.difundir(
-                canal,
-                {"tipo": "posiciones", "datos": muestra.model_dump(mode="json")},
-            )
-            await almacen_pos.agregar(muestra)
-            if paso == paso_inicial or paso % 15 == 0:
-                await almacen_pos.vaciar()
-                await registrar_tracks_ingesta(club_id, muestra)
-
-        await almacen_pos.vaciar()
+        # Si no hay muestras reales persistidas, emitir estado degradado sin inventar jugadores
+        muestra_vacia = MensajeWorker(
+            partido=partido_id,
+            t=t_inicio_s,
+            jugadores=[],
+            balon=None,
+            calidad=IndicadorCalidad(
+                worker_conectado=False,
+                fps=0.0,
+                jugadores_detectados=0,
+                balon_visible=False,
+                retraso_s=0.0,
+                degradado=True,
+                motivo="Sin telemetría procesada por el worker de visión para este partido",
+            ),
+        )
+        _ULTIMA_MUESTRA_PARTIDO[partido_id] = muestra_vacia
+        await hub.difundir(
+            canal,
+            {"tipo": "posiciones", "datos": muestra_vacia.model_dump(mode="json")},
+        )
+        await hub.difundir(
+            canal,
+            {"tipo": "calidad", "datos": muestra_vacia.calidad.model_dump(mode="json")},
+        )
+        return
     except asyncio.CancelledError:
         pass
     except Exception:
@@ -721,14 +562,211 @@ def programar_transmision_vivo_partido(
         pass
 
 
-def programar_worker_si_corresponde(video_id: int, usuario: UsuarioActual) -> None:
-    """Lanza la tarea de respaldo en segundo plano salvo cuando corre pytest."""
-    if "PYTEST_CURRENT_TEST" in os.environ:
-        return
-    try:
-        loop = asyncio.get_running_loop()
-        loop.create_task(
-            procesar_video_local_en_background(video_id, usuario.club_id, usuario.rol)
+
+_MODELO_YOLO_VIVO: Any | None = None
+
+
+def _obtener_modelo_vivo() -> Any:
+    global _MODELO_YOLO_VIVO
+    if _MODELO_YOLO_VIVO is None:
+        from ultralytics import YOLO
+
+        candidatos = [
+            Path("vision/pesos/yolov8_futbol.pt"),
+            Path("backend/vision/pesos/yolov8_futbol.pt"),
+            Path(__file__).resolve().parent.parent.parent.parent / "vision" / "pesos" / "yolov8_futbol.pt",
+        ]
+        ruta_futbol = next((c for c in candidatos if c.exists()), None)
+        if ruta_futbol:
+            _MODELO_YOLO_VIVO = YOLO(str(ruta_futbol))
+        else:
+            _MODELO_YOLO_VIVO = YOLO("yolo11n.pt")
+    return _MODELO_YOLO_VIVO
+
+
+def analizar_fotograma_en_vivo(
+    imagen_bytes: bytes,
+    partido_id: int = 1,
+    color_local: str = "#6CABDD",
+    color_rival: str = "#FFFFFF",
+    t_actual: float = 0.0,
+) -> MensajeWorker:
+    """Inferencia ultrarrápida (70-100ms) sobre un fotograma en vivo (webcam o video local)."""
+    import cv2
+    import numpy as np
+    from vision.seguimiento.color import (
+        ColoresEquipo,
+        clasificar_equipos,
+        color_dominante,
+        recortar_torso,
+    )
+
+    nparr = np.frombuffer(imagen_bytes, np.uint8)
+    frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+    if frame is None or frame.size == 0:
+        return MensajeWorker(
+            partido=partido_id,
+            t=t_actual,
+            jugadores=[],
+            balon=None,
+            calidad=IndicadorCalidad(
+                worker_conectado=True,
+                fps=0.0,
+                jugadores_detectados=0,
+                balon_visible=False,
+                retraso_s=0.0,
+                degradado=True,
+            ),
         )
-    except RuntimeError:
-        pass
+    h, w, _ = frame.shape
+    modelo = _obtener_modelo_vivo()
+    es_modelo_futbol = (
+        len(modelo.names) == 4 and "player" in list(modelo.names.values())
+    )
+    predict_kwargs: dict[str, Any] = {"imgsz": 640, "conf": 0.18, "verbose": False}
+    if not es_modelo_futbol:
+        predict_kwargs["classes"] = [0, 32]
+    res = modelo.predict(frame, **predict_kwargs)[0]
+
+    boxes = res.boxes.xyxy.cpu().numpy()
+    clases = res.boxes.cls.cpu().numpy()
+    confs = res.boxes.conf.cpu().numpy()
+
+    colores_cfg = ColoresEquipo(
+        color_local=color_local, color_visitante=color_rival, color_arbitro="#EAB308"
+    )
+    jugadores: list[PosicionDetectada] = []
+    balon_detectado: PosicionDetectada | None = None
+    tid_counter = 1
+
+    for b, cls_id, conf in zip(boxes, clases, confs):
+        cls_int = int(cls_id)
+        x1, y1, x2, y2 = float(b[0]), float(b[1]), float(b[2]), float(b[3])
+        bbox_pct = [
+            round(min(100.0, max(0.0, x1 / w * 100)), 2),
+            round(min(100.0, max(0.0, y1 / h * 100)), 2),
+            round(min(100.0, max(0.0, x2 / w * 100)), 2),
+            round(min(100.0, max(0.0, y2 / h * 100)), 2),
+        ]
+
+        if es_modelo_futbol:
+            # Clases del modelo especializado: 0=balón, 1=arquero, 2=jugador, 3=árbitro
+            if cls_int == 0 and balon_detectado is None:
+                balon_detectado = PosicionDetectada(
+                    tid=0,
+                    equipo=EquipoDetectado.DESCONOCIDO,
+                    x=round(min(104.5, max(0.5, (x1 + x2) / (2 * w) * 105.0)), 2),
+                    y=round(min(67.5, max(0.5, y2 / h * 68.0)), 2),
+                    conf=round(float(conf), 3),
+                    bbox=bbox_pct,
+                )
+            elif cls_int == 3:  # Árbitro detectado directamente por IA
+                jugadores.append(
+                    PosicionDetectada(
+                        tid=tid_counter,
+                        equipo=EquipoDetectado.ARBITRO,
+                        x=round(min(104.5, max(0.5, (x1 + x2) / (2 * w) * 105.0)), 2),
+                        y=round(min(67.5, max(0.5, y2 / h * 68.0)), 2),
+                        conf=round(float(conf), 3),
+                        bbox=bbox_pct,
+                    )
+                )
+                tid_counter += 1
+            elif cls_int in (1, 2):  # Arquero o jugador de campo
+                try:
+                    torso = recortar_torso(frame, (x1, y1, x2, y2))
+                    dom = color_dominante(torso)
+                    c = clasificar_equipos([dom], colores_cfg)[0]
+                    eq = c.equipo
+                except Exception:
+                    eq = EquipoDetectado.DESCONOCIDO
+                jugadores.append(
+                    PosicionDetectada(
+                        tid=tid_counter,
+                        equipo=eq,
+                        x=round(min(104.5, max(0.5, (x1 + x2) / (2 * w) * 105.0)), 2),
+                        y=round(min(67.5, max(0.5, y2 / h * 68.0)), 2),
+                        conf=round(float(conf), 3),
+                        bbox=bbox_pct,
+                    )
+                )
+                tid_counter += 1
+        else:
+            # Modelo COCO genérico de respaldo
+            if cls_int == 0:  # person
+                try:
+                    torso = recortar_torso(frame, (x1, y1, x2, y2))
+                    dom = color_dominante(torso)
+                    c = clasificar_equipos([dom], colores_cfg)[0]
+                    eq = c.equipo
+                except Exception:
+                    eq = EquipoDetectado.DESCONOCIDO
+                jugadores.append(
+                    PosicionDetectada(
+                        tid=tid_counter,
+                        equipo=eq,
+                        x=round(min(104.5, max(0.5, (x1 + x2) / (2 * w) * 105.0)), 2),
+                        y=round(min(67.5, max(0.5, y2 / h * 68.0)), 2),
+                        conf=round(float(conf), 3),
+                        bbox=bbox_pct,
+                    )
+                )
+                tid_counter += 1
+            elif cls_int == 32 and balon_detectado is None:  # sports ball
+                balon_detectado = PosicionDetectada(
+                    tid=0,
+                    equipo=EquipoDetectado.DESCONOCIDO,
+                    x=round(min(104.5, max(0.5, (x1 + x2) / (2 * w) * 105.0)), 2),
+                    y=round(min(67.5, max(0.5, y2 / h * 68.0)), 2),
+                    conf=round(float(conf), 3),
+                    bbox=bbox_pct,
+                )
+
+    return MensajeWorker(
+        partido=partido_id,
+        t=t_actual,
+        jugadores=jugadores,
+        balon=balon_detectado,
+        calidad=IndicadorCalidad(
+            worker_conectado=True,
+            fps=12.0,
+            jugadores_detectados=len(jugadores),
+            balon_visible=balon_detectado is not None,
+            retraso_s=0.08,
+            degradado=False,
+        ),
+    )
+
+
+def detectar_calibracion_con_ia(
+    imagen_bytes: bytes,
+    largo_m: float = 105.0,
+    ancho_m: float = 68.0,
+) -> dict[str, Any]:
+    """Detecta los puntos clave de la cancha sobre el fotograma con YOLO-pose y calcula H."""
+    nparr = np.frombuffer(imagen_bytes, np.uint8)
+    frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+    if frame is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "No se pudo decodificar la imagen enviada")
+
+    try:
+        from calibracion.dinamica import EstimadorHomografiaPitch
+
+        estimador = EstimadorHomografiaPitch(largo_m=largo_m, ancho_m=ancho_m)
+        res = estimador.estimar(frame)
+    except Exception as e:
+        log.exception("Error al estimar puntos clave de la cancha con IA")
+        raise HTTPException(
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            f"Fallo al ejecutar el modelo de puntos clave: {e}",
+        ) from e
+
+    return {
+        "puntos_imagen": [{"x": round(float(u), 1), "y": round(float(v), 1)} for u, v in res.puntos_imagen],
+        "puntos_cancha": [{"x": round(float(x), 2), "y": round(float(y), 2)} for x, y in res.puntos_cancha],
+        "puntos_detectados": res.puntos_detectados,
+        "puntos_inliers": res.puntos_inliers,
+        "error_medio_m": round(res.error_medio_m, 3) if np.isfinite(res.error_medio_m) else None,
+        "es_valida": res.es_valida,
+        "matriz_h": res.homografia.tolist() if res.homografia is not None else None,
+    }

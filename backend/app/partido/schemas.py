@@ -141,6 +141,10 @@ class PosicionDetectada(BaseModel):
         default=None,
         description="Bounding box [x1, y1, x2, y2] en porcentaje (0..100) del cuadro de video",
     )
+    dorsal: int | None = Field(
+        default=None,
+        description="Número dorsal o slot canónico persistente del jugador (1..11)",
+    )
 
 
 class MensajeWorker(BaseModel):

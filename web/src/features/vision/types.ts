@@ -135,6 +135,8 @@ export interface Video {
   iniciado_en: string | null;
   /** HU-25: null en cola o sin avance, 0 al terminar. */
   tiempo_restante_s: number | null;
+  color_propio?: string | null;
+  color_rival?: string | null;
   mensaje_error: string | null;
   creado_en: string;
   procesado_en: string | null;
@@ -143,6 +145,8 @@ export interface Video {
 /** Cuerpo de `POST /vision/videos/{id}/procesar`. */
 export interface LanzarProceso {
   modelo_id?: number | null;
+  /** Camiseta del equipo propio, `#RRGGBB`; si se omite, se usa la del club. */
+  color_propio?: string | null;
   /** Camiseta del rival, `#RRGGBB`; sin ella el worker separa los equipos por K-means. */
   color_rival?: string | null;
 }

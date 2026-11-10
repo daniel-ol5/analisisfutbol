@@ -6,6 +6,7 @@
  */
 import { api } from "@/shared/api/client";
 
+import type { MensajeWorker } from "@/features/analisis/types";
 import type { Partido } from "@/features/deportivo";
 
 import type {
@@ -37,6 +38,31 @@ export async function guardarCalibracion(
   datos: CalibracionGuardar,
 ): Promise<Calibracion> {
   const { data } = await api.post<Calibracion>(`/vision/partidos/${partidoId}/calibracion`, datos);
+  return data;
+}
+
+/** Detectar puntos clave de la cancha automáticamente con IA (YOLO Pose). */
+export async function detectarCalibracionIA(
+  partidoId: number,
+  archivo: Blob | File,
+  largoM: number = 105,
+  anchoM: number = 68,
+): Promise<{
+  puntos_imagen: Array<{ x: number; y: number }>;
+  puntos_cancha: Array<{ x: number; y: number }>;
+  puntos_detectados: number;
+  puntos_inliers: number;
+  error_medio_m: number | null;
+  es_valida: boolean;
+  matriz_h: number[][] | null;
+}> {
+  const fd = new FormData();
+  fd.append("archivo", archivo, "calibracion.jpg");
+  fd.append("largo_m", String(largoM));
+  fd.append("ancho_m", String(anchoM));
+  const { data } = await api.post(`/vision/partidos/${partidoId}/calibracion/detectar-ia`, fd, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
   return data;
 }
 
@@ -180,3 +206,29 @@ export async function pausarTransmisionVivoPartido(
   );
   return data;
 }
+
+/** CU-24, CU-40, CU-41 · Descargar telemetría persistida del video para sincronización directa sin retardo. */
+export async function obtenerMuestrasVideo(videoId: number): Promise<MensajeWorker[]> {
+  const { data } = await api.get<MensajeWorker[]>(`/vision/videos/${videoId}/muestras`);
+  return data;
+}
+
+/** CU-24, CU-40 · Enviar fotograma en vivo (webcam o video local) para inferencia instantánea de YOLO + Color. */
+export async function analizarCuadroEnVivo(
+  blob: Blob,
+  colorLocal: string,
+  colorRival: string,
+  partidoId = 1,
+  tActual = 0,
+): Promise<MensajeWorker> {
+  const formData = new FormData();
+  formData.append("archivo", blob, "cuadro.jpg");
+  formData.append("color_local", colorLocal);
+  formData.append("color_rival", colorRival);
+  formData.append("partido_id", String(partidoId));
+  formData.append("t_actual", String(tActual));
+
+  const { data } = await api.post<MensajeWorker>("/vision/vivo/analizar-cuadro", formData);
+  return data;
+}
+

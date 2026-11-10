@@ -7,17 +7,22 @@
  * o en paralelo.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 
 import {
+  analizarCuadroEnVivo,
   descargarArchivoVideo,
+  eliminarVideo,
   iniciarTransmisionVivoPartido,
   listarVideos,
+  obtenerMuestrasVideo,
   pausarTransmisionVivoPartido,
 } from "@/features/vision/api";
 import type { Video } from "@/features/vision/types";
 
-import type { PosicionDetectada } from "../types";
+import type { MensajeWorker, PosicionDetectada } from "../types";
+import { esColorClaro } from "./Plano2DCancha";
 
 export type ModoDisposicionVivo = "apilado" | "paralelo" | "solo-radar";
 type FuenteSenal = "servidor" | "archivo" | "camara";
@@ -33,30 +38,10 @@ interface Props {
   workerTransmitiendo: boolean;
   modoDisposicion: ModoDisposicionVivo;
   onCambiarModoDisposicion: (modo: ModoDisposicionVivo) => void;
+  onVideoSeleccionado?: (video: Video) => void;
+  onMuestraSincronizada?: (muestra: MensajeWorker) => void;
 }
 
-/**
- * Proyecta una coordenada métrica de la cancha (0..105 m x 0..68 m)
- * a coordenadas porcentuales (0..100%) de perspectiva de cámara de tribuna
- * para superponer el HUD de detección YOLO + ByteTrack sobre el cuadro de video.
- */
-function proyectarCanchaACamara(xMetros: number, yMetros: number): {
-  leftPct: number;
-  topPct: number;
-  escala: number;
-} {
-  const u = Math.min(1, Math.max(0, xMetros / 105));
-  const v = Math.min(1, Math.max(0, yMetros / 68));
-  // v = 1 es la banda superior (más lejana a la cámara); v = 0 es la banda inferior (más cercana).
-  const profundidad = 1 - v; // 0 arriba (lejos), 1 abajo (cerca)
-  const topPct = 24 + profundidad * 64;
-  // Efecto trapezoidal de perspectiva de cámara: más estrecho al fondo, más ancho cerca.
-  const margenLateral = 16 - profundidad * 11;
-  const anchoUtil = 100 - margenLateral * 2;
-  const leftPct = margenLateral + u * anchoUtil;
-  const escala = 0.72 + profundidad * 0.42;
-  return { leftPct, topPct, escala };
-}
 
 export function VisorVideoSincronizado({
   partidoId,
@@ -69,10 +54,13 @@ export function VisorVideoSincronizado({
   workerTransmitiendo,
   modoDisposicion,
   onCambiarModoDisposicion,
+  onVideoSeleccionado,
+  onMuestraSincronizada,
 }: Props) {
   const [fuente, setFuente] = useState<FuenteSenal>("servidor");
   const [videosServidor, setVideosServidor] = useState<Video[]>([]);
   const [videoSeleccionadoId, setVideoSeleccionadoId] = useState<number | null>(null);
+  const [muestrasLocales, setMuestrasLocales] = useState<MensajeWorker[]>([]);
   const [cargandoLista, setCargandoLista] = useState(false);
   const [cargandoBinario, setCargandoBinario] = useState(false);
   const [videoSrcUrl, setVideoSrcUrl] = useState<string | null>(null);
@@ -80,6 +68,7 @@ export function VisorVideoSincronizado({
   const [errorFuente, setErrorFuente] = useState<string | null>(null);
   const [mostrarOverlayYolo, setMostrarOverlayYolo] = useState(true);
   const [iniciandoStream, setIniciandoStream] = useState(false);
+  const [eliminandoVideo, setEliminandoVideo] = useState(false);
 
   // Estado de cámara en vivo
   const [dispositivosCamara, setDispositivosCamara] = useState<MediaDeviceInfo[]>([]);
@@ -90,6 +79,33 @@ export function VisorVideoSincronizado({
   const camaraVideoRef = useRef<HTMLVideoElement | null>(null);
   const streamCamaraRef = useRef<MediaStream | null>(null);
   const urlObjetoRef = useRef<string | null>(null);
+  const ultimoTiempoSincronizadoRef = useRef<number>(-1);
+
+  // Deduplica jugadores por Track ID (tid) para evitar cajas dobles o superpuestas
+  const jugadoresUnicos = useMemo(() => {
+    const mapa = new Map<number, PosicionDetectada>();
+    for (const j of jugadores) {
+      const actual = mapa.get(j.tid);
+      // Preferir la detección que incluye bounding box real en % o mayor confianza
+      if (!actual || (!actual.bbox && j.bbox) || (j.conf > (actual.conf ?? 0))) {
+        mapa.set(j.tid, j);
+      }
+    }
+    return Array.from(mapa.values());
+  }, [jugadores]);
+
+  const obtenerEstiloCaja = useCallback((equipo: string) => {
+    let borde = "#94a3b8";
+    if (equipo === "LOCAL") borde = colorLocal;
+    else if (equipo === "VISITANTE") borde = colorVisitante;
+    else if (equipo === "ARBITRO") borde = "#eab308";
+    const claro = esColorClaro(borde);
+    return {
+      borde,
+      fondoTag: borde,
+      textoTag: claro ? "#0f172a" : "#ffffff",
+    };
+  }, [colorLocal, colorVisitante]);
 
   const limpiarUrlObjeto = useCallback(() => {
     if (urlObjetoRef.current) {
@@ -148,6 +164,14 @@ export function VisorVideoSincronizado({
     };
   }, [partidoId]);
 
+  useEffect(() => {
+    if (!videoSeleccionadoId) return;
+    const vid = videosServidor.find((v) => v.id === videoSeleccionadoId);
+    if (vid) {
+      onVideoSeleccionado?.(vid);
+    }
+  }, [videoSeleccionadoId, videosServidor, onVideoSeleccionado]);
+
   // Descargar el blob del video del servidor cuando se selecciona uno en modo "servidor"
   useEffect(() => {
     if (fuente !== "servidor" || !videoSeleccionadoId) return;
@@ -176,6 +200,159 @@ export function VisorVideoSincronizado({
     };
   }, [fuente, videoSeleccionadoId, limpiarUrlObjeto]);
 
+  // Descargar telemetría persistida del video para sincronización instantánea (0 ms desfase)
+  useEffect(() => {
+    const vidId = videoSeleccionadoId ?? (videosServidor.length > 0 ? videosServidor[0].id : null);
+    if (!vidId) {
+      setMuestrasLocales([]);
+      return;
+    }
+    let activo = true;
+    obtenerMuestrasVideo(vidId)
+      .then((lista) => {
+        if (!activo) return;
+        if (Array.isArray(lista) && lista.length > 0) {
+          setMuestrasLocales(lista);
+          onMuestraSincronizada?.(lista[0]);
+        } else {
+          setMuestrasLocales([]);
+        }
+      })
+      .catch(() => {
+        if (activo) setMuestrasLocales([]);
+      });
+    return () => {
+      activo = false;
+    };
+  }, [videoSeleccionadoId, videosServidor, onMuestraSincronizada]);
+
+  const sincronizarMuestraPorTiempo = useCallback(
+    (tiempoS: number) => {
+      if (muestrasLocales.length === 0) return;
+      let mejor = muestrasLocales[0];
+      let distMin = Math.abs(mejor.t - tiempoS);
+      for (let i = 1; i < muestrasLocales.length; i++) {
+        const d = Math.abs(muestrasLocales[i].t - tiempoS);
+        if (d < distMin) {
+          distMin = d;
+          mejor = muestrasLocales[i];
+        } else if (muestrasLocales[i].t > tiempoS + 1.2) {
+          break;
+        }
+      }
+      // Solo notificar si la muestra realmente avanzó en el tiempo (evita re-renders redundantes)
+      if (Math.abs(mejor.t - ultimoTiempoSincronizadoRef.current) > 0.01) {
+        ultimoTiempoSincronizadoRef.current = mejor.t;
+        onMuestraSincronizada?.(mejor);
+      }
+    },
+    [muestrasLocales, onMuestraSincronizada],
+  );
+
+  // Sincronización continua de alta frecuencia (requestAnimationFrame) durante la reproducción
+  useEffect(() => {
+    let animId: number | null = null;
+    let ultimoTiempo = -1;
+
+    const bucle = () => {
+      const vid = videoRef.current;
+      if (vid && !vid.paused && !vid.ended && muestrasLocales.length > 0) {
+        const t = vid.currentTime;
+        if (Math.abs(t - ultimoTiempo) >= 0.08) {
+          ultimoTiempo = t;
+          sincronizarMuestraPorTiempo(t);
+        }
+      }
+      animId = requestAnimationFrame(bucle);
+    };
+
+    animId = requestAnimationFrame(bucle);
+    return () => {
+      if (animId !== null) cancelAnimationFrame(animId);
+    };
+  }, [muestrasLocales, sincronizarMuestraPorTiempo]);
+
+  // Bucle de inferencia en tiempo real para cámara web o archivo local sin telemetría precalculada
+  useEffect(() => {
+    let activo = true;
+    let timer: number | null = null;
+    let procesando = false;
+    const canvas = document.createElement("canvas");
+    canvas.width = 640;
+    canvas.height = 360;
+    const ctx = canvas.getContext("2d");
+
+    const capturarYProcesar = () => {
+      if (!activo || procesando) return;
+      const elVideo =
+        fuente === "camara"
+          ? camaraVideoRef.current
+          : fuente === "archivo"
+            ? videoRef.current
+            : null;
+
+      if (!elVideo || elVideo.paused || elVideo.ended || elVideo.readyState < 2) {
+        return;
+      }
+
+      // Si es un archivo local y ya tiene muestras precalculadas, no sobrecargar la GPU
+      if (fuente === "archivo" && muestrasLocales.length > 0) {
+        return;
+      }
+
+      procesando = true;
+      try {
+        ctx?.drawImage(elVideo, 0, 0, 640, 360);
+        canvas.toBlob(
+          async (blob) => {
+            if (!blob || !activo) {
+              procesando = false;
+              return;
+            }
+            try {
+              const res = await analizarCuadroEnVivo(
+                blob,
+                colorLocal,
+                colorVisitante,
+                partidoId,
+                elVideo.currentTime || 0,
+              );
+              if (activo && res && (res.jugadores.length > 0 || res.balon)) {
+                onMuestraSincronizada?.(res);
+              }
+            } catch {
+              // Silencioso ante frames caídos
+            } finally {
+              procesando = false;
+            }
+          },
+          "image/jpeg",
+          0.7,
+        );
+      } catch {
+        procesando = false;
+      }
+    };
+
+    if (camaraActiva || (fuente === "archivo" && videoSrcUrl)) {
+      timer = window.setInterval(capturarYProcesar, 250); // 4 FPS de inferencia YOLO en vivo
+    }
+
+    return () => {
+      activo = false;
+      if (timer !== null) clearInterval(timer);
+    };
+  }, [
+    fuente,
+    camaraActiva,
+    videoSrcUrl,
+    muestrasLocales.length,
+    colorLocal,
+    colorVisitante,
+    partidoId,
+    onMuestraSincronizada,
+  ]);
+
   const activarSincronizacion5Hz = useCallback(
     async (tInicioS = 0, vidIdOverride?: number | null) => {
       setIniciandoStream(true);
@@ -198,6 +375,37 @@ export function VisorVideoSincronizado({
       // Ignorar error al pausar
     }
   }, [partidoId]);
+
+  const manejarEliminarVideoSeleccionado = async () => {
+    if (!videoSeleccionadoId) return;
+    const vid = videosServidor.find((v) => v.id === videoSeleccionadoId);
+    const nombre = vid?.nombre ?? `Video #${videoSeleccionadoId}`;
+    if (!window.confirm(`¿Eliminar definitivamente el video «${nombre}» de este partido?`)) {
+      return;
+    }
+
+    setEliminandoVideo(true);
+    setErrorFuente(null);
+    try {
+      await eliminarVideo(videoSeleccionadoId);
+      const restantes = videosServidor.filter((v) => v.id !== videoSeleccionadoId);
+      setVideosServidor(restantes);
+      if (restantes.length > 0) {
+        setVideoSeleccionadoId(restantes[0].id);
+        void activarSincronizacion5Hz(0, restantes[0].id);
+      } else {
+        setVideoSeleccionadoId(null);
+        setVideoSrcUrl(null);
+        limpiarUrlObjeto();
+      }
+    } catch {
+      setErrorFuente(
+        "No se pudo eliminar el video. Verifica tus permisos de usuario o si el procesamiento sigue activo.",
+      );
+    } finally {
+      setEliminandoVideo(false);
+    }
+  };
 
   const manejarReproducirYSincronizar = async () => {
     const tActual = videoRef.current ? videoRef.current.currentTime : 0;
@@ -399,13 +607,40 @@ export function VisorVideoSincronizado({
                       </option>
                     ))}
                   </select>
+
+                  <button
+                    type="button"
+                    className="panel-vivo-btn-peligro"
+                    disabled={eliminandoVideo || !videoSeleccionadoId}
+                    onClick={() => void manejarEliminarVideoSeleccionado()}
+                    title="Eliminar este video del servidor y liberar espacio"
+                  >
+                    {eliminandoVideo ? "Eliminando..." : "Eliminar video"}
+                  </button>
+
+                  <Link
+                    to={`/vision/videos?partidoId=${partidoId}`}
+                    className="panel-vivo-btn-secundario"
+                    style={{ textDecoration: "none", display: "inline-flex", alignItems: "center" }}
+                    title="Administrar o subir nuevos videos para este partido"
+                  >
+                    Gestionar videos
+                  </Link>
                 </div>
               ) : (
-                <span className="visor-sincro-nota">
-                  Este partido aún no tiene videos guardados en el servidor. Puedes usar la pestaña{" "}
-                  <strong>«Cargar video desde mi PC»</strong> o <strong>«Cámara en vivo»</strong> aquí
-                  mismo.
-                </span>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
+                  <span className="visor-sincro-nota">
+                    Este partido aún no tiene videos guardados en el servidor. Puedes usar las pestañas{" "}
+                    <strong>«Cargar video desde mi PC»</strong> o <strong>«Cámara en vivo»</strong> aquí mismo.
+                  </span>
+                  <Link
+                    to={`/vision/videos?partidoId=${partidoId}`}
+                    className="panel-vivo-btn-accion"
+                    style={{ textDecoration: "none" }}
+                  >
+                    Subir video al servidor
+                  </Link>
+                </div>
               )}
             </div>
           )}
@@ -489,94 +724,61 @@ export function VisorVideoSincronizado({
                     autoPlay
                   />
                   {/* Capa de superposición YOLO + ByteTrack sincronizada con `jugadores` y `balon` */}
-                  {mostrarOverlayYolo && (jugadores.length > 0 || balon !== null) && (
+                  {mostrarOverlayYolo && (jugadoresUnicos.length > 0 || balon !== null) && (
                     <div className="visor-yolo-overlay" aria-hidden="true">
                       <div className="visor-yolo-badge-superior">
-                        <span>YOLOv8 + ByteTrack · {jugadores.length} tracks activos</span>
+                        <span>YOLOv8 + ByteTrack · {jugadoresUnicos.length} tracks activos</span>
                         <span>Homografía 105x68m sincronizada (5.0 Hz)</span>
                       </div>
 
-                      {jugadores.map((j) => {
-                        const esLocal = j.equipo === "LOCAL";
-                        const colorCaja = esLocal ? colorLocal : colorVisitante;
+                      {jugadoresUnicos.map((j) => {
+                        const estilo = obtenerEstiloCaja(j.equipo);
 
-                        if (j.bbox && j.bbox.length === 4) {
-                          const [x1, y1, x2, y2] = j.bbox;
-                          const wPct = Math.max(1.8, x2 - x1);
-                          const hPct = Math.max(3.2, y2 - y1);
-                          return (
-                            <div
-                              key={j.tid}
-                              className="visor-yolo-bbox"
-                              style={{
-                                left: `${x1}%`,
-                                top: `${y1}%`,
-                                width: `${wPct}%`,
-                                height: `${hPct}%`,
-                                transform: "none",
-                                borderColor: colorCaja,
-                              }}
-                            >
-                              <span
-                                className="visor-yolo-bbox-tag"
-                                style={{ backgroundColor: colorCaja }}
-                              >
-                                {j.dorsal ? `#${j.dorsal}` : `ID:${j.tid}`}
-                              </span>
-                            </div>
-                          );
+                        if (!j.bbox || j.bbox.length !== 4) {
+                          return null;
                         }
 
-                        const pos = proyectarCanchaACamara(j.x, j.y);
-                        const anchoPx = Math.round(24 * pos.escala);
-                        const altoPx = Math.round(48 * pos.escala);
+                        const [x1, y1, x2, y2] = j.bbox;
+                        const wPct = Math.max(1.8, x2 - x1);
+                        const hPct = Math.max(3.2, y2 - y1);
                         return (
                           <div
                             key={j.tid}
                             className="visor-yolo-bbox"
                             style={{
-                              left: `${pos.leftPct}%`,
-                              top: `${pos.topPct}%`,
-                              width: `${anchoPx}px`,
-                              height: `${altoPx}px`,
-                              borderColor: colorCaja,
+                              left: `${x1}%`,
+                              top: `${y1}%`,
+                              width: `${wPct}%`,
+                              height: `${hPct}%`,
+                              borderColor: estilo.borde,
                             }}
                           >
                             <span
                               className="visor-yolo-bbox-tag"
-                              style={{ backgroundColor: colorCaja }}
+                              style={{
+                                backgroundColor: estilo.fondoTag,
+                                color: estilo.textoTag,
+                              }}
                             >
-                              {j.dorsal ? `#${j.dorsal}` : `ID:${j.tid}`}
+                              {j.dorsal != null ? `#${j.dorsal}` : `ID:${j.tid}`}
                             </span>
                           </div>
                         );
                       })}
 
-                      {balon &&
-                        (balon.bbox && balon.bbox.length === 4 ? (
-                          <div
-                            className="visor-yolo-balon"
-                            style={{
-                              left: `${balon.bbox[0]}%`,
-                              top: `${balon.bbox[1]}%`,
-                              width: `${Math.max(1.4, balon.bbox[2] - balon.bbox[0])}%`,
-                              height: `${Math.max(2.2, balon.bbox[3] - balon.bbox[1])}%`,
-                              transform: "none",
-                            }}
-                          >
-                            <span className="visor-yolo-balon-tag">BALÓN</span>
-                          </div>
-                        ) : (
-                          <div
-                            className="visor-yolo-balon"
-                            style={{
-                              left: `${proyectarCanchaACamara(balon.x, balon.y).leftPct}%`,
-                              top: `${proyectarCanchaACamara(balon.x, balon.y).topPct}%`,
-                            }}
-                          >
-                            <span className="visor-yolo-balon-tag">BALÓN</span>
-                          </div>
-                        ))}
+                      {balon && balon.bbox && balon.bbox.length === 4 && (
+                        <div
+                          className="visor-yolo-balon"
+                          style={{
+                            left: `${balon.bbox[0]}%`,
+                            top: `${balon.bbox[1]}%`,
+                            width: `${Math.max(1.4, balon.bbox[2] - balon.bbox[0])}%`,
+                            height: `${Math.max(2.2, balon.bbox[3] - balon.bbox[1])}%`,
+                          }}
+                        >
+                          <span className="visor-yolo-balon-tag">BALÓN</span>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -591,111 +793,106 @@ export function VisorVideoSincronizado({
                     controls
                     playsInline
                     loop
+                    onLoadedData={() => {
+                      if (videoRef.current) {
+                        sincronizarMuestraPorTiempo(videoRef.current.currentTime);
+                      }
+                    }}
+                    onTimeUpdate={() => {
+                      if (videoRef.current) {
+                        sincronizarMuestraPorTiempo(videoRef.current.currentTime);
+                      }
+                    }}
                     onPlay={() => {
                       const t = videoRef.current ? videoRef.current.currentTime : 0;
-                      void activarSincronizacion5Hz(t);
+                      sincronizarMuestraPorTiempo(t);
+                      if (muestrasLocales.length === 0) {
+                        void activarSincronizacion5Hz(t);
+                      }
                     }}
                     onPause={() => {
-                      void pausarSincronizacion();
+                      if (muestrasLocales.length === 0) {
+                        void pausarSincronizacion();
+                      }
                     }}
                     onSeeked={() => {
-                      if (videoRef.current && !videoRef.current.paused) {
-                        void activarSincronizacion5Hz(videoRef.current.currentTime);
+                      if (videoRef.current) {
+                        const t = videoRef.current.currentTime;
+                        sincronizarMuestraPorTiempo(t);
+                        if (muestrasLocales.length === 0) {
+                          if (!videoRef.current.paused) {
+                            void activarSincronizacion5Hz(t);
+                          } else {
+                            // Al mover la barra en pausa, sincronizar el fotograma actual en el radar 2D
+                            void activarSincronizacion5Hz(t).then(() => {
+                              void pausarSincronizacion();
+                            });
+                          }
+                        }
                       }
                     }}
                     onEnded={() => {
-                      void pausarSincronizacion();
+                      if (muestrasLocales.length === 0) {
+                        void pausarSincronizacion();
+                      }
                     }}
                   />
                   {/* Capa de superposición YOLO + ByteTrack sincronizada con `jugadores` y `balon` */}
-                  {mostrarOverlayYolo && (jugadores.length > 0 || balon !== null) && (
+                  {mostrarOverlayYolo && (jugadoresUnicos.length > 0 || balon !== null) && (
                     <div className="visor-yolo-overlay" aria-hidden="true">
                       <div className="visor-yolo-badge-superior">
-                        <span>YOLOv8 + ByteTrack · {jugadores.length} tracks activos</span>
+                        <span>YOLOv8 + ByteTrack · {jugadoresUnicos.length} tracks activos</span>
                         <span>Homografía 105x68m sincronizada (5.0 Hz)</span>
                       </div>
 
-                      {jugadores.map((j) => {
-                        const esLocal = j.equipo === "LOCAL";
-                        const colorCaja = esLocal ? colorLocal : colorVisitante;
+                      {jugadoresUnicos.map((j) => {
+                        const estilo = obtenerEstiloCaja(j.equipo);
 
-                        if (j.bbox && j.bbox.length === 4) {
-                          const [x1, y1, x2, y2] = j.bbox;
-                          const wPct = Math.max(1.8, x2 - x1);
-                          const hPct = Math.max(3.2, y2 - y1);
-                          return (
-                            <div
-                              key={j.tid}
-                              className="visor-yolo-bbox"
-                              style={{
-                                left: `${x1}%`,
-                                top: `${y1}%`,
-                                width: `${wPct}%`,
-                                height: `${hPct}%`,
-                                transform: "none",
-                                borderColor: colorCaja,
-                              }}
-                            >
-                              <span
-                                className="visor-yolo-bbox-tag"
-                                style={{ backgroundColor: colorCaja }}
-                              >
-                                {j.dorsal ? `#${j.dorsal}` : `ID:${j.tid}`}
-                              </span>
-                            </div>
-                          );
+                        if (!j.bbox || j.bbox.length !== 4) {
+                          return null;
                         }
 
-                        const pos = proyectarCanchaACamara(j.x, j.y);
-                        const anchoPx = Math.round(24 * pos.escala);
-                        const altoPx = Math.round(48 * pos.escala);
+                        const [x1, y1, x2, y2] = j.bbox;
+                        const wPct = Math.max(1.8, x2 - x1);
+                        const hPct = Math.max(3.2, y2 - y1);
                         return (
                           <div
                             key={j.tid}
                             className="visor-yolo-bbox"
                             style={{
-                              left: `${pos.leftPct}%`,
-                              top: `${pos.topPct}%`,
-                              width: `${anchoPx}px`,
-                              height: `${altoPx}px`,
-                              borderColor: colorCaja,
+                              left: `${x1}%`,
+                              top: `${y1}%`,
+                              width: `${wPct}%`,
+                              height: `${hPct}%`,
+                              borderColor: estilo.borde,
                             }}
                           >
                             <span
                               className="visor-yolo-bbox-tag"
-                              style={{ backgroundColor: colorCaja }}
+                              style={{
+                                backgroundColor: estilo.fondoTag,
+                                color: estilo.textoTag,
+                              }}
                             >
-                              {j.dorsal ? `#${j.dorsal}` : `ID:${j.tid}`}
+                              {j.dorsal != null ? `#${j.dorsal}` : `ID:${j.tid}`}
                             </span>
                           </div>
                         );
                       })}
 
-                      {balon &&
-                        (balon.bbox && balon.bbox.length === 4 ? (
-                          <div
-                            className="visor-yolo-balon"
-                            style={{
-                              left: `${balon.bbox[0]}%`,
-                              top: `${balon.bbox[1]}%`,
-                              width: `${Math.max(1.4, balon.bbox[2] - balon.bbox[0])}%`,
-                              height: `${Math.max(2.2, balon.bbox[3] - balon.bbox[1])}%`,
-                              transform: "none",
-                            }}
-                          >
-                            <span className="visor-yolo-balon-tag">BALÓN</span>
-                          </div>
-                        ) : (
-                          <div
-                            className="visor-yolo-balon"
-                            style={{
-                              left: `${proyectarCanchaACamara(balon.x, balon.y).leftPct}%`,
-                              top: `${proyectarCanchaACamara(balon.x, balon.y).topPct}%`,
-                            }}
-                          >
-                            <span className="visor-yolo-balon-tag">BALÓN</span>
-                          </div>
-                        ))}
+                      {balon && balon.bbox && balon.bbox.length === 4 && (
+                        <div
+                          className="visor-yolo-balon"
+                          style={{
+                            left: `${balon.bbox[0]}%`,
+                            top: `${balon.bbox[1]}%`,
+                            width: `${Math.max(1.4, balon.bbox[2] - balon.bbox[0])}%`,
+                            height: `${Math.max(2.2, balon.bbox[3] - balon.bbox[1])}%`,
+                          }}
+                        >
+                          <span className="visor-yolo-balon-tag">BALÓN</span>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

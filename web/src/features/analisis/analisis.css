@@ -261,6 +261,29 @@
   opacity: 0.9;
 }
 
+.panel-vivo-btn-peligro {
+  padding: 0.35rem 0.65rem;
+  border-radius: 0.375rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  background-color: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.45);
+  color: #f87171;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.panel-vivo-btn-peligro:hover:not(:disabled) {
+  background-color: #ef4444;
+  color: #ffffff;
+}
+
+.panel-vivo-btn-peligro:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* Alertas */
 .panel-vivo-alerta {
   padding: 0.75rem 1rem;
@@ -568,9 +591,83 @@
 }
 
 .panel-vivo--alto-contraste .panel-toggle-btn--activo {
-  background-color: #0ea5e9;
-  color: #ffffff;
-  border-color: #0ea5e9;
+  background-color: #38bdf8;
+  color: #0f172a;
+  border-color: #38bdf8;
+}
+
+/* Selector de indumentarias de equipos en el radar */
+.panel-colores-grupo {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding-left: 0.6rem;
+  border-left: 1px solid var(--line);
+}
+
+.panel-color-pill {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.5rem;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: 0.375rem;
+  font-size: 0.72rem;
+  font-family: var(--font-mono, monospace);
+  color: var(--text);
+  cursor: pointer;
+  user-select: none;
+}
+
+.panel-color-pill:hover {
+  background: var(--surface-hover, rgba(255, 255, 255, 0.06));
+}
+
+.panel-color-pill input[type="color"] {
+  position: absolute;
+  opacity: 0;
+  width: 100%;
+  height: 100%;
+  left: 0;
+  top: 0;
+  cursor: pointer;
+}
+
+.panel-color-swatch {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.3);
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.panel-colores-presets {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-left: 0.2rem;
+}
+
+.panel-preset-btn {
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 0.2rem 0.45rem;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: 0.25rem;
+  color: var(--text-2);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.panel-preset-btn:hover {
+  background: var(--surface-hover, rgba(255, 255, 255, 0.08));
+  color: var(--text);
+  border-color: var(--line-focus);
 }
 
 /* Envoltorio del Plano 2D (CU-41) */
@@ -659,8 +756,9 @@
 }
 
 .plano-leyenda-balon {
-  background-color: #ffffff;
-  border: 2px solid #0f172a;
+  background-color: #ff6b00;
+  border: 2px solid #ffffff;
+  box-shadow: 0 0 4px rgba(255, 107, 0, 0.8);
 }
 
 .plano-orientacion-nota {
@@ -1522,12 +1620,15 @@
 
 .visor-yolo-bbox {
   position: absolute;
-  transform: translate(-50%, -85%);
   border: 2px solid #10b981;
   border-radius: 3px;
   background: rgba(16, 185, 129, 0.08);
   box-shadow: 0 0 6px rgba(0, 0, 0, 0.45);
-  transition: left 0.18s linear, top 0.18s linear;
+  transition: left 0.14s cubic-bezier(0.25, 0.1, 0.25, 1),
+              top 0.14s cubic-bezier(0.25, 0.1, 0.25, 1),
+              width 0.14s ease-out,
+              height 0.14s ease-out;
+  will-change: left, top, width, height;
 }
 
 .visor-yolo-bbox-tag {
@@ -1553,7 +1654,8 @@
   border-radius: 9999px;
   background: rgba(250, 204, 21, 0.25);
   box-shadow: 0 0 8px rgba(250, 204, 21, 0.85);
-  transition: left 0.18s linear, top 0.18s linear;
+  transition: left 0.18s cubic-bezier(0.25, 0.1, 0.25, 1), top 0.18s cubic-bezier(0.25, 0.1, 0.25, 1);
+  will-change: left, top;
 }
 
 .visor-yolo-balon-tag {
