@@ -28,18 +28,27 @@ import {
   calcularEsperaReconexionWsMs,
   construirUrlWsVivo,
 } from "../lib/reloj";
+import { calcularLatenciaWsMs, contarTracksActivos } from "../lib/calidad";
 import type { EstadoCanalVivo, EstadoEnVivo, IndicadorCalidad } from "../types";
 
 export interface EstadoHookCanalVivo {
   estado: EstadoCanalVivo;
   etiqueta: string;
   aviso: string | null;
+  calidad: IndicadorCalidad | null;
+  tracksActivos: number | null;
+  latenciaMs: number | null;
+  ultimaTelemetriaEnMs: number | null;
 }
 
 interface instantaneaCanal {
   partidoId: number;
   estado: EstadoCanalVivo;
   aviso: string | null;
+  calidad: IndicadorCalidad | null;
+  tracksActivos: number | null;
+  latenciaMs: number | null;
+  ultimaTelemetriaEnMs: number | null;
 }
 
 function esObjeto(valor: unknown): valor is Record<string, unknown> {
@@ -103,6 +112,7 @@ export function useCanalVivo(
     let cancelado = false;
     let intentos = 0;
     let ultimaActualizacionCalidadMs = 0;
+    let pingEnviadoEnMs: number | null = null;
     let inicioTimeoutId: number | null = null;
     let pingIntervalId: number | null = null;
     let reintentoTimeoutId: number | null = null;
@@ -129,6 +139,26 @@ export function useCanalVivo(
         aviso,
       });
     };
+
+    const actualizarInstantanea = (cambios: Partial<instantaneaCanal>) => {
+      if (cancelado) return;
+      setInstantanea((actual) => {
+        const base: instantaneaCanal =
+          actual?.partidoId === partidoId
+            ? actual
+            : {
+                partidoId,
+                estado: "SIN_CONEXION",
+                aviso: null,
+                calidad: null,
+                tracksActivos: null,
+                latenciaMs: null,
+                ultimaTelemetriaEnMs: null,
+              };
+        return { ...base, ...cambios, partidoId };
+      });
+    };
+
 
     const conectar = () => {
       if (cancelado) return;
@@ -171,6 +201,7 @@ export function useCanalVivo(
           actualizarEstadoCanal("CONECTADO", null);
           limpiarPing();
           pingIntervalId = window.setInterval(() => {
+          const enviarPing = () => {
             if (
               !cancelado &&
               socket === socketActualRef.current &&
@@ -179,10 +210,21 @@ export function useCanalVivo(
               socket.send(JSON.stringify({ tipo: "ping" }));
             }
           }, INTERVALO_PING_WS_MS);
+              pingEnviadoEnMs = performance.now();
+              socket.send(JSON.stringify({ tipo: "ping" }));
+            }
+          };
+          enviarPing();
+          pingIntervalId = window.setInterval(enviarPing, INTERVALO_PING_WS_MS);
           return;
         }
 
         if (tipo === "pong") {
+          if (pingEnviadoEnMs !== null) {
+            const latenciaMs = calcularLatenciaWsMs(pingEnviadoEnMs, performance.now());
+            pingEnviadoEnMs = null;
+            actualizarInstantanea({ latenciaMs });
+          }
           return;
         }
 
@@ -215,6 +257,11 @@ export function useCanalVivo(
           }
           ultimaActualizacionCalidadMs = ahora;
           const nuevaCalidad = datos["calidad"];
+          actualizarInstantanea({
+            calidad: nuevaCalidad,
+            tracksActivos: contarTracksActivos(datos),
+            ultimaTelemetriaEnMs: Date.now(),
+          });
           queryClient.setQueryData<EstadoEnVivo>(["partido", "estado-vivo", partidoId], (actual) =>
             actual ? { ...actual, calidad: nuevaCalidad } : actual,
           );
@@ -305,5 +352,15 @@ export function useCanalVivo(
     estado: estadoVigente,
     etiqueta: etiquetaEstadoCanalVivo(estadoVigente),
     aviso: avisoVigente,
+    calidad:
+      partidoId !== null && instantanea?.partidoId === partidoId ? instantanea.calidad : null,
+    tracksActivos:
+      partidoId !== null && instantanea?.partidoId === partidoId ? instantanea.tracksActivos : null,
+    latenciaMs:
+      partidoId !== null && instantanea?.partidoId === partidoId ? instantanea.latenciaMs : null,
+    ultimaTelemetriaEnMs:
+      partidoId !== null && instantanea?.partidoId === partidoId
+        ? instantanea.ultimaTelemetriaEnMs
+        : null,
   };
 }

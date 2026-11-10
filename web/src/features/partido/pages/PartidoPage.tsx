@@ -26,6 +26,12 @@ import {
 import { PanelAsignacionTracks } from "../components/PanelAsignacionTracks";
 import { useCanalVivo } from "../hooks/useCanalVivo";
 import { useRelojPartido } from "../hooks/useRelojPartido";
+import { useSupervisionCalidad } from "../hooks/useSupervisionCalidad";
+import {
+  FPS_ESPERADO,
+  TRACKS_ESPERADOS_REFERENCIA,
+  type MuestraSupervisionCalidad,
+} from "../lib/calidad";
 import {
   INTERVALO_SONDEO_CON_WS_MS,
   INTERVALO_SONDEO_SIN_WS_MS,
@@ -124,6 +130,23 @@ export function PartidoPage() {
 
   // Canal WebSocket `/api/partido/{id}/vivo` (Fase 2B)
   const canalVivo = useCanalVivo(partidoIdActivo, queryClient);
+  const muestraSupervision = useMemo<MuestraSupervisionCalidad>(
+    () => ({
+      canal: canalVivo.estado,
+      calidad: canalVivo.calidad,
+      recibidaEnMs: canalVivo.ultimaTelemetriaEnMs,
+      tracksActivos: canalVivo.tracksActivos,
+      latenciaWsMs: canalVivo.latenciaMs,
+    }),
+    [
+      canalVivo.calidad,
+      canalVivo.estado,
+      canalVivo.latenciaMs,
+      canalVivo.tracksActivos,
+      canalVivo.ultimaTelemetriaEnMs,
+    ],
+  );
+  const supervisionCalidad = useSupervisionCalidad(partidoIdActivo, muestraSupervision);
 
   // Sondeo HTTP de respaldo: 15 s con WS conectado y 2 s cuando está reconectando o caído
   const intervaloSondeoMs: number | false =

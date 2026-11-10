@@ -205,13 +205,21 @@ package "P4 · partido" {
   entity "evento_manual" as ev_manual {
     * id : integer <<PK>>
     --
+    * club_id : integer <<FK>>
     * partido_id : integer <<FK>>
+    * uuid : varchar(36) <<UQ por club>>
     jugador_id : integer <<FK>>
     jugador_entra_id : integer <<FK>>
     * tipo : enum(GOL|AMARILLA|ROJA|SUSTITUCION)
     * minuto : integer
-    equipo : enum(LOCAL|VISITANTE)
-    origen : enum(MANUAL)
+    * equipo : enum(LOCAL|VISITANTE)
+    * origen : enum(MANUAL)
+    * convertida_en_roja : boolean
+    * capturado_en : timestamp
+    * creado_en : timestamp
+    * creado_por_id : integer <<FK>>
+    anulado_en : timestamp
+    anulado_por_id : integer <<FK>>
   }
 }
 
@@ -321,6 +329,7 @@ partido     "1"    ||--o{ "0..*" asig_track    : define
 jugador     "0..1" ||--o{ "0..*" asig_track    : se identifica en
 partido     "1"    ||--o{ "0..*" ev_manual     : registra
 jugador     "0..1" ||--o{ "0..*" ev_manual     : protagoniza
+usuario     "1"    ||--o{ "0..*" ev_manual     : carga
 
 partido     "1"    ||--o{ "0..*" m_intervalo   : acumula
 partido     "1"    ||--o{ "0..*" m_jugador     : mide
