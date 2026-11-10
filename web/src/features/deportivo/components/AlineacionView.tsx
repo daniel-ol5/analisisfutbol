@@ -17,11 +17,13 @@ import { Alert, Badge, Button, Select } from "@/shared/ui";
 
 import { guardarAlineacion, listarJugadores, obtenerAlineacion } from "../api";
 import {
+  PUESTOS,
   TITULARES,
   alineacionVacia,
   asignar,
   cambiarFormacion,
   cantidadTitulares,
+  colocarEnPuesto,
   estadoDesdeAlineacion,
   huella,
   marcarCapitan,
@@ -33,6 +35,7 @@ import {
   puedeEditarAlineacion,
   reubicar,
   rolDe,
+  soltarEnCancha,
   type EstadoAlineacion,
   type RolEnAlineacion,
 } from "../alineacion";
@@ -46,7 +49,7 @@ import {
   type Partido,
   type Posicion,
 } from "../types";
-import { CanchaTactica } from "./CanchaTactica";
+import { CanchaTactica, MIME_JUGADOR_ALINEACION } from "./CanchaTactica";
 import "./alineacion.css";
 
 const SIN_FILTROS = {};
@@ -213,6 +216,7 @@ function Editor({
     guardada ? huella(inicial.estado) : null,
   );
   const [exito, setExito] = useState(false);
+  const [puestoSeleccionado, setPuestoSeleccionado] = useState<number | null>(null);
 
   const porId = useMemo(() => new Map(plantel.map((j) => [j.id, j])), [plantel]);
   const lista = problemas(estado, plantel);
@@ -286,14 +290,31 @@ function Editor({
             estado={estado}
             plantel={porId}
             editable={editable}
+            puestoSeleccionado={puestoSeleccionado}
+            onSeleccionarPuesto={setPuestoSeleccionado}
             onMover={(id, x, y) => cambiar(mover(estado, id, x, y))}
+            onSoltarJugador={(id, x, y) => {
+              cambiar(soltarEnCancha(estado, id, x, y));
+              setPuestoSeleccionado(null);
+            }}
+            onColocarEnPuesto={(id, indice) => {
+              cambiar(colocarEnPuesto(estado, id, indice));
+              setPuestoSeleccionado(null);
+            }}
           />
           {editable && (
             <div className="alin-cancha-acciones">
               <span>
-                Arrastra las fichas para ajustar la posición, o usa las flechas del teclado.
+                Arrastra cualquier jugador del plantel directamente al puesto deseado en la cancha,
+                o haz clic en un círculo punteado para elegir ese puesto.
               </span>
-              <Button variante="fantasma" onClick={() => cambiar(reubicar(estado))}>
+              <Button
+                variante="fantasma"
+                onClick={() => {
+                  cambiar(reubicar(estado));
+                  setPuestoSeleccionado(null);
+                }}
+              >
                 Reubicar según la formación
               </Button>
             </div>
@@ -301,20 +322,39 @@ function Editor({
         </div>
 
         <div className="alin-plantel">
+          {editable && puestoSeleccionado !== null && (
+            <div className="alin-puesto-aviso">
+              <span>
+                Elegir jugador para puesto{" "}
+                <strong>{PUESTOS[estado.formacion][puestoSeleccionado]?.rol}</strong>
+              </span>
+              <button type="button" onClick={() => setPuestoSeleccionado(null)}>
+                Cancelar
+              </button>
+            </div>
+          )}
           <GrupoJugadores
             titulo={`Titulares (${titulares}/${TITULARES})`}
             jugadores={grupos.titular}
             estado={estado}
             editable={editable}
-            onCambiar={cambiar}
-            vacio="Pasa jugadores del plantel a titulares."
+            puestoSeleccionado={puestoSeleccionado}
+            onCambiar={(sig) => {
+              cambiar(sig);
+              setPuestoSeleccionado(null);
+            }}
+            vacio="Arrastra jugadores a la cancha o pulsa Titular."
           />
           <GrupoJugadores
             titulo={`Suplentes (${grupos.suplente.length})`}
             jugadores={grupos.suplente}
             estado={estado}
             editable={editable}
-            onCambiar={cambiar}
+            puestoSeleccionado={puestoSeleccionado}
+            onCambiar={(sig) => {
+              cambiar(sig);
+              setPuestoSeleccionado(null);
+            }}
             vacio="Sin suplentes convocados."
           />
           <GrupoJugadores
@@ -322,7 +362,11 @@ function Editor({
             jugadores={grupos.fuera}
             estado={estado}
             editable={editable}
-            onCambiar={cambiar}
+            puestoSeleccionado={puestoSeleccionado}
+            onCambiar={(sig) => {
+              cambiar(sig);
+              setPuestoSeleccionado(null);
+            }}
             vacio={
               plantel.length === 0
                 ? "El equipo no tiene jugadores activos."
@@ -372,6 +416,7 @@ function GrupoJugadores({
   jugadores,
   estado,
   editable,
+  puestoSeleccionado = null,
   onCambiar,
   vacio,
 }: {
@@ -379,10 +424,11 @@ function GrupoJugadores({
   jugadores: Jugador[];
   estado: EstadoAlineacion;
   editable: boolean;
+  puestoSeleccionado?: number | null;
   onCambiar: (e: EstadoAlineacion) => void;
   vacio: string;
 }) {
-  const completo = cantidadTitulares(estado) >= TITULARES;
+  const completo = cantidadTitulares(estado) >= TITULARES && puestoSeleccionado === null;
   return (
     <div className="alin-grupo">
       <h4>{titulo}</h4>
@@ -392,7 +438,22 @@ function GrupoJugadores({
           const actual = rolDe(estado, j.id);
           const capitan = estado.capitanId === j.id;
           return (
-            <li key={j.id} className="alin-jugador">
+            <li
+              key={j.id}
+              className={editable ? "alin-jugador alin-jugador--arrastrable" : "alin-jugador"}
+              draggable={editable}
+              onDragStart={(e) => {
+                if (!editable) return;
+                e.dataTransfer.effectAllowed = "move";
+                e.dataTransfer.setData(MIME_JUGADOR_ALINEACION, String(j.id));
+                e.dataTransfer.setData("text/plain", String(j.id));
+              }}
+              title={
+                editable
+                  ? "Arrastra a este jugador hacia un puesto de la cancha"
+                  : undefined
+              }
+            >
               <span
                 className={
                   j.posicion === "ARQ" ? "alin-dorsal alin-dorsal--arquero" : "alin-dorsal"
@@ -419,7 +480,11 @@ function GrupoJugadores({
               )}
               {editable && (
                 <span className="alin-acciones" role="group" aria-label={`Rol de ${j.apellido}`}>
-                  {ACCIONES.filter((a) => a.destino !== actual).map((a) => {
+                  {ACCIONES.filter(
+                    (a) =>
+                      a.destino !== actual ||
+                      (a.destino === "titular" && puestoSeleccionado !== null),
+                  ).map((a) => {
                     const sinLugar = a.destino === "titular" && completo;
                     return (
                       <button
@@ -427,7 +492,16 @@ function GrupoJugadores({
                         type="button"
                         disabled={sinLugar}
                         title={sinLugar ? `Ya hay ${TITULARES} titulares` : undefined}
-                        onClick={() => onCambiar(asignar(estado, j, a.destino))}
+                        onClick={() =>
+                          onCambiar(
+                            asignar(
+                              estado,
+                              j,
+                              a.destino,
+                              a.destino === "titular" ? puestoSeleccionado : null,
+                            ),
+                          )
+                        }
                       >
                         {a.texto}
                       </button>

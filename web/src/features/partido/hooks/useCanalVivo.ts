@@ -132,9 +132,7 @@ export function useCanalVivo(
     };
 
     const actualizarEstadoCanal = (nuevoEstado: EstadoCanalVivo, aviso: string | null = null) => {
-      if (cancelado) return;
-      setInstantanea({
-        partidoId,
+      actualizarInstantanea({
         estado: nuevoEstado,
         aviso,
       });
@@ -200,16 +198,12 @@ export function useCanalVivo(
           intentos = 0;
           actualizarEstadoCanal("CONECTADO", null);
           limpiarPing();
-          pingIntervalId = window.setInterval(() => {
           const enviarPing = () => {
             if (
               !cancelado &&
               socket === socketActualRef.current &&
               socket.readyState === WebSocket.OPEN
             ) {
-              socket.send(JSON.stringify({ tipo: "ping" }));
-            }
-          }, INTERVALO_PING_WS_MS);
               pingEnviadoEnMs = performance.now();
               socket.send(JSON.stringify({ tipo: "ping" }));
             }

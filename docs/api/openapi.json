@@ -2024,12 +2024,82 @@
         }
       }
     },
+    "/api/vision/partidos/{partido_id}/calibracion/detectar-ia": {
+      "post": {
+        "tags": [
+          "P3 · Visión por Computadora"
+        ],
+        "summary": "Detectar puntos clave de la cancha automáticamente con IA (YOLO Pose)",
+        "operationId": "detectar_calibracion_ia_api_vision_partidos__partido_id__calibracion_detectar_ia_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "partido_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Partido Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_detectar_calibracion_ia_api_vision_partidos__partido_id__calibracion_detectar_ia_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Detectar Calibracion Ia Api Vision Partidos  Partido Id  Calibracion Detectar Ia Post"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "Declarado en el contrato, pendiente de implementacion",
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/vision/sedes/{sede}/calibracion-previa": {
       "get": {
         "tags": [
           "P3 · Visión por Computadora"
         ],
         "summary": "CU-22 · Recuperar una calibracion anterior de la misma sede",
+        "description": "La calibracion valida mas reciente del club en un partido de esa sede (T-035).\n\nLa sede se compara sin distinguir mayusculas ni espacios sobrantes. La\nrespuesta trae `advertencia`: hay que verificar que la camara no se movio.\nPara usarla en el partido nuevo, enviar sus puntos y medidas en\nPOST /partidos/{id}/calibracion.",
         "operationId": "calibracion_previa_api_vision_sedes__sede__calibracion_previa_get",
         "security": [
           {
@@ -2068,6 +2138,9 @@
               }
             }
           },
+          "404": {
+            "description": "No hay una calibracion valida previa del club en esa sede"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -2077,6 +2150,92 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/api/vision/calibracion-intrinseca": {
+      "post": {
+        "tags": [
+          "P3 · Visión por Computadora"
+        ],
+        "summary": "CU-23 · Calibrar el lente con fotos de un tablero de ajedrez",
+        "description": "Calibra la **camara y el lente** (no la cancha) con fotos de un tablero de ajedrez\nimpreso, rigido y plano. Se hace una vez por camara, lente y resolucion. **No\nguarda nada**: devuelve los parametros para enviarlos en la calibracion de la cancha.\n\n**Fotos:** entre 5 y 20, JPG o PNG, hasta 10 MB cada una, todas del mismo tamano y\ncon la misma resolucion con la que se va a filmar. El tablero entero en cada foto,\ninclinado de distintas formas y llegando a las esquinas y bordes del cuadro, que es\ndonde mas deforma el lente. `columnas` y `filas` son las esquinas INTERIORES del\ntablero (uno de 10 x 7 casillas tiene 9 x 6).\n\n**Uso en dos pasos:**\n\n1. `POST /api/vision/calibracion-intrinseca?columnas=9&filas=6` (multipart, campo\n   `imagenes` repetido una vez por foto). Respuesta:\n\n```json\n{\"matriz_camara\": [[1012.4, 0, 960.7], [0, 1011.9, 541.2], [0, 0, 1]],\n \"coef_distorsion\": [-0.31, 0.11, 0.0004, -0.0003, -0.017],\n \"tamano_imagen\": [1920, 1080], \"error_reproyeccion_px\": 0.27, \"imagenes_usadas\": 18}\n```\n\n2. `POST /api/vision/partidos/{partido_id}/calibracion` con los puntos de la cancha\n   y esos tres campos (los demas se pueden enviar tambien; se ignoran):\n\n```json\n{\"puntos_imagen\": [...], \"puntos_cancha\": [...], \"largo_m\": 100, \"ancho_m\": 64,\n \"matriz_camara\": [[1012.4, 0, 960.7], [0, 1011.9, 541.2], [0, 0, 1]],\n \"coef_distorsion\": [-0.31, 0.11, 0.0004, -0.0003, -0.017],\n \"tamano_imagen\": [1920, 1080]}\n```\n\nCon los tres campos, los `puntos_imagen` se corrigen antes de calcular la homografia\ny el error de reproyeccion (CU-21) ya no crece cerca de las bandas.",
+        "operationId": "calibracion_intrinseca_api_vision_calibracion_intrinseca_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "columnas",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 30,
+              "minimum": 3,
+              "description": "Esquinas interiores por fila",
+              "default": 9,
+              "title": "Columnas"
+            },
+            "description": "Esquinas interiores por fila"
+          },
+          {
+            "name": "filas",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 30,
+              "minimum": 3,
+              "description": "Esquinas interiores por columna",
+              "default": 6,
+              "title": "Filas"
+            },
+            "description": "Esquinas interiores por columna"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_calibracion_intrinseca_api_vision_calibracion_intrinseca_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CalibracionIntrinseca"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "Declarado en el contrato, pendiente de implementacion",
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Requiere rol ADMIN o ANALISTA"
+          },
+          "413": {
+            "description": "Alguna foto supera los 10 MB"
+          },
+          "422": {
+            "description": "Menos de 5 o mas de 20 fotos, una foto ilegible, fotos de distinto tamano, o el tablero se detecto en menos de 5 fotos"
           }
         }
       }
@@ -2556,6 +2715,57 @@
             }
           }
         }
+      },
+      "delete": {
+        "tags": [
+          "P3 · Visión por Computadora"
+        ],
+        "summary": "CU-28 · Eliminar un video del partido",
+        "operationId": "eliminar_video_api_vision_videos__video_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "video_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Video Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "501": {
+            "description": "Declarado en el contrato, pendiente de implementacion",
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Partido o video inexistente, o de otro club"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/vision/videos/{video_id}/procesar": {
@@ -2732,7 +2942,7 @@
         "tags": [
           "P3 · Visión por Computadora"
         ],
-        "summary": "T-061 · Worker: descargar el video",
+        "summary": "T-061 · Worker / Visor: descargar o reproducir el video",
         "operationId": "descargar_video_api_vision_videos__video_id__archivo_get",
         "security": [
           {
@@ -2772,6 +2982,277 @@
           },
           "409": {
             "description": "El video todavía no terminó de subirse"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/vision/partidos/{partido_id}/transmitir-vivo": {
+      "post": {
+        "tags": [
+          "P3 · Visión por Computadora"
+        ],
+        "summary": "CU-24, CU-40, CU-41 · Iniciar emisión sincronizada a 5 Hz con visor de video/cámara",
+        "operationId": "iniciar_transmision_vivo_api_vision_partidos__partido_id__transmitir_vivo_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "partido_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Partido Id"
+            }
+          },
+          {
+            "name": "t_inicio_s",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "default": 0.0,
+              "title": "T Inicio S"
+            }
+          },
+          {
+            "name": "duracion_s",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "default": 60.0,
+              "title": "Duracion S"
+            }
+          },
+          {
+            "name": "video_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Video Id"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Iniciar Transmision Vivo Api Vision Partidos  Partido Id  Transmitir Vivo Post"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "Declarado en el contrato, pendiente de implementacion",
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/vision/partidos/{partido_id}/pausar-vivo": {
+      "post": {
+        "tags": [
+          "P3 · Visión por Computadora"
+        ],
+        "summary": "CU-24, CU-40 · Pausar emisión sincronizada cuando el video o cámara se pausa",
+        "operationId": "pausar_transmision_vivo_api_vision_partidos__partido_id__pausar_vivo_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "partido_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Partido Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Pausar Transmision Vivo Api Vision Partidos  Partido Id  Pausar Vivo Post"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "Declarado en el contrato, pendiente de implementacion",
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/vision/vivo/analizar-cuadro": {
+      "post": {
+        "tags": [
+          "P3 · Visión por Computadora"
+        ],
+        "summary": "CU-24, CU-40 · Inferencia YOLO + Color en tiempo real desde cámara web o video local",
+        "operationId": "analizar_cuadro_en_vivo_api_vision_vivo_analizar_cuadro_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_analizar_cuadro_en_vivo_api_vision_vivo_analizar_cuadro_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MensajeWorker"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "Declarado en el contrato, pendiente de implementacion",
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/vision/videos/{video_id}/muestras": {
+      "get": {
+        "tags": [
+          "P3 · Visión por Computadora"
+        ],
+        "summary": "CU-24, CU-40, CU-41 · Descargar telemetría persistida del video para sincronización directa",
+        "operationId": "obtener_muestras_video_api_vision_videos__video_id__muestras_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "video_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Video Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MensajeWorker"
+                  },
+                  "title": "Response Obtener Muestras Video Api Vision Videos  Video Id  Muestras Get"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "Declarado en el contrato, pendiente de implementacion",
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
+                }
+              }
+            }
           },
           "422": {
             "description": "Validation Error",
@@ -3787,6 +4268,7 @@
           "P5 · Análisis Táctico"
         ],
         "summary": "CU-42 · Metricas de equipo acumuladas y de los ultimos 5 minutos",
+        "description": "T-074. Posesion: en cada muestra con balon visible, el jugador de campo mas cercano; a 2 m o menos posee su equipo, si no es disputa. Sin balon visible no se asigna. local + visitante + disputa = 100. Con el partido en juego incluye el intervalo en curso y `ultimos_5_min_*` es una ventana movil.",
         "operationId": "metricas_api_analisis_partidos__partido_id__metricas_get",
         "security": [
           {
@@ -3825,6 +4307,9 @@
               }
             }
           },
+          "404": {
+            "description": "Partido inexistente o de otro club"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -3844,6 +4329,7 @@
           "P5 · Análisis Táctico"
         ],
         "summary": "CU-46 · Evolucion por intervalos de 5 minutos",
+        "description": "T-076. Solo intervalos CERRADOS: se cierran durante el partido, al llegar la primera muestra del siguiente. Al finalizar, el ultimo se cierra como parcial (`minuto_hasta` es el de su ultima muestra).",
         "operationId": "intervalos_api_analisis_partidos__partido_id__metricas_intervalos_get",
         "security": [
           {
@@ -3886,6 +4372,76 @@
               }
             }
           },
+          "404": {
+            "description": "Partido inexistente o de otro club"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/analisis/partidos/{partido_id}/metricas/recalcular": {
+      "post": {
+        "tags": [
+          "P5 · Análisis Táctico"
+        ],
+        "summary": "CU-46 · Recalcular las metricas desde las posiciones guardadas",
+        "description": "T-076. Pasa las filas de `posicion`, ordenadas por t, por el mismo motor que en vivo y reemplaza los intervalos guardados. Util tras procesar un video grabado o tras asignar el arquero. No disponible con el partido EN_CURSO.",
+        "operationId": "recalcular_metricas_api_analisis_partidos__partido_id__metricas_recalcular_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "partido_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Partido Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetricasPartido"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "Declarado en el contrato, pendiente de implementacion",
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Partido inexistente o de otro club"
+          },
+          "403": {
+            "description": "Requiere rol ADMIN o ANALISTA"
+          },
+          "409": {
+            "description": "El partido esta EN_CURSO"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -3905,6 +4461,7 @@
           "P5 · Análisis Táctico"
         ],
         "summary": "CU-43 · Distancia, velocidad maxima y sprints por jugador",
+        "description": "T-075. Ordenado por distancia. Distancia sobre la trayectoria suavizada; velocidad en ventana de 1 s; sprint = mas de 21 km/h sostenido 1 s. Se calcula por track y se convierte a jugador con las asignaciones (CU-34, CU-35): un track sin asignar suma a su equipo pero no aparece aqui.",
         "operationId": "metricas_jugadores_api_analisis_partidos__partido_id__metricas_jugadores_get",
         "security": [
           {
@@ -3934,8 +4491,10 @@
                   "type": "null"
                 }
               ],
+              "description": "LOCAL o VISITANTE; sin filtro, los dos. Otro valor: 422",
               "title": "Equipo"
-            }
+            },
+            "description": "LOCAL o VISITANTE; sin filtro, los dos. Otro valor: 422"
           }
         ],
         "responses": {
@@ -3962,6 +4521,92 @@
                 }
               }
             }
+          },
+          "404": {
+            "description": "Partido inexistente o de otro club"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/analisis/partidos/{partido_id}/metricas/jugadores/intervalos": {
+      "get": {
+        "tags": [
+          "P5 · Análisis Táctico"
+        ],
+        "summary": "CU-43 · Metricas fisicas por jugador en cada intervalo de 5 minutos",
+        "description": "T-075. Una entrada por intervalo cerrado con `minuto_desde`, `minuto_hasta`, `distancia_m`, `velocidad_max_kmh`, `sprints` y `minutos_jugados`. Un sprint cuenta en el intervalo donde empieza.",
+        "operationId": "metricas_jugadores_intervalos_api_analisis_partidos__partido_id__metricas_jugadores_intervalos_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "partido_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Partido Id"
+            }
+          },
+          {
+            "name": "equipo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "LOCAL o VISITANTE; sin filtro, los dos. Otro valor: 422",
+              "title": "Equipo"
+            },
+            "description": "LOCAL o VISITANTE; sin filtro, los dos. Otro valor: 422"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MetricasJugadorPorIntervalo"
+                  },
+                  "title": "Response Metricas Jugadores Intervalos Api Analisis Partidos  Partido Id  Metricas Jugadores Intervalos Get"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "Declarado en el contrato, pendiente de implementacion",
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Partido inexistente o de otro club"
           },
           "422": {
             "description": "Validation Error",
@@ -5271,6 +5916,77 @@
         "title": "AvisoColores",
         "description": "CU-10: los colores de ambos equipos quedaron demasiado cerca en HSV."
       },
+      "Body_calibracion_intrinseca_api_vision_calibracion_intrinseca_post": {
+        "properties": {
+          "imagenes": {
+            "items": {
+              "type": "string",
+              "contentMediaType": "application/octet-stream"
+            },
+            "type": "array",
+            "title": "Imagenes",
+            "description": "Fotos del tablero, de 5 a 20, JPG o PNG, hasta 10 MB cada una"
+      "Body_analizar_cuadro_en_vivo_api_vision_vivo_analizar_cuadro_post": {
+        "properties": {
+          "archivo": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "Archivo"
+          },
+          "color_local": {
+            "type": "string",
+            "title": "Color Local",
+            "default": "#6CABDD"
+          },
+          "color_rival": {
+            "type": "string",
+            "title": "Color Rival",
+            "default": "#FFFFFF"
+          },
+          "partido_id": {
+            "type": "integer",
+            "title": "Partido Id",
+            "default": 1
+          },
+          "t_actual": {
+            "type": "number",
+            "title": "T Actual",
+            "default": 0.0
+          }
+        },
+        "type": "object",
+        "required": [
+          "imagenes"
+        ],
+        "title": "Body_calibracion_intrinseca_api_vision_calibracion_intrinseca_post"
+          "archivo"
+        ],
+        "title": "Body_analizar_cuadro_en_vivo_api_vision_vivo_analizar_cuadro_post"
+      },
+      "Body_detectar_calibracion_ia_api_vision_partidos__partido_id__calibracion_detectar_ia_post": {
+        "properties": {
+          "archivo": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "Archivo"
+          },
+          "largo_m": {
+            "type": "number",
+            "title": "Largo M",
+            "default": 105.0
+          },
+          "ancho_m": {
+            "type": "number",
+            "title": "Ancho M",
+            "default": 68.0
+          }
+        },
+        "type": "object",
+        "required": [
+          "archivo"
+        ],
+        "title": "Body_detectar_calibracion_ia_api_vision_partidos__partido_id__calibracion_detectar_ia_post"
+      },
       "Body_importar_plantel_api_deportivo_equipos__equipo_id__jugadores_importar_post": {
         "properties": {
           "archivo": {
@@ -5381,6 +6097,51 @@
             "type": "string",
             "format": "date-time",
             "title": "Creada En"
+          },
+          "matriz_camara": {
+            "anyOf": [
+              {
+                "items": {
+                  "items": {
+                    "type": "number"
+                  },
+                  "type": "array"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matriz Camara",
+            "description": "CU-23: matriz de la camara K, si se envio. Con ella, matriz_h va de pixeles CORREGIDOS a metros: el worker debe corregir cada punto antes de aplicarla"
+          },
+          "tamano_imagen": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tamano Imagen",
+            "description": "CU-23: [ancho, alto] de la calibracion de la camara, si se envio"
+          },
+          "advertencia": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Advertencia",
+            "description": "CU-22: solo en GET /sedes/{sede}/calibracion-previa. Recuerda verificar que la camara no se haya movido antes de reutilizar la calibracion"
           }
         },
         "type": "object",
@@ -5445,6 +6206,42 @@
             ],
             "title": "Coef Distorsion",
             "description": "CU-23, opcional. Obligatorio con gran angular o action cam"
+          },
+          "matriz_camara": {
+            "anyOf": [
+              {
+                "items": {
+                  "items": {
+                    "type": "number"
+                  },
+                  "type": "array"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matriz Camara",
+            "description": "CU-23, opcional. Matriz de la camara K (3x3, en pixeles), de POST /calibracion-intrinseca. Va junto con coef_distorsion y tamano_imagen: con los tres, los puntos_imagen se corrigen antes de calcular la homografia"
+          },
+          "tamano_imagen": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0.0
+                },
+                "type": "array",
+                "maxItems": 2,
+                "minItems": 2
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tamano Imagen",
+            "description": "CU-23, opcional. [ancho, alto] en pixeles de las fotos con que se calibro la camara. Los puntos_imagen deben marcarse sobre un cuadro de ese mismo tamano"
           }
         },
         "type": "object",
@@ -5454,6 +6251,57 @@
         ],
         "title": "CalibracionGuardar",
         "description": "Se exigen al menos 8 puntos repartidos por toda la cancha.\n\nCon 4 la homografia ajusta exacta y el residual da cero, que no informa nada.\nSolo puntos sobre el plano del suelo: nunca el travesano, que esta a 2,44 m."
+      },
+      "CalibracionIntrinseca": {
+        "properties": {
+          "matriz_camara": {
+            "items": {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            "type": "array",
+            "title": "Matriz Camara",
+            "description": "K, 3x3, en pixeles"
+          },
+          "coef_distorsion": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "title": "Coef Distorsion",
+            "description": "(k1, k2, p1, p2, k3) de OpenCV"
+          },
+          "tamano_imagen": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Tamano Imagen",
+            "description": "[ancho, alto] en pixeles de las fotos"
+          },
+          "error_reproyeccion_px": {
+            "type": "number",
+            "title": "Error Reproyeccion Px",
+            "description": "Error RMS de la calibracion: por debajo de 0,5 px es buena"
+          },
+          "imagenes_usadas": {
+            "type": "integer",
+            "title": "Imagenes Usadas",
+            "description": "Fotos en las que se detecto el tablero"
+          }
+        },
+        "type": "object",
+        "required": [
+          "matriz_camara",
+          "coef_distorsion",
+          "tamano_imagen",
+          "error_reproyeccion_px",
+          "imagenes_usadas"
+        ],
+        "title": "CalibracionIntrinseca",
+        "description": "CU-23: parametros propios de la camara y el lente, de POST /calibracion-intrinseca.\n\nNo se guardan solos: se envian (los tres primeros campos) en\nPOST /partidos/{id}/calibracion junto con los puntos de la cancha."
       },
       "CambioPassword": {
         "properties": {
@@ -6623,6 +7471,14 @@
           },
           "visitante": {
             "$ref": "#/components/schemas/MetricaEquipo"
+          },
+          "posesion_disputa_pct": {
+            "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Posesion Disputa Pct",
+            "description": "T-074. Tiempo con el balon lejos de todos (> 2 m); local + visitante + disputa = 100",
+            "default": 0
           }
         },
         "type": "object",
@@ -7148,6 +8004,22 @@
             "title": "Modelo Id",
             "description": "Si se omite, usa el modelo marcado como activo; sin modelo activo, el worker usa el YOLO preentrenado"
           },
+          "color_propio": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^#[0-9A-Fa-f]{6}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color Propio",
+            "description": "Color de camiseta del equipo propio para este análisis. Si se omite, se usa el color titular/alternativo registrado del equipo.",
+            "examples": [
+              "#1E5AA8"
+            ]
+          },
           "color_rival": {
             "anyOf": [
               {
@@ -7495,6 +8367,29 @@
         ],
         "title": "MetricaJugador"
       },
+      "MetricasJugadorPorIntervalo": {
+        "properties": {
+          "jugador_id": {
+            "type": "integer",
+            "title": "Jugador Id"
+          },
+          "intervalos": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Intervalos",
+            "description": "Uno por bloque de 5 minutos, con distancia, velocidad max y sprints"
+          }
+        },
+        "type": "object",
+        "required": [
+          "jugador_id",
+          "intervalos"
+        ],
+        "title": "MetricasJugadorPorIntervalo"
+      },
       "MetricasPartido": {
         "properties": {
           "partido_id": {
@@ -7526,6 +8421,14 @@
                 "type": "null"
               }
             ]
+          },
+          "posesion_disputa_pct": {
+            "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Posesion Disputa Pct",
+            "description": "T-074. Acumulado en disputa; local + visitante + disputa = 100",
+            "default": 0
           }
         },
         "type": "object",
@@ -8195,6 +9098,33 @@
             "maximum": 1.0,
             "minimum": 0.0,
             "title": "Conf"
+          },
+          "bbox": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bbox",
+            "description": "Bounding box [x1, y1, x2, y2] en porcentaje (0..100) del cuadro de video"
+          },
+          "dorsal": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dorsal",
+            "description": "Número dorsal o slot canónico persistente del jugador (1..11)"
           }
         },
         "type": "object",
@@ -9416,6 +10346,28 @@
               }
             ],
             "title": "Mensaje Error"
+          },
+          "color_propio": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color Propio"
+          },
+          "color_rival": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color Rival"
           },
           "creado_en": {
             "type": "string",

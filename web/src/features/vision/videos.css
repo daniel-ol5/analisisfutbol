@@ -223,3 +223,53 @@
 .vid-color span {
   font-family: var(--font-mono);
 }
+
+.vid-colores-seccion {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
+
+.vid-color-bloque {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--surface-2, rgba(255, 255, 255, 0.03));
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+}
+
+.vid-color-fila {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.vid-presets {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.vid-btn-preset {
+  font-size: 0.75rem;
+  font-weight: 500;
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  border-left-width: 6px;
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--text-2);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.vid-btn-preset:hover {
+  background: var(--surface-hover, rgba(255, 255, 255, 0.08));
+  color: var(--text);
+  border-color: var(--line-focus);
+}

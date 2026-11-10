@@ -8,7 +8,7 @@
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 import { useSesion } from "@/features/seguridad";
 import { estadoHttp, mensajeDeError } from "@/shared/lib/errors";
@@ -17,6 +17,7 @@ import type { TonoBadge } from "@/shared/ui/Badge";
 
 import {
   cancelarProceso,
+  eliminarVideo,
   enviarTrozo,
   iniciarCarga,
   lanzarProceso,
@@ -187,12 +188,22 @@ export function VideosPage() {
 
   // ---------- Procesamiento ----------
 
+  const navegar = useNavigate();
   const procesar = useMutation({
-    mutationFn: ({ id, colorRival }: { id: number; colorRival: string | null }) =>
-      lanzarProceso(id, { color_rival: colorRival }),
+    mutationFn: ({
+      id,
+      colorPropio,
+      colorRival,
+    }: {
+      id: number;
+      colorPropio: string | null;
+      colorRival: string | null;
+    }) =>
+      lanzarProceso(id, { color_propio: colorPropio, color_rival: colorRival }),
     onSettled: refrescar,
   });
   const cancelar = useMutation({ mutationFn: cancelarProceso, onSettled: refrescar });
+  const eliminar = useMutation({ mutationFn: eliminarVideo, onSettled: refrescar });
 
   // ---------- Vista ----------
 
@@ -282,7 +293,9 @@ export function VideosPage() {
               subida && void verVideo(v.id).then((fresco) => subir(subida.archivo, fresco))
             }
             onRetomar={() => elegirArchivo(v)}
-            onProcesar={(colorRival) => procesar.mutate({ id: v.id, colorRival })}
+            onProcesar={({ colorPropio, colorRival }) =>
+              procesar.mutate({ id: v.id, colorPropio, colorRival })
+            }
             procesando={procesar.isPending && procesar.variables?.id === v.id}
             errorProcesar={procesar.variables?.id === v.id ? procesar.error : null}
             onCancelar={() => {
@@ -290,6 +303,12 @@ export function VideosPage() {
                 cancelar.mutate(v.id);
             }}
             cancelando={cancelar.isPending && cancelar.variables === v.id}
+            onAnalizar={() => navegar(`/analisis?partidoId=${v.partido_id}&videoId=${v.id}`)}
+            onEliminar={() => {
+              if (window.confirm(`¿Eliminar definitivamente el video «${v.nombre}»?`))
+                eliminar.mutate(v.id);
+            }}
+            eliminando={eliminar.isPending && eliminar.variables === v.id}
           />
         ))}
       </ul>
@@ -308,11 +327,14 @@ interface PropsTarjeta {
   onPausar: () => void;
   onReanudar: () => void;
   onRetomar: () => void;
-  onProcesar: (colorRival: string | null) => void;
+  onProcesar: (colores: { colorPropio: string | null; colorRival: string | null }) => void;
   procesando: boolean;
   errorProcesar: unknown;
   onCancelar: () => void;
   cancelando: boolean;
+  onAnalizar: () => void;
+  onEliminar: () => void;
+  eliminando: boolean;
 }
 
 function TarjetaVideo(p: PropsTarjeta) {
@@ -366,6 +388,29 @@ function TarjetaVideo(p: PropsTarjeta) {
       )}
 
       {p.puedeProcesar && sePuedeProcesar(v) && <FormularioProceso {...p} />}
+
+      <div
+        className="vid-estado-fila"
+        style={{
+          marginTop: "0.75rem",
+          paddingTop: "0.65rem",
+          borderTop: "1px solid var(--border-subtle, rgba(255,255,255,0.08))",
+          justifyContent: "flex-end",
+          gap: "0.6rem",
+          flexWrap: "wrap",
+        }}
+      >
+        {legible && (
+          <Button variante="secundario" onClick={p.onAnalizar}>
+            Analizar en panel en vivo
+          </Button>
+        )}
+        {p.puedeSubir && (
+          <Button variante="peligro" onClick={p.onEliminar} disabled={p.eliminando}>
+            {p.eliminando ? "Eliminando…" : "Eliminar video"}
+          </Button>
+        )}
+      </div>
     </li>
   );
 }
@@ -447,7 +492,7 @@ function EstadoProceso({ video: v, puedeProcesar, onCancelar, cancelando }: Prop
       <div className="vid-estado-fila">
         <span aria-live="polite">
           {enCola ? (
-            "En cola: esperando que el worker de visión lo tome…"
+            "En cola: iniciando análisis de visión con IA…"
           ) : (
             <>
               <strong>{v.progreso_pct}%</strong>
@@ -466,35 +511,126 @@ function EstadoProceso({ video: v, puedeProcesar, onCancelar, cancelando }: Prop
 }
 
 function FormularioProceso({ video: v, onProcesar, procesando, errorProcesar }: PropsTarjeta) {
-  const [conColor, setConColor] = useState(false);
-  const [color, setColor] = useState("#C8102E");
+  const [personalizarPropio, setPersonalizarPropio] = useState<boolean>(Boolean(v.color_propio));
+  const [colorPropio, setColorPropio] = useState<string>(v.color_propio || "#6CABDD");
+  const [conColorRival, setConColorRival] = useState<boolean>(v.color_rival ? true : true);
+  const [colorRival, setColorRival] = useState<string>(v.color_rival || "#FFFFFF");
   const sinCalibrar =
     estadoHttp(errorProcesar) === 409 && /calibra/i.test(mensajeDeError(errorProcesar));
 
+  const presetsPropio = [
+    { nombre: "Celeste (MCI)", hex: "#6CABDD" },
+    { nombre: "Verde (Betis)", hex: "#008855" },
+    { nombre: "Azul", hex: "#1E5AA8" },
+    { nombre: "Blanco", hex: "#FFFFFF" },
+    { nombre: "Rojo", hex: "#C8102E" },
+  ];
+
+  const presetsRival = [
+    { nombre: "Blanco (TOT)", hex: "#FFFFFF" },
+    { nombre: "Rojo", hex: "#C8102E" },
+    { nombre: "Celeste", hex: "#6CABDD" },
+    { nombre: "Negro", hex: "#1E1E1E" },
+    { nombre: "Amarillo", hex: "#FACC15" },
+  ];
+
   return (
     <div className="vid-procesar">
-      <label className="vid-check">
-        <input type="checkbox" checked={conColor} onChange={(e) => setConColor(e.target.checked)} />
-        Indicar el color de camiseta del rival
-      </label>
-      {conColor && (
-        <label className="vid-color">
-          <input type="color" value={color} onChange={(e) => setColor(e.target.value)} />
-          <span>{color.toUpperCase()}</span>
-        </label>
-      )}
+      <div className="vid-colores-seccion">
+        {/* Color de nuestro equipo */}
+        <div className="vid-color-bloque">
+          <label className="vid-check">
+            <input
+              type="checkbox"
+              checked={personalizarPropio}
+              onChange={(e) => setPersonalizarPropio(e.target.checked)}
+            />
+            <strong>Color de nuestro equipo (Local):</strong>
+          </label>
+          {personalizarPropio ? (
+            <div className="vid-color-fila">
+              <label className="vid-color">
+                <input
+                  type="color"
+                  value={colorPropio}
+                  onChange={(e) => setColorPropio(e.target.value)}
+                />
+                <span>{colorPropio.toUpperCase()}</span>
+              </label>
+              <div className="vid-presets">
+                {presetsPropio.map((p) => (
+                  <button
+                    key={p.hex}
+                    type="button"
+                    className="vid-btn-preset"
+                    style={{ borderLeftColor: p.hex }}
+                    onClick={() => setColorPropio(p.hex)}
+                  >
+                    {p.nombre}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <p className="vid-nota">
+              Usa por defecto la indumentaria registrada del club para el partido.
+            </p>
+          )}
+        </div>
+
+        {/* Color del equipo rival */}
+        <div className="vid-color-bloque">
+          <label className="vid-check">
+            <input
+              type="checkbox"
+              checked={conColorRival}
+              onChange={(e) => setConColorRival(e.target.checked)}
+            />
+            <strong>Color del equipo rival (Visitante):</strong>
+          </label>
+          {conColorRival ? (
+            <div className="vid-color-fila">
+              <label className="vid-color">
+                <input
+                  type="color"
+                  value={colorRival}
+                  onChange={(e) => setColorRival(e.target.value)}
+                />
+                <span>{colorRival.toUpperCase()}</span>
+              </label>
+              <div className="vid-presets">
+                {presetsRival.map((p) => (
+                  <button
+                    key={p.hex}
+                    type="button"
+                    className="vid-btn-preset"
+                    style={{ borderLeftColor: p.hex }}
+                    onClick={() => setColorRival(p.hex)}
+                  >
+                    {p.nombre}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <p className="vid-nota">
+              Sin el color del rival, los equipos se separan automáticamente por K-means.
+            </p>
+          )}
+        </div>
+      </div>
+
       <Button
-        onClick={() => onProcesar(conColor ? color.toUpperCase() : null)}
+        onClick={() =>
+          onProcesar({
+            colorPropio: personalizarPropio ? colorPropio.toUpperCase() : null,
+            colorRival: conColorRival ? colorRival.toUpperCase() : null,
+          })
+        }
         disabled={procesando}
       >
         {procesando ? "Enviando…" : v.estado === "SUBIDO" ? "Procesar video" : "Volver a procesar"}
       </Button>
-      {!conColor && (
-        <p className="vid-nota">
-          Sin el color del rival, los equipos se separan automáticamente por el color de las
-          camisetas.
-        </p>
-      )}
       {errorProcesar != null && (
         <Alert tono="error" titulo="No se pudo procesar">
           {mensajeDeError(errorProcesar)}{" "}

@@ -9,30 +9,42 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import cv2
 import numpy as np
 
 from seguimiento.tipos import Deteccion
-from seguimiento.tracker import _adaptar
+from seguimiento.tracker import _CONFIG_TRACKER_DEFECTO, _adaptar
 
 if TYPE_CHECKING:
     from deteccion.modelo import ModeloDeteccion
 
 
 def seguir_con_cuadros(
-    modelo: ModeloDeteccion, ruta: str | Path, vid_stride: int = 6
+    modelo: ModeloDeteccion,
+    ruta: str | Path,
+    vid_stride: int = 6,
+    tracker_config: str | Path | None = None,
 ) -> Iterator[tuple[np.ndarray, list[Deteccion]]]:
     """Un par (cuadro BGR, detecciones) por cada `vid_stride` cuadros del video."""
-    resultados = modelo.modelo.track(
-        source=str(ruta),
-        tracker="bytetrack.yaml",
-        vid_stride=vid_stride,
-        stream=True,
-        persist=True,
-        verbose=False,
-    )
+    tracker_path = str(tracker_config or (_CONFIG_TRACKER_DEFECTO if _CONFIG_TRACKER_DEFECTO.exists() else "bytetrack.yaml"))
+    dispositivo = modelo.dispositivo_efectivo() if hasattr(modelo, "dispositivo_efectivo") else modelo.config.dispositivo
+    kwargs: dict[str, Any] = {
+        "source": str(ruta),
+        "tracker": tracker_path,
+        "vid_stride": vid_stride,
+        "conf": modelo.config.confianza_min,
+        "iou": modelo.config.iou_nms,
+        "device": dispositivo,
+        "stream": True,
+        "persist": True,
+        "verbose": False,
+    }
+    if hasattr(modelo.config, "tamano_img") and modelo.config.tamano_img:
+        kwargs["imgsz"] = modelo.config.tamano_img
+
+    resultados = modelo.modelo.track(**kwargs)
     for resultado in resultados:
         yield resultado.orig_img, _adaptar(resultado, modelo.config)
 

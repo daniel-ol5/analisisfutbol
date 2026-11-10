@@ -73,3 +73,24 @@ def proyectar_detecciones(
     puntos = [d.punto_apoyo for d in detecciones]
     proyectados = proyectar_puntos(puntos, homografia)
     return list(zip(detecciones, (tuple(p) for p in proyectados), strict=True))
+
+
+def actualizar_homografia_dinamica(
+    homografia_referencia: np.ndarray, matriz_camara_acumulada_3x3: np.ndarray
+) -> np.ndarray:
+    """Ajusta la homografía de referencia según el paneo acumulado de la cámara:
+
+    H_t = H_0 * T_cam^{-1}
+
+    Permite que la proyección a metros del radar 2D siga siendo exacta cuando
+    la cámara táctica se desplaza horizontal o verticalmente para seguir la jugada.
+    """
+    if matriz_camara_acumulada_3x3 is None or matriz_camara_acumulada_3x3.shape != (3, 3):
+        return homografia_referencia.copy()
+
+    try:
+        t_inv = np.linalg.inv(matriz_camara_acumulada_3x3)
+        return homografia_referencia @ t_inv
+    except (np.linalg.LinAlgError, ValueError):
+        return homografia_referencia.copy()
+

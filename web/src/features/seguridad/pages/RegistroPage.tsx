@@ -1,5 +1,5 @@
 /** CU-01 · Registrar club y cuenta administradora. */
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, type SubmitEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
@@ -28,6 +28,7 @@ interface Errores {
 
 export function RegistroPage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [nombreClub, setNombreClub] = useState("");
   const [ciudad, setCiudad] = useState("");
   const [email, setEmail] = useState("");
@@ -39,6 +40,7 @@ export function RegistroPage() {
   const mutacion = useMutation({
     mutationFn: registrar,
     onSuccess: (sesion) => {
+      queryClient.clear();
       iniciarSesion(sesion);
       navigate("/", { replace: true });
     },

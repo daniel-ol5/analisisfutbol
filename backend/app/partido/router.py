@@ -24,6 +24,7 @@ from app.core.pendiente import RESPUESTA_501, pendiente
 from app.core.realtime import Hub, canal_partido, obtener_hub
 from app.core.security import decodificar, token_ingesta
 from app.core.ws import Cierre, cerrar
+from app.deportivo.schemas import EstadoPartido
 from app.partido import service
 from app.partido.schemas import (
     AsignarTrack,
@@ -192,16 +193,19 @@ PartidosDep = Annotated[RepositorioPartidos, Depends(obtener_repositorio_partido
 
 
 async def _partido_accesible(ws: WebSocket, partidos: RepositorioPartidos,
-                             partido_id: int, identidad: UsuarioActual) -> bool:
-    """Verifica el partido con `tenancy`; si no es accesible, cierra con 4404."""
+                             partido_id: int, identidad: UsuarioActual) -> tuple[bool, str | None]:
+    """Verifica el partido con `tenancy`; si no es accesible, cierra con 4404.
+
+    Devuelve (accesible, estado del partido).
+    """
     try:
-        await partidos.verificar(partido_id, identidad)
+        estado = await partidos.verificar(partido_id, identidad)
     except HTTPException as e:
         if e.status_code != status.HTTP_404_NOT_FOUND:
             raise
         await cerrar(ws, Cierre.NO_ENCONTRADO, "Partido no encontrado")
-        return False
-    return True
+        return False, None
+    return True, estado
 
 
 @router.websocket("/{partido_id}/vivo")
@@ -212,7 +216,7 @@ async def vivo(ws: WebSocket, partido_id: int, hub: HubDep, partidos: PartidosDe
     responde {"tipo": "listo"} y difunde lo que llegue al canal del partido.
     """
     usuario = await ws_auth.autenticar(ws)
-    if usuario is None or not await _partido_accesible(ws, partidos, partido_id, usuario):
+    if usuario is None or not (await _partido_accesible(ws, partidos, partido_id, usuario))[0]:
         return
 
     canal = canal_partido(usuario.club_id, partido_id)
@@ -282,7 +286,8 @@ async def ingesta(ws: WebSocket, partido_id: int, hub: HubDep, partidos: Partido
     """El worker de visión (o el emisor simulado) publica posiciones a 5 Hz.
 
     Primer mensaje: {"tipo": "auth", "token": "<token de ingesta>"}. Cada
-    mensaje válido se difunde a /vivo y se guarda por lotes.
+    mensaje válido se difunde a /vivo y se guarda por lotes. Solo con el
+    partido EN_CURSO; si no, cierra con 4409.
     """
     worker = await ws_auth.autenticar(ws, worker_desde_token)
     if worker is None:
@@ -291,7 +296,15 @@ async def ingesta(ws: WebSocket, partido_id: int, hub: HubDep, partidos: Partido
         # Token de otro partido: mismo cierre que un partido ajeno
         await cerrar(ws, Cierre.NO_ENCONTRADO, "Partido no encontrado")
         return
-    if not await _partido_accesible(ws, partidos, partido_id, worker):
+    accesible, estado = await _partido_accesible(ws, partidos, partido_id, worker)
+    if not accesible:
+        return
+    # Solo un partido en juego recibe posiciones: así no se mezclan datos de
+    # pruebas previas ni llegan posiciones a un partido ya cerrado. El video
+    # grabado no pasa por aquí (entra por POST /vision/videos/{id}/resultados).
+    if estado is not None and estado != EstadoPartido.EN_CURSO.value:
+        await cerrar(ws, Cierre.NO_EN_CURSO,
+                     f"El partido no está en curso (estado {estado})")
         return
 
     canal = canal_partido(worker.club_id, partido_id)

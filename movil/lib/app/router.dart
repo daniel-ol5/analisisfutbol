@@ -17,6 +17,7 @@ import '../features/deportivo/alineacion/alineacion_pagina.dart';
 import '../features/vision/pagina.dart';
 import '../features/partido/pagina.dart';
 import '../features/analisis/pagina.dart';
+import '../features/analisis/resumen_pagina.dart';
 import '../features/asistencia/pagina.dart';
 
 /// Pantalla de inicio de sesión (CU-02).
@@ -35,6 +36,14 @@ final router = GoRouter(
     GoRoute(
       path: '/seguridad',
       builder: (_, _) => const SeguridadPagina(),
+    ),
+    // T-081: resumen de métricas a pantalla completa (fuera del Marco: sin la
+    // barra inferior, para que todo entre sin desplazamiento).
+    GoRoute(
+      path: '/partidos/:id/resumen',
+      builder: (_, estado) => ResumenPagina(
+        partidoId: int.parse(estado.pathParameters['id']!),
+      ),
     ),
     ShellRoute(
       builder: (_, _, child) => Marco(child: child),

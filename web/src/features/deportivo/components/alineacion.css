@@ -124,17 +124,43 @@
 }
 
 .alin-puesto-libre {
+  all: unset;
+  box-sizing: border-box;
   position: absolute;
   transform: translate(-50%, -50%);
-  width: 34px;
-  height: 34px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
-  border: 2px dashed rgb(255 255 255 / 0.7);
+  border: 2px dashed rgb(255 255 255 / 0.72);
   display: grid;
   place-items: center;
   font-size: 10px;
   font-weight: 700;
-  color: rgb(255 255 255 / 0.85);
+  color: rgb(255 255 255 / 0.88);
+  transition: transform 0.14s ease, background 0.14s ease, border-color 0.14s ease;
+}
+.alin-puesto-libre--interactivo {
+  cursor: pointer;
+}
+.alin-puesto-libre--interactivo:hover {
+  background: rgb(255 255 255 / 0.18);
+  border-color: #ffffff;
+  transform: translate(-50%, -50%) scale(1.1);
+}
+.alin-puesto-libre--seleccionado,
+.alin-puesto-libre--hover {
+  background: rgb(242 194 0 / 0.35);
+  border-style: solid;
+  border-color: #f2c200;
+  color: #ffffff;
+  transform: translate(-50%, -50%) scale(1.16);
+  box-shadow: 0 0 0 4px rgb(242 194 0 / 0.25);
+}
+
+.alin-ficha--hover .alin-ficha-dorsal {
+  outline: 3px solid #f2c200;
+  outline-offset: 2px;
+  transform: scale(1.12);
 }
 
 .alin-ficha {
@@ -250,6 +276,36 @@
   border: 1px solid var(--line);
   border-radius: 6px;
   background: var(--ground);
+}
+.alin-jugador--arrastrable {
+  cursor: grab;
+  transition: border-color 0.14s ease, background 0.14s ease;
+}
+.alin-jugador--arrastrable:hover {
+  border-color: var(--pitch-border);
+}
+.alin-jugador--arrastrable:active {
+  cursor: grabbing;
+}
+
+.alin-puesto-aviso {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--pitch-border);
+  background: var(--pitch-soft);
+  font-size: 12.5px;
+  color: var(--text);
+}
+.alin-puesto-aviso button {
+  all: unset;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--pitch);
 }
 .alin-dorsal {
   flex: none;

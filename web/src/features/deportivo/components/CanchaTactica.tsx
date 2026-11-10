@@ -8,31 +8,60 @@
  * Las fichas se arrastran con el mouse o el dedo, y con el teclado: flechas
  * mueven 1 %, Mayús + flechas 5 %.
  */
-import { useRef, type KeyboardEvent, type PointerEvent } from "react";
+import {
+  useRef,
+  useState,
+  type DragEvent,
+  type KeyboardEvent,
+  type PointerEvent,
+} from "react";
 
-import { PUESTOS, type EstadoAlineacion } from "../alineacion";
+import {
+  PUESTOS,
+  puestoCercanoEnCancha,
+  type EstadoAlineacion,
+} from "../alineacion";
 import { ETIQUETAS_POSICION, type Jugador } from "../types";
+
+export const MIME_JUGADOR_ALINEACION = "application/x-jugador-alineacion";
 
 interface Props {
   estado: EstadoAlineacion;
   plantel: ReadonlyMap<number, Jugador>;
   editable: boolean;
+  puestoSeleccionado?: number | null;
+  onSeleccionarPuesto?: (indice: number | null) => void;
   onMover: (jugadorId: number, x: number, y: number) => void;
+  onSoltarJugador?: (jugadorId: number, x: number, y: number) => void;
+  onColocarEnPuesto?: (jugadorId: number, indicePuesto: number) => void;
 }
 
-export function CanchaTactica({ estado, plantel, editable, onMover }: Props) {
+export function CanchaTactica({
+  estado,
+  plantel,
+  editable,
+  puestoSeleccionado = null,
+  onSeleccionarPuesto,
+  onMover,
+  onSoltarJugador,
+  onColocarEnPuesto,
+}: Props) {
   const cancha = useRef<HTMLDivElement>(null);
   const arrastrando = useRef<number | null>(null);
+  const [puestoHover, setPuestoHover] = useState<number | null>(null);
   const puestos = PUESTOS[estado.formacion];
 
-  const puntoEnCancha = (e: PointerEvent): { x: number; y: number } | null => {
+  const coordsRelativas = (clientX: number, clientY: number): { x: number; y: number } | null => {
     const caja = cancha.current?.getBoundingClientRect();
-    if (!caja) return null;
+    if (!caja || caja.width <= 0 || caja.height <= 0) return null;
     return {
-      x: ((e.clientX - caja.left) / caja.width) * 100,
-      y: ((e.clientY - caja.top) / caja.height) * 100,
+      x: ((clientX - caja.left) / caja.width) * 100,
+      y: ((clientY - caja.top) / caja.height) * 100,
     };
   };
+
+  const puntoEnCancha = (e: PointerEvent): { x: number; y: number } | null =>
+    coordsRelativas(e.clientX, e.clientY);
 
   const alPresionar = (e: PointerEvent<HTMLButtonElement>, jugadorId: number) => {
     if (!editable) return;
@@ -43,11 +72,69 @@ export function CanchaTactica({ estado, plantel, editable, onMover }: Props) {
   const alMover = (e: PointerEvent<HTMLButtonElement>) => {
     if (arrastrando.current === null) return;
     const p = puntoEnCancha(e);
-    if (p) onMover(arrastrando.current, p.x, p.y);
+    if (p) {
+      onMover(arrastrando.current, p.x, p.y);
+      const cercano = puestoCercanoEnCancha(estado, p.x, p.y, 8);
+      setPuestoHover(cercano);
+    }
   };
 
-  const alSoltar = () => {
+  const alSoltar = (e: PointerEvent<HTMLButtonElement>) => {
+    const jugadorId = arrastrando.current;
     arrastrando.current = null;
+    setPuestoHover(null);
+    if (jugadorId === null || !onColocarEnPuesto) return;
+    const p = puntoEnCancha(e);
+    if (!p) return;
+    const origenIndice = estado.titulares.findIndex((t) => t?.jugadorId === jugadorId);
+    // Buscamos si soltó sobre otro puesto (libre u ocupado distinto del propio)
+    for (let i = 0; i < puestos.length; i++) {
+      if (i === origenIndice) continue;
+      const titularDestino = estado.titulares[i];
+      const refX = titularDestino ? titularDestino.x : puestos[i].x;
+      const refY = titularDestino ? titularDestino.y : puestos[i].y;
+      const d2 = (refX - p.x) ** 2 + (refY - p.y) ** 2;
+      if (d2 <= 64) {
+        onColocarEnPuesto(jugadorId, i);
+        break;
+      }
+    }
+  };
+
+  const cancelarArrastrePuntero = () => {
+    arrastrando.current = null;
+    setPuestoHover(null);
+  };
+
+  const alDragOverCancha = (e: DragEvent<HTMLDivElement>) => {
+    if (!editable) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    const p = coordsRelativas(e.clientX, e.clientY);
+    if (!p) return;
+    setPuestoHover(puestoCercanoEnCancha(estado, p.x, p.y, 9));
+  };
+
+  const alDragLeaveCancha = (e: DragEvent<HTMLDivElement>) => {
+    if (!cancha.current?.contains(e.relatedTarget as Node | null)) {
+      setPuestoHover(null);
+    }
+  };
+
+  const alDropCancha = (e: DragEvent<HTMLDivElement>) => {
+    if (!editable) return;
+    e.preventDefault();
+    setPuestoHover(null);
+    const raw =
+      e.dataTransfer.getData(MIME_JUGADOR_ALINEACION) || e.dataTransfer.getData("text/plain");
+    const jugadorId = Number(raw);
+    if (!Number.isInteger(jugadorId) || jugadorId <= 0) return;
+
+    const p = coordsRelativas(e.clientX, e.clientY);
+    if (!p) return;
+    if (onSoltarJugador) {
+      onSoltarJugador(jugadorId, p.x, p.y);
+    }
   };
 
   const alTeclear = (
@@ -71,32 +158,57 @@ export function CanchaTactica({ estado, plantel, editable, onMover }: Props) {
   };
 
   return (
-    <div className="alin-cancha" ref={cancha} aria-label={`Cancha, formación ${estado.formacion}`}>
+    <div
+      className="alin-cancha"
+      ref={cancha}
+      aria-label={`Cancha, formación ${estado.formacion}`}
+      onDragOver={alDragOverCancha}
+      onDragLeave={alDragLeaveCancha}
+      onDrop={alDropCancha}
+    >
       <LineasCancha />
       <span className="alin-cancha-sentido" aria-hidden="true">
-        Ataque →
+        Ataque
       </span>
 
-      {/* Puestos libres: guía de dónde falta un titular */}
-      {estado.titulares.map((t, i) =>
-        t === null ? (
-          <span
+      {/* Puestos libres: guía de dónde falta un titular (clicables y destino de arrastre) */}
+      {estado.titulares.map((t, i) => {
+        if (t !== null) return null;
+        const seleccionado = puestoSeleccionado === i;
+        const hover = puestoHover === i;
+        return (
+          <button
             key={`libre-${i}`}
-            className="alin-puesto-libre"
+            type="button"
+            disabled={!editable}
+            onClick={() => onSeleccionarPuesto?.(seleccionado ? null : i)}
+            className={[
+              "alin-puesto-libre",
+              editable ? "alin-puesto-libre--interactivo" : "",
+              seleccionado ? "alin-puesto-libre--seleccionado" : "",
+              hover ? "alin-puesto-libre--hover" : "",
+            ]
+              .filter(Boolean)
+              .join(" ")}
             style={{ left: `${puestos[i].x}%`, top: `${puestos[i].y}%` }}
-            title={`Puesto libre: ${ETIQUETAS_POSICION[puestos[i].rol]}`}
+            title={
+              editable
+                ? `Puesto ${ETIQUETAS_POSICION[puestos[i].rol]}: arrastra un jugador aquí o haz clic para elegir este puesto`
+                : `Puesto libre: ${ETIQUETAS_POSICION[puestos[i].rol]}`
+            }
           >
             {puestos[i].rol}
-          </span>
-        ) : null,
-      )}
+          </button>
+        );
+      })}
 
-      {estado.titulares.map((t) => {
+      {estado.titulares.map((t, i) => {
         if (t === null) return null;
         const j = plantel.get(t.jugadorId);
         if (!j) return null;
         const capitan = estado.capitanId === j.id;
         const arquero = j.posicion === "ARQ";
+        const hover = puestoHover === i && arrastrando.current !== j.id;
         return (
           <button
             key={j.id}
@@ -105,17 +217,20 @@ export function CanchaTactica({ estado, plantel, editable, onMover }: Props) {
               "alin-ficha",
               arquero ? "alin-ficha--arquero" : "",
               editable ? "alin-ficha--movible" : "",
-            ].join(" ")}
+              hover ? "alin-ficha--hover" : "",
+            ]
+              .filter(Boolean)
+              .join(" ")}
             style={{ left: `${t.x}%`, top: `${t.y}%` }}
             aria-label={
               `${j.dorsal}, ${j.nombre} ${j.apellido}, ${ETIQUETAS_POSICION[j.posicion]}` +
               `${capitan ? ", capitán" : ""}. Largo ${Math.round(t.x)} %, ancho ${Math.round(t.y)} %` +
-              (editable ? ". Muévelo con las flechas." : "")
+              (editable ? ". Muévelo con las flechas o arrastrando." : "")
             }
             onPointerDown={(e) => alPresionar(e, j.id)}
             onPointerMove={alMover}
             onPointerUp={alSoltar}
-            onPointerCancel={alSoltar}
+            onPointerCancel={cancelarArrastrePuntero}
             onKeyDown={(e) => alTeclear(e, j.id, t.x, t.y)}
           >
             <span className="alin-ficha-dorsal">

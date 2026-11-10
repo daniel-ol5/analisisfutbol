@@ -1,0 +1,919 @@
+/**
+ * Visor de Video / Cámara en Vivo Sincronizado con el Radar 2D  —  CU-24, CU-25, CU-27, CU-40, CU-41.
+ *
+ * Permite visualizar simultáneamente la señal de video del partido (video subido al servidor,
+ * archivo local de video o cámara en vivo por WebRTC/getUserMedia) junto con la superposición
+ * en tiempo real de las cajas de detección YOLO + ByteTrack (tid) y el plano 2D táctico debajo
+ * o en paralelo.
+ */
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "react-router-dom";
+
+import {
+  analizarCuadroEnVivo,
+  descargarArchivoVideo,
+  eliminarVideo,
+  iniciarTransmisionVivoPartido,
+  listarVideos,
+  obtenerMuestrasVideo,
+  pausarTransmisionVivoPartido,
+} from "@/features/vision/api";
+import type { Video } from "@/features/vision/types";
+
+import type { MensajeWorker, PosicionDetectada } from "../types";
+import { esColorClaro } from "./Plano2DCancha";
+
+export type ModoDisposicionVivo = "apilado" | "paralelo" | "solo-radar";
+type FuenteSenal = "servidor" | "archivo" | "camara";
+
+interface Props {
+  partidoId: number;
+  jugadores: PosicionDetectada[];
+  balon?: PosicionDetectada | null;
+  colorLocal?: string;
+  colorVisitante?: string;
+  nombreLocal: string;
+  nombreVisitante: string;
+  workerTransmitiendo: boolean;
+  modoDisposicion: ModoDisposicionVivo;
+  onCambiarModoDisposicion: (modo: ModoDisposicionVivo) => void;
+  onVideoSeleccionado?: (video: Video) => void;
+  onMuestraSincronizada?: (muestra: MensajeWorker) => void;
+}
+
+
+export function VisorVideoSincronizado({
+  partidoId,
+  jugadores,
+  balon,
+  colorLocal = "#10b981",
+  colorVisitante = "#ef4444",
+  nombreLocal: _nombreLocal,
+  nombreVisitante: _nombreVisitante,
+  workerTransmitiendo,
+  modoDisposicion,
+  onCambiarModoDisposicion,
+  onVideoSeleccionado,
+  onMuestraSincronizada,
+}: Props) {
+  const [fuente, setFuente] = useState<FuenteSenal>("servidor");
+  const [videosServidor, setVideosServidor] = useState<Video[]>([]);
+  const [videoSeleccionadoId, setVideoSeleccionadoId] = useState<number | null>(null);
+  const [muestrasLocales, setMuestrasLocales] = useState<MensajeWorker[]>([]);
+  const [cargandoLista, setCargandoLista] = useState(false);
+  const [cargandoBinario, setCargandoBinario] = useState(false);
+  const [videoSrcUrl, setVideoSrcUrl] = useState<string | null>(null);
+  const [nombreArchivoLocal, setNombreArchivoLocal] = useState<string | null>(null);
+  const [errorFuente, setErrorFuente] = useState<string | null>(null);
+  const [mostrarOverlayYolo, setMostrarOverlayYolo] = useState(true);
+  const [iniciandoStream, setIniciandoStream] = useState(false);
+  const [eliminandoVideo, setEliminandoVideo] = useState(false);
+
+  // Estado de cámara en vivo
+  const [dispositivosCamara, setDispositivosCamara] = useState<MediaDeviceInfo[]>([]);
+  const [dispositivoCamaraId, setDispositivoCamaraId] = useState<string>("");
+  const [camaraActiva, setCamaraActiva] = useState(false);
+
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const camaraVideoRef = useRef<HTMLVideoElement | null>(null);
+  const streamCamaraRef = useRef<MediaStream | null>(null);
+  const urlObjetoRef = useRef<string | null>(null);
+  const ultimoTiempoSincronizadoRef = useRef<number>(-1);
+
+  // Deduplica jugadores por Track ID (tid) para evitar cajas dobles o superpuestas
+  const jugadoresUnicos = useMemo(() => {
+    const mapa = new Map<number, PosicionDetectada>();
+    for (const j of jugadores) {
+      const actual = mapa.get(j.tid);
+      // Preferir la detección que incluye bounding box real en % o mayor confianza
+      if (!actual || (!actual.bbox && j.bbox) || (j.conf > (actual.conf ?? 0))) {
+        mapa.set(j.tid, j);
+      }
+    }
+    return Array.from(mapa.values());
+  }, [jugadores]);
+
+  const obtenerEstiloCaja = useCallback((equipo: string) => {
+    let borde = "#94a3b8";
+    if (equipo === "LOCAL") borde = colorLocal;
+    else if (equipo === "VISITANTE") borde = colorVisitante;
+    else if (equipo === "ARBITRO") borde = "#eab308";
+    const claro = esColorClaro(borde);
+    return {
+      borde,
+      fondoTag: borde,
+      textoTag: claro ? "#0f172a" : "#ffffff",
+    };
+  }, [colorLocal, colorVisitante]);
+
+  const limpiarUrlObjeto = useCallback(() => {
+    if (urlObjetoRef.current) {
+      URL.revokeObjectURL(urlObjetoRef.current);
+      urlObjetoRef.current = null;
+    }
+  }, []);
+
+  const detenerCamara = useCallback(() => {
+    if (streamCamaraRef.current) {
+      streamCamaraRef.current.getTracks().forEach((t) => t.stop());
+      streamCamaraRef.current = null;
+    }
+    if (camaraVideoRef.current) {
+      camaraVideoRef.current.srcObject = null;
+    }
+    setCamaraActiva(false);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      limpiarUrlObjeto();
+      detenerCamara();
+    };
+  }, [limpiarUrlObjeto, detenerCamara]);
+
+  // Cargar videos subidos del partido cuando cambia partidoId
+  useEffect(() => {
+    let activo = true;
+    setCargandoLista(true);
+    setErrorFuente(null);
+    listarVideos(partidoId)
+      .then((lista) => {
+        if (!activo) return;
+        const disponibles = lista.filter((v) => v.estado !== "CARGANDO");
+        setVideosServidor(disponibles);
+        if (disponibles.length > 0) {
+          setVideoSeleccionadoId(disponibles[0].id);
+        } else {
+          setVideoSeleccionadoId(null);
+          if (fuente === "servidor") {
+            setVideoSrcUrl(null);
+          }
+        }
+      })
+      .catch(() => {
+        if (!activo) return;
+        setVideosServidor([]);
+        setVideoSeleccionadoId(null);
+      })
+      .finally(() => {
+        if (activo) setCargandoLista(false);
+      });
+    return () => {
+      activo = false;
+    };
+  }, [partidoId]);
+
+  useEffect(() => {
+    if (!videoSeleccionadoId) return;
+    const vid = videosServidor.find((v) => v.id === videoSeleccionadoId);
+    if (vid) {
+      onVideoSeleccionado?.(vid);
+    }
+  }, [videoSeleccionadoId, videosServidor, onVideoSeleccionado]);
+
+  // Descargar el blob del video del servidor cuando se selecciona uno en modo "servidor"
+  useEffect(() => {
+    if (fuente !== "servidor" || !videoSeleccionadoId) return;
+    let activo = true;
+    setCargandoBinario(true);
+    setErrorFuente(null);
+    descargarArchivoVideo(videoSeleccionadoId)
+      .then((blob) => {
+        if (!activo) return;
+        limpiarUrlObjeto();
+        const url = URL.createObjectURL(blob);
+        urlObjetoRef.current = url;
+        setVideoSrcUrl(url);
+      })
+      .catch(() => {
+        if (!activo) return;
+        setErrorFuente(
+          "No se pudo cargar el archivo de video desde el servidor. Puedes elegir un archivo local o usar la cámara en vivo.",
+        );
+      })
+      .finally(() => {
+        if (activo) setCargandoBinario(false);
+      });
+    return () => {
+      activo = false;
+    };
+  }, [fuente, videoSeleccionadoId, limpiarUrlObjeto]);
+
+  // Descargar telemetría persistida del video para sincronización instantánea (0 ms desfase)
+  useEffect(() => {
+    const vidId = videoSeleccionadoId ?? (videosServidor.length > 0 ? videosServidor[0].id : null);
+    if (!vidId) {
+      setMuestrasLocales([]);
+      return;
+    }
+    let activo = true;
+    obtenerMuestrasVideo(vidId)
+      .then((lista) => {
+        if (!activo) return;
+        if (Array.isArray(lista) && lista.length > 0) {
+          setMuestrasLocales(lista);
+          onMuestraSincronizada?.(lista[0]);
+        } else {
+          setMuestrasLocales([]);
+        }
+      })
+      .catch(() => {
+        if (activo) setMuestrasLocales([]);
+      });
+    return () => {
+      activo = false;
+    };
+  }, [videoSeleccionadoId, videosServidor, onMuestraSincronizada]);
+
+  const sincronizarMuestraPorTiempo = useCallback(
+    (tiempoS: number) => {
+      if (muestrasLocales.length === 0) return;
+      let mejor = muestrasLocales[0];
+      let distMin = Math.abs(mejor.t - tiempoS);
+      for (let i = 1; i < muestrasLocales.length; i++) {
+        const d = Math.abs(muestrasLocales[i].t - tiempoS);
+        if (d < distMin) {
+          distMin = d;
+          mejor = muestrasLocales[i];
+        } else if (muestrasLocales[i].t > tiempoS + 1.2) {
+          break;
+        }
+      }
+      // Solo notificar si la muestra realmente avanzó en el tiempo (evita re-renders redundantes)
+      if (Math.abs(mejor.t - ultimoTiempoSincronizadoRef.current) > 0.01) {
+        ultimoTiempoSincronizadoRef.current = mejor.t;
+        onMuestraSincronizada?.(mejor);
+      }
+    },
+    [muestrasLocales, onMuestraSincronizada],
+  );
+
+  // Sincronización continua de alta frecuencia (requestAnimationFrame) durante la reproducción
+  useEffect(() => {
+    let animId: number | null = null;
+    let ultimoTiempo = -1;
+
+    const bucle = () => {
+      const vid = videoRef.current;
+      if (vid && !vid.paused && !vid.ended && muestrasLocales.length > 0) {
+        const t = vid.currentTime;
+        if (Math.abs(t - ultimoTiempo) >= 0.08) {
+          ultimoTiempo = t;
+          sincronizarMuestraPorTiempo(t);
+        }
+      }
+      animId = requestAnimationFrame(bucle);
+    };
+
+    animId = requestAnimationFrame(bucle);
+    return () => {
+      if (animId !== null) cancelAnimationFrame(animId);
+    };
+  }, [muestrasLocales, sincronizarMuestraPorTiempo]);
+
+  // Bucle de inferencia en tiempo real para cámara web o archivo local sin telemetría precalculada
+  useEffect(() => {
+    let activo = true;
+    let timer: number | null = null;
+    let procesando = false;
+    const canvas = document.createElement("canvas");
+    canvas.width = 640;
+    canvas.height = 360;
+    const ctx = canvas.getContext("2d");
+
+    const capturarYProcesar = () => {
+      if (!activo || procesando) return;
+      const elVideo =
+        fuente === "camara"
+          ? camaraVideoRef.current
+          : fuente === "archivo"
+            ? videoRef.current
+            : null;
+
+      if (!elVideo || elVideo.paused || elVideo.ended || elVideo.readyState < 2) {
+        return;
+      }
+
+      // Si es un archivo local y ya tiene muestras precalculadas, no sobrecargar la GPU
+      if (fuente === "archivo" && muestrasLocales.length > 0) {
+        return;
+      }
+
+      procesando = true;
+      try {
+        ctx?.drawImage(elVideo, 0, 0, 640, 360);
+        canvas.toBlob(
+          async (blob) => {
+            if (!blob || !activo) {
+              procesando = false;
+              return;
+            }
+            try {
+              const res = await analizarCuadroEnVivo(
+                blob,
+                colorLocal,
+                colorVisitante,
+                partidoId,
+                elVideo.currentTime || 0,
+              );
+              if (activo && res && (res.jugadores.length > 0 || res.balon)) {
+                onMuestraSincronizada?.(res);
+              }
+            } catch {
+              // Silencioso ante frames caídos
+            } finally {
+              procesando = false;
+            }
+          },
+          "image/jpeg",
+          0.7,
+        );
+      } catch {
+        procesando = false;
+      }
+    };
+
+    if (camaraActiva || (fuente === "archivo" && videoSrcUrl)) {
+      timer = window.setInterval(capturarYProcesar, 250); // 4 FPS de inferencia YOLO en vivo
+    }
+
+    return () => {
+      activo = false;
+      if (timer !== null) clearInterval(timer);
+    };
+  }, [
+    fuente,
+    camaraActiva,
+    videoSrcUrl,
+    muestrasLocales.length,
+    colorLocal,
+    colorVisitante,
+    partidoId,
+    onMuestraSincronizada,
+  ]);
+
+  const activarSincronizacion5Hz = useCallback(
+    async (tInicioS = 0, vidIdOverride?: number | null) => {
+      setIniciandoStream(true);
+      try {
+        const idVid = vidIdOverride !== undefined ? vidIdOverride : (fuente === "servidor" ? videoSeleccionadoId : null);
+        await iniciarTransmisionVivoPartido(partidoId, tInicioS, 120, idVid);
+      } catch {
+        // Si falla por permisos o red, no bloquea la reproducción local
+      } finally {
+        setIniciandoStream(false);
+      }
+    },
+    [partidoId, fuente, videoSeleccionadoId],
+  );
+
+  const pausarSincronizacion = useCallback(async () => {
+    try {
+      await pausarTransmisionVivoPartido(partidoId);
+    } catch {
+      // Ignorar error al pausar
+    }
+  }, [partidoId]);
+
+  const manejarEliminarVideoSeleccionado = async () => {
+    if (!videoSeleccionadoId) return;
+    const vid = videosServidor.find((v) => v.id === videoSeleccionadoId);
+    const nombre = vid?.nombre ?? `Video #${videoSeleccionadoId}`;
+    if (!window.confirm(`¿Eliminar definitivamente el video «${nombre}» de este partido?`)) {
+      return;
+    }
+
+    setEliminandoVideo(true);
+    setErrorFuente(null);
+    try {
+      await eliminarVideo(videoSeleccionadoId);
+      const restantes = videosServidor.filter((v) => v.id !== videoSeleccionadoId);
+      setVideosServidor(restantes);
+      if (restantes.length > 0) {
+        setVideoSeleccionadoId(restantes[0].id);
+        void activarSincronizacion5Hz(0, restantes[0].id);
+      } else {
+        setVideoSeleccionadoId(null);
+        setVideoSrcUrl(null);
+        limpiarUrlObjeto();
+      }
+    } catch {
+      setErrorFuente(
+        "No se pudo eliminar el video. Verifica tus permisos de usuario o si el procesamiento sigue activo.",
+      );
+    } finally {
+      setEliminandoVideo(false);
+    }
+  };
+
+  const manejarReproducirYSincronizar = async () => {
+    const tActual = videoRef.current ? videoRef.current.currentTime : 0;
+    await activarSincronizacion5Hz(tActual);
+    if (fuente !== "camara" && videoRef.current) {
+      try {
+        await videoRef.current.play();
+      } catch {
+        // Ignorar bloqueo de autoplay si el usuario ya interactuó con el control nativo
+      }
+    }
+  };
+
+  const manejarSeleccionArchivoLocal = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const archivo = e.target.files?.[0];
+    if (!archivo) return;
+    detenerCamara();
+    limpiarUrlObjeto();
+    const url = URL.createObjectURL(archivo);
+    urlObjetoRef.current = url;
+    setNombreArchivoLocal(archivo.name);
+    setVideoSrcUrl(url);
+    setErrorFuente(null);
+  };
+
+  const iniciarCamaraEnVivo = useCallback(
+    async (deviceId?: string) => {
+      setErrorFuente(null);
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setErrorFuente("Este navegador no soporta captura de cámara en vivo (getUserMedia).");
+        return;
+      }
+      try {
+        detenerCamara();
+        const constraints: MediaStreamConstraints = {
+          video: deviceId
+            ? { deviceId: { exact: deviceId }, width: { ideal: 1280 }, height: { ideal: 720 } }
+            : { width: { ideal: 1280 }, height: { ideal: 720 } },
+          audio: false,
+        };
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        streamCamaraRef.current = stream;
+        if (camaraVideoRef.current) {
+          camaraVideoRef.current.srcObject = stream;
+          await camaraVideoRef.current.play();
+        }
+        setCamaraActiva(true);
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const cams = devices.filter((d) => d.kind === "videoinput");
+        setDispositivosCamara(cams);
+        if (!deviceId && cams.length > 0) {
+          const trackDevice = stream.getVideoTracks()[0]?.getSettings().deviceId;
+          setDispositivoCamaraId(trackDevice ?? cams[0].deviceId);
+        }
+        void activarSincronizacion5Hz();
+      } catch {
+        setErrorFuente(
+          "No se pudo acceder a la cámara. Verifica los permisos del navegador o que no esté ocupada por otra aplicación.",
+        );
+      }
+    },
+    [detenerCamara, activarSincronizacion5Hz],
+  );
+
+  const cambiarFuente = (nueva: FuenteSenal) => {
+    setErrorFuente(null);
+    if (nueva !== "camara") {
+      detenerCamara();
+    }
+    setFuente(nueva);
+    if (nueva === "camara") {
+      void iniciarCamaraEnVivo(dispositivoCamaraId || undefined);
+    }
+  };
+
+  return (
+    <section
+      className="visor-sincro-contenedor"
+      aria-label="Visor de video y cámara en vivo sincronizado con el radar 2D"
+    >
+      {/* Cabecera de controles de fuente y disposición */}
+      <div className="visor-sincro-cabecera">
+        <div className="visor-sincro-titulo-bloque">
+          <span className="visor-sincro-kicker">CU-24 · CU-25 · CU-27 · SEÑAL DE VISIÓN</span>
+          <h3 className="visor-sincro-titulo">
+            Video / Cámara en Vivo sincronizado con Radar 2D
+          </h3>
+        </div>
+
+        <div className="visor-sincro-modos-vista" role="group" aria-label="Disposición de pantalla">
+          <button
+            type="button"
+            className={`panel-toggle-btn ${modoDisposicion === "apilado" ? "panel-toggle-btn--activo" : ""}`}
+            onClick={() => onCambiarModoDisposicion("apilado")}
+          >
+            Video arriba + Radar 2D abajo
+          </button>
+          <button
+            type="button"
+            className={`panel-toggle-btn ${modoDisposicion === "paralelo" ? "panel-toggle-btn--activo" : ""}`}
+            onClick={() => onCambiarModoDisposicion("paralelo")}
+          >
+            Lado a lado
+          </button>
+          <button
+            type="button"
+            className={`panel-toggle-btn ${modoDisposicion === "solo-radar" ? "panel-toggle-btn--activo" : ""}`}
+            onClick={() => onCambiarModoDisposicion("solo-radar")}
+          >
+            Solo Radar 2D
+          </button>
+        </div>
+      </div>
+
+      {modoDisposicion !== "solo-radar" && (
+        <>
+          {/* Selector de fuente de video y controles de sincronización */}
+          <div className="visor-sincro-barra-fuente">
+            <div className="visor-sincro-tabs-fuente" role="tablist" aria-label="Fuente de video">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={fuente === "servidor"}
+                className={`visor-fuente-btn ${fuente === "servidor" ? "visor-fuente-btn--activa" : ""}`}
+                onClick={() => cambiarFuente("servidor")}
+              >
+                Video subido del partido ({videosServidor.length})
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={fuente === "archivo"}
+                className={`visor-fuente-btn ${fuente === "archivo" ? "visor-fuente-btn--activa" : ""}`}
+                onClick={() => cambiarFuente("archivo")}
+              >
+                Cargar video desde mi PC
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={fuente === "camara"}
+                className={`visor-fuente-btn ${fuente === "camara" ? "visor-fuente-btn--activa" : ""}`}
+                onClick={() => cambiarFuente("camara")}
+              >
+                Cámara en vivo
+              </button>
+            </div>
+
+            <div className="visor-sincro-acciones">
+              <button
+                type="button"
+                className={`panel-toggle-btn ${mostrarOverlayYolo ? "panel-toggle-btn--activo" : ""}`}
+                onClick={() => setMostrarOverlayYolo((v) => !v)}
+              >
+                {mostrarOverlayYolo
+                  ? "Detecciones YOLO (tid): ON"
+                  : "Detecciones YOLO (tid): OFF"}
+              </button>
+
+              <button
+                type="button"
+                className="panel-vivo-btn-primario"
+                disabled={iniciandoStream}
+                onClick={() => void manejarReproducirYSincronizar()}
+              >
+                {iniciandoStream
+                  ? "Iniciando telemetría 5 Hz..."
+                  : workerTransmitiendo
+                    ? "Reiniciar sincronización 5 Hz"
+                    : "Reproducir y Analizar en Vivo (5 Hz)"}
+              </button>
+            </div>
+          </div>
+
+          {/* Subbarra según la fuente elegida */}
+          {fuente === "servidor" && (
+            <div className="visor-sincro-subbarra">
+              {cargandoLista ? (
+                <span className="visor-sincro-nota">Buscando videos subidos para este partido...</span>
+              ) : videosServidor.length > 0 ? (
+                <div className="visor-sincro-selector-linea">
+                  <label htmlFor="select-video-partido" className="panel-control-etiqueta">
+                    Grabación del partido:
+                  </label>
+                  <select
+                    id="select-video-partido"
+                    className="panel-control-select"
+                    value={videoSeleccionadoId ?? ""}
+                    onChange={(e) => {
+                      const nuevoId = Number(e.target.value);
+                      setVideoSeleccionadoId(nuevoId);
+                      void activarSincronizacion5Hz(0, nuevoId);
+                    }}
+                  >
+                    {videosServidor.map((v) => (
+                      <option key={v.id} value={v.id}>
+                        {v.nombre} ({v.resolucion ?? "HD"} · {v.fps ? `${Math.round(v.fps)} fps` : "30 fps"} ·{" "}
+                        {v.estado})
+                      </option>
+                    ))}
+                  </select>
+
+                  <button
+                    type="button"
+                    className="panel-vivo-btn-peligro"
+                    disabled={eliminandoVideo || !videoSeleccionadoId}
+                    onClick={() => void manejarEliminarVideoSeleccionado()}
+                    title="Eliminar este video del servidor y liberar espacio"
+                  >
+                    {eliminandoVideo ? "Eliminando..." : "Eliminar video"}
+                  </button>
+
+                  <Link
+                    to={`/vision/videos?partidoId=${partidoId}`}
+                    className="panel-vivo-btn-secundario"
+                    style={{ textDecoration: "none", display: "inline-flex", alignItems: "center" }}
+                    title="Administrar o subir nuevos videos para este partido"
+                  >
+                    Gestionar videos
+                  </Link>
+                </div>
+              ) : (
+                <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
+                  <span className="visor-sincro-nota">
+                    Este partido aún no tiene videos guardados en el servidor. Puedes usar las pestañas{" "}
+                    <strong>«Cargar video desde mi PC»</strong> o <strong>«Cámara en vivo»</strong> aquí mismo.
+                  </span>
+                  <Link
+                    to={`/vision/videos?partidoId=${partidoId}`}
+                    className="panel-vivo-btn-accion"
+                    style={{ textDecoration: "none" }}
+                  >
+                    Subir video al servidor
+                  </Link>
+                </div>
+              )}
+            </div>
+          )}
+
+          {fuente === "archivo" && (
+            <div className="visor-sincro-subbarra">
+              <label className="visor-archivo-label">
+                <span>Seleccionar video MP4 / MOV / WebM de tu equipo:</span>
+                <input
+                  type="file"
+                  accept="video/mp4,video/quicktime,video/webm,video/x-matroska"
+                  onChange={manejarSeleccionArchivoLocal}
+                />
+              </label>
+              {nombreArchivoLocal && (
+                <span className="visor-sincro-nota">Archivo cargado: {nombreArchivoLocal}</span>
+              )}
+            </div>
+          )}
+
+          {fuente === "camara" && (
+            <div className="visor-sincro-subbarra">
+              {dispositivosCamara.length > 0 && (
+                <div className="visor-sincro-selector-linea">
+                  <label htmlFor="select-camara-vivo" className="panel-control-etiqueta">
+                    Dispositivo de cámara:
+                  </label>
+                  <select
+                    id="select-camara-vivo"
+                    className="panel-control-select"
+                    value={dispositivoCamaraId}
+                    onChange={(e) => {
+                      setDispositivoCamaraId(e.target.value);
+                      void iniciarCamaraEnVivo(e.target.value);
+                    }}
+                  >
+                    {dispositivosCamara.map((d, i) => (
+                      <option key={d.deviceId || i} value={d.deviceId}>
+                        {d.label || `Cámara ${i + 1}`}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              {camaraActiva ? (
+                <button
+                  type="button"
+                  className="panel-vivo-btn-secundario"
+                  onClick={detenerCamara}
+                >
+                  Detener cámara
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="panel-vivo-btn-accion"
+                  onClick={() => void iniciarCamaraEnVivo(dispositivoCamaraId || undefined)}
+                >
+                  Encender cámara
+                </button>
+              )}
+            </div>
+          )}
+
+          {errorFuente && (
+            <div className="panel-vivo-alerta panel-vivo-alerta--aviso" role="alert">
+              <span>{errorFuente}</span>
+            </div>
+          )}
+
+          {/* Marco del reproductor de video / cámara con HUD YOLO superpuesto */}
+          <div className="visor-sincro-stage">
+            {fuente === "camara" ? (
+              <div className="visor-video-canvas-wrapper">
+                <div className="visor-video-inner-container">
+                  <video
+                    ref={camaraVideoRef}
+                    className="visor-sincro-video"
+                    playsInline
+                    muted
+                    autoPlay
+                  />
+                  {/* Capa de superposición YOLO + ByteTrack sincronizada con `jugadores` y `balon` */}
+                  {mostrarOverlayYolo && (jugadoresUnicos.length > 0 || balon !== null) && (
+                    <div className="visor-yolo-overlay" aria-hidden="true">
+                      <div className="visor-yolo-badge-superior">
+                        <span>YOLOv8 + ByteTrack · {jugadoresUnicos.length} tracks activos</span>
+                        <span>Homografía 105x68m sincronizada (5.0 Hz)</span>
+                      </div>
+
+                      {jugadoresUnicos.map((j) => {
+                        const estilo = obtenerEstiloCaja(j.equipo);
+
+                        if (!j.bbox || j.bbox.length !== 4) {
+                          return null;
+                        }
+
+                        const [x1, y1, x2, y2] = j.bbox;
+                        const wPct = Math.max(1.8, x2 - x1);
+                        const hPct = Math.max(3.2, y2 - y1);
+                        return (
+                          <div
+                            key={j.tid}
+                            className="visor-yolo-bbox"
+                            style={{
+                              left: `${x1}%`,
+                              top: `${y1}%`,
+                              width: `${wPct}%`,
+                              height: `${hPct}%`,
+                              borderColor: estilo.borde,
+                            }}
+                          >
+                            <span
+                              className="visor-yolo-bbox-tag"
+                              style={{
+                                backgroundColor: estilo.fondoTag,
+                                color: estilo.textoTag,
+                              }}
+                            >
+                              {j.dorsal != null ? `#${j.dorsal}` : `ID:${j.tid}`}
+                            </span>
+                          </div>
+                        );
+                      })}
+
+                      {balon && balon.bbox && balon.bbox.length === 4 && (
+                        <div
+                          className="visor-yolo-balon"
+                          style={{
+                            left: `${balon.bbox[0]}%`,
+                            top: `${balon.bbox[1]}%`,
+                            width: `${Math.max(1.4, balon.bbox[2] - balon.bbox[0])}%`,
+                            height: `${Math.max(2.2, balon.bbox[3] - balon.bbox[1])}%`,
+                          }}
+                        >
+                          <span className="visor-yolo-balon-tag">BALÓN</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : videoSrcUrl ? (
+              <div className="visor-video-canvas-wrapper">
+                <div className="visor-video-inner-container">
+                  <video
+                    ref={videoRef}
+                    src={videoSrcUrl}
+                    className="visor-sincro-video"
+                    controls
+                    playsInline
+                    loop
+                    onLoadedData={() => {
+                      if (videoRef.current) {
+                        sincronizarMuestraPorTiempo(videoRef.current.currentTime);
+                      }
+                    }}
+                    onTimeUpdate={() => {
+                      if (videoRef.current) {
+                        sincronizarMuestraPorTiempo(videoRef.current.currentTime);
+                      }
+                    }}
+                    onPlay={() => {
+                      const t = videoRef.current ? videoRef.current.currentTime : 0;
+                      sincronizarMuestraPorTiempo(t);
+                      if (muestrasLocales.length === 0) {
+                        void activarSincronizacion5Hz(t);
+                      }
+                    }}
+                    onPause={() => {
+                      if (muestrasLocales.length === 0) {
+                        void pausarSincronizacion();
+                      }
+                    }}
+                    onSeeked={() => {
+                      if (videoRef.current) {
+                        const t = videoRef.current.currentTime;
+                        sincronizarMuestraPorTiempo(t);
+                        if (muestrasLocales.length === 0) {
+                          if (!videoRef.current.paused) {
+                            void activarSincronizacion5Hz(t);
+                          } else {
+                            // Al mover la barra en pausa, sincronizar el fotograma actual en el radar 2D
+                            void activarSincronizacion5Hz(t).then(() => {
+                              void pausarSincronizacion();
+                            });
+                          }
+                        }
+                      }
+                    }}
+                    onEnded={() => {
+                      if (muestrasLocales.length === 0) {
+                        void pausarSincronizacion();
+                      }
+                    }}
+                  />
+                  {/* Capa de superposición YOLO + ByteTrack sincronizada con `jugadores` y `balon` */}
+                  {mostrarOverlayYolo && (jugadoresUnicos.length > 0 || balon !== null) && (
+                    <div className="visor-yolo-overlay" aria-hidden="true">
+                      <div className="visor-yolo-badge-superior">
+                        <span>YOLOv8 + ByteTrack · {jugadoresUnicos.length} tracks activos</span>
+                        <span>Homografía 105x68m sincronizada (5.0 Hz)</span>
+                      </div>
+
+                      {jugadoresUnicos.map((j) => {
+                        const estilo = obtenerEstiloCaja(j.equipo);
+
+                        if (!j.bbox || j.bbox.length !== 4) {
+                          return null;
+                        }
+
+                        const [x1, y1, x2, y2] = j.bbox;
+                        const wPct = Math.max(1.8, x2 - x1);
+                        const hPct = Math.max(3.2, y2 - y1);
+                        return (
+                          <div
+                            key={j.tid}
+                            className="visor-yolo-bbox"
+                            style={{
+                              left: `${x1}%`,
+                              top: `${y1}%`,
+                              width: `${wPct}%`,
+                              height: `${hPct}%`,
+                              borderColor: estilo.borde,
+                            }}
+                          >
+                            <span
+                              className="visor-yolo-bbox-tag"
+                              style={{
+                                backgroundColor: estilo.fondoTag,
+                                color: estilo.textoTag,
+                              }}
+                            >
+                              {j.dorsal != null ? `#${j.dorsal}` : `ID:${j.tid}`}
+                            </span>
+                          </div>
+                        );
+                      })}
+
+                      {balon && balon.bbox && balon.bbox.length === 4 && (
+                        <div
+                          className="visor-yolo-balon"
+                          style={{
+                            left: `${balon.bbox[0]}%`,
+                            top: `${balon.bbox[1]}%`,
+                            width: `${Math.max(1.4, balon.bbox[2] - balon.bbox[0])}%`,
+                            height: `${Math.max(2.2, balon.bbox[3] - balon.bbox[1])}%`,
+                          }}
+                        >
+                          <span className="visor-yolo-balon-tag">BALÓN</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="visor-sincro-placeholder">
+                <strong>
+                  {cargandoBinario
+                    ? "Cargando transmisión de video del partido..."
+                    : "Selecciona un video o activa la cámara en vivo"}
+                </strong>
+                <p>
+                  Al darle reproducir, el motor de visión transmite las posiciones a 5 Hz y el
+                  Radar 2D inferior mueve las 22 fichas y el balón en sincronía.
+                </p>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+

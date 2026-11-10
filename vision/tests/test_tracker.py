@@ -61,3 +61,26 @@ def test_filtra_por_confianza_y_por_clase_desconocida():
     assert d.conf == 0.9
     assert d.caja == (0.0, 0.0, 10.0, 20.0)
     assert d.punto_apoyo == (5.0, 20.0)
+
+
+def test_descarta_cajas_degeneradas_gigantes_y_duplicados_de_tid():
+    # Caja 1: Jugador normal (w=20, h=50) -> ACEPTADA
+    # Caja 2: Caja gigante aberrante de tribuna (w=200, h=600) -> DESCARTADA
+    # Caja 3: Mismo TID 1 duplicado en el mismo fotograma -> DESCARTADA
+    # Caja 4: Balón normal (w=12, h=12) -> ACEPTADA
+    cajas = _Cajas(
+        xyxy=_Tensor([
+            [100.0, 200.0, 120.0, 250.0],
+            [50.0, 10.0, 300.0, 700.0],
+            [105.0, 202.0, 122.0, 252.0],
+            [300.0, 400.0, 312.0, 412.0],
+        ]),
+        id=_Tensor([1.0, 6.0, 1.0, 99.0]),
+        cls=_Tensor([0.0, 0.0, 0.0, 32.0]),
+        conf=_Tensor([0.88, 0.75, 0.85, 0.92]),
+    )
+    detecciones = _adaptar(_Resultado(boxes=cajas), _config(confianza_min=0.3))
+    assert len(detecciones) == 2
+    assert [d.tid for d in detecciones] == [1, 99]
+    assert detecciones[0].clase == Clase.JUGADOR
+    assert detecciones[1].clase == Clase.BALON

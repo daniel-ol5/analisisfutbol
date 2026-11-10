@@ -10,11 +10,10 @@ Método: DLT con normalización de Hartley y ajuste por mínimos cuadrados sobre
 TODOS los puntos. Se evita RANSAC a propósito: descartaría los puntos mal
 marcados y el error informado dejaría de ser honesto.
 
-TODO T-036 (Alejandra): la corrección de la distorsión del lente queda FUERA de
-T-029. Los puntos de imagen entran tal cual los marcó el usuario. Cuando se
-integre `app.vision.calibracion.corregir_puntos`, debe aplicarse ANTES de llamar
-a `calcular_homografia` (requiere ampliar el contrato: `coef_distorsion` solo no
-alcanza, falta la matriz de la cámara y el tamaño de imagen).
+T-036: la corrección de la distorsión del lente queda FUERA de esta función.
+Si la calibración trae la intrínseca completa (matriz_camara, coef_distorsion,
+tamano_imagen), `app/vision/service.py::_puntos_imagen` aplica
+`app.vision.calibracion.corregir_puntos` ANTES de llamar a `calcular_homografia`.
 """
 
 from collections.abc import Sequence

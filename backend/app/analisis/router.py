@@ -6,8 +6,9 @@ Responsables segun el Sprint Planning:
     CU-45, CU-47, CU-48  avanzadas      · S4 · Alex
 """
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 
+from app.analisis import metricas as svc_metricas
 from app.analisis.schemas import (
     Comparativa,
     EventoDerivado,
@@ -15,37 +16,92 @@ from app.analisis.schemas import (
     LineaTiempo,
     MapaCalor,
     MetricaJugador,
+    MetricasJugadorPorIntervalo,
     MetricasPartido,
     RedPases,
 )
-from app.core.deps import Actual, Db
+from app.analisis.service import calcular_mapa_calor
+from app.core.deps import Actual, Db, requiere_rol
 from app.core.pendiente import RESPUESTA_501, pendiente
 
 router = APIRouter(responses=RESPUESTA_501)
+
+_RESPUESTA_404 = {404: {"description": "Partido inexistente o de otro club"}}
+_EQUIPO = Query(None, description="LOCAL o VISITANTE; sin filtro, los dos. Otro valor: 422")
 
 
 # ---------------- CU-42 · Posesion y circulacion ----------------
 
 @router.get("/partidos/{partido_id}/metricas", response_model=MetricasPartido,
-            summary="CU-42 · Metricas de equipo acumuladas y de los ultimos 5 minutos")
+            responses=_RESPUESTA_404,
+            summary="CU-42 · Metricas de equipo acumuladas y de los ultimos 5 minutos",
+            description=(
+                "T-074. Posesion: en cada muestra con balon visible, el jugador de campo mas "
+                "cercano; a 2 m o menos posee su equipo, si no es disputa. Sin balon visible "
+                "no se asigna. local + visitante + disputa = 100. Con el partido en juego "
+                "incluye el intervalo en curso y `ultimos_5_min_*` es una ventana movil."
+            ))
 async def metricas(partido_id: int, usuario: Actual, db: Db) -> MetricasPartido:
-    pendiente("CU-42", "Sprint 3", "Alejandra")
+    return await svc_metricas.metricas_partido(db, usuario, partido_id)
 
 
 @router.get("/partidos/{partido_id}/metricas/intervalos", response_model=list[Intervalo],
-            summary="CU-46 · Evolucion por intervalos de 5 minutos")
+            responses=_RESPUESTA_404,
+            summary="CU-46 · Evolucion por intervalos de 5 minutos",
+            description=(
+                "T-076. Solo intervalos CERRADOS: se cierran durante el partido, al llegar la "
+                "primera muestra del siguiente. Al finalizar, el ultimo se cierra como parcial "
+                "(`minuto_hasta` es el de su ultima muestra)."
+            ))
 async def intervalos(partido_id: int, usuario: Actual, db: Db) -> list[Intervalo]:
-    pendiente("CU-46", "Sprint 3", "Alejandra")
+    return await svc_metricas.listar_intervalos(db, usuario, partido_id)
+
+
+@router.post("/partidos/{partido_id}/metricas/recalcular", response_model=MetricasPartido,
+             dependencies=[Depends(requiere_rol("ADMIN", "ANALISTA"))],
+             responses={**_RESPUESTA_404,
+                        403: {"description": "Requiere rol ADMIN o ANALISTA"},
+                        409: {"description": "El partido esta EN_CURSO"}},
+             summary="CU-46 · Recalcular las metricas desde las posiciones guardadas",
+             description=(
+                 "T-076. Pasa las filas de `posicion`, ordenadas por t, por el mismo motor que "
+                 "en vivo y reemplaza los intervalos guardados. Util tras procesar un video "
+                 "grabado o tras asignar el arquero. No disponible con el partido EN_CURSO."
+             ))
+async def recalcular_metricas(partido_id: int, usuario: Actual, db: Db) -> MetricasPartido:
+    return await svc_metricas.recalcular(db, usuario, partido_id)
 
 
 # ---------------- CU-43 · Metricas fisicas ----------------
 
 @router.get("/partidos/{partido_id}/metricas/jugadores", response_model=list[MetricaJugador],
-            summary="CU-43 · Distancia, velocidad maxima y sprints por jugador")
+            responses=_RESPUESTA_404,
+            summary="CU-43 · Distancia, velocidad maxima y sprints por jugador",
+            description=(
+                "T-075. Ordenado por distancia. Distancia sobre la trayectoria suavizada; "
+                "velocidad en ventana de 1 s; sprint = mas de 21 km/h sostenido 1 s. Se "
+                "calcula por track y se convierte a jugador con las asignaciones (CU-34, "
+                "CU-35): un track sin asignar suma a su equipo pero no aparece aqui."
+            ))
 async def metricas_jugadores(partido_id: int, usuario: Actual, db: Db,
-                             equipo: str | None = None) -> list[MetricaJugador]:
+                             equipo: str | None = _EQUIPO) -> list[MetricaJugador]:
     # Regla: un identificador sin jugador asignado no produce metricas individuales.
-    pendiente("CU-43", "Sprint 3", "Alejandra")
+    return await svc_metricas.metricas_jugadores(db, usuario, partido_id, equipo)
+
+
+@router.get("/partidos/{partido_id}/metricas/jugadores/intervalos",
+            response_model=list[MetricasJugadorPorIntervalo],
+            responses=_RESPUESTA_404,
+            summary="CU-43 · Metricas fisicas por jugador en cada intervalo de 5 minutos",
+            description=(
+                "T-075. Una entrada por intervalo cerrado con `minuto_desde`, `minuto_hasta`, "
+                "`distancia_m`, `velocidad_max_kmh`, `sprints` y `minutos_jugados`. Un sprint "
+                "cuenta en el intervalo donde empieza."
+            ))
+async def metricas_jugadores_intervalos(
+    partido_id: int, usuario: Actual, db: Db, equipo: str | None = _EQUIPO,
+) -> list[MetricasJugadorPorIntervalo]:
+    return await svc_metricas.metricas_jugadores_intervalos(db, usuario, partido_id, equipo)
 
 
 # ---------------- CU-44 · Mapas de calor ----------------
@@ -58,7 +114,15 @@ async def mapa_calor(partido_id: int, usuario: Actual, db: Db,
                      desde_minuto: int = 0,
                      hasta_minuto: int = 90) -> MapaCalor:
     # Regla: las coordenadas se normalizan por direccion de ataque antes de agregarse.
-    pendiente("CU-44", "Sprint 3", "Daniel")
+    return await calcular_mapa_calor(
+        partido_id=partido_id,
+        alcance=alcance,  # type: ignore[arg-type]
+        referencia_id=referencia_id,
+        desde_minuto=desde_minuto,
+        hasta_minuto=hasta_minuto,
+        usuario=usuario,
+        db=db,
+    )
 
 
 # ---------------- CU-47, CU-48 · Linea de tiempo y red de pases ----------------

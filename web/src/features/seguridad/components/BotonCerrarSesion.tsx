@@ -1,3 +1,4 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -16,6 +17,7 @@ export function BotonCerrarSesion({
   children?: ReactNode;
 }) {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [cerrando, setCerrando] = useState(false);
 
   async function alPulsar() {
@@ -25,6 +27,7 @@ export function BotonCerrarSesion({
     } catch {
       // Se ignora a propósito: la sesión local se limpia igualmente.
     }
+    queryClient.clear();
     cerrarSesion();
     navigate("/login", { replace: true });
   }

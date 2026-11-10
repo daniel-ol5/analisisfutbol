@@ -1,6 +1,7 @@
 """Modelos de Gestión Deportiva  —  CU-09 … CU-17.
 
-Tablas: Equipo, Jugador, Competicion, Partido, Alineacion, AlineacionJugador
+Tablas: Equipo, Jugador, Competicion, Partido, Alineacion, AlineacionJugador,
+Posicion
 
 Todas las tablas de este paquete llevan `club_id` para el aislamiento entre
 clubes (Pb-03), salvo las que cuelgan de otra que ya lo tenga.
@@ -9,14 +10,18 @@ clubes (Pb-03), salvo las que cuelgan de otra que ya lo tenga.
 from datetime import UTC, date, datetime
 
 from sqlalchemy import (
+    BigInteger,
+    Boolean,
     Date,
     DateTime,
     Float,
     ForeignKey,
     Index,
     Integer,
+    Numeric,
     String,
     UniqueConstraint,
+    false,
     text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -176,3 +181,34 @@ class AlineacionJugador(Base):
 
     alineacion: Mapped["Alineacion"] = relationship(back_populates="jugadores_alineados")
     jugador: Mapped["Jugador"] = relationship()
+
+
+class Posicion(Base):
+    """Posición de un track en un instante del partido (T-033).
+
+    La escribe la ingesta del worker (`/partido/{id}/ingesta`) y el
+    procesamiento de video grabado, siempre por lotes con un solo INSERT
+    (`PosicionesEnLote` en `app/partido/service.py`). Tipos de
+    docs/diagramas/modelo-datos.puml. Sin `club_id`: cuelga de `partido`, que
+    ya lo tiene. Sin columna de equipo: la asignación de track a jugador vive
+    en `asignacion_track`.
+    """
+
+    __tablename__ = "posicion"
+    __table_args__ = (
+        # Replay y mapas consultan siempre un partido en un rango de tiempo.
+        Index("ix_posicion_partido_t", "partido_id", "t"),
+    )
+
+    # Un partido son ~620.000 filas: BigInteger. En SQLite solo INTEGER autoincrementa.
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"), primary_key=True
+    )
+    partido_id: Mapped[int] = mapped_column(ForeignKey("partido.id", ondelete="CASCADE"))
+    t: Mapped[float] = mapped_column(Numeric(8, 2, asdecimal=False))
+    track_id: Mapped[int] = mapped_column(Integer)
+    x_m: Mapped[float] = mapped_column(Numeric(6, 2, asdecimal=False))
+    y_m: Mapped[float] = mapped_column(Numeric(6, 2, asdecimal=False))
+    confianza: Mapped[float | None] = mapped_column(Numeric(4, 3, asdecimal=False), nullable=True)
+    # T-074: el balón es una fila más; esto lo distingue de los jugadores al recalcular.
+    es_balon: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())

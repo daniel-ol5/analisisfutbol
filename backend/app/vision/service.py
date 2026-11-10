@@ -6,6 +6,8 @@ lanza excepciones de dominio. Así se prueba sin levantar el servidor.
 
 from datetime import UTC, datetime
 
+import cv2
+import numpy as np
 from fastapi import HTTPException, status
 from sqlalchemy import update
 from sqlalchemy.exc import IntegrityError
@@ -13,6 +15,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import UsuarioActual
 from app.core.tenancy import del_club, verificar_pertenencia
+from app.deportivo.models import Partido
+from app.vision.calibracion import CalibracionInsuficiente, calibrar, corregir_puntos
+from app.vision.calibracion import CalibracionIntrinseca as CalibracionIntrinsecaLente
 from app.vision.homografia import (
     UMBRAL_ERROR_MEDIO_M,
     HomografiaError,
@@ -39,11 +44,31 @@ async def obtener_calibracion(
     return verificar_pertenencia(await _buscar_calibracion(db, usuario, partido_id), usuario)
 
 
+def _puntos_imagen(datos: CalibracionGuardar) -> list[tuple[float, float]] | np.ndarray:
+    """T-036 (CU-23): los puntos marcados, corregidos del lente si llegó la
+    calibración intrínseca completa. Si no, tal cual (como antes de T-036).
+
+    Se corrige con `alfa=0`: el worker tiene que usar el mismo `alfa` al
+    corregir cada detección antes de aplicar `matriz_h`.
+    """
+    puntos = [(p.x, p.y) for p in datos.puntos_imagen]
+    if not datos.tiene_intrinseca:
+        return puntos
+    intrinseca = CalibracionIntrinsecaLente.desde_dict({
+        "matriz_camara": datos.matriz_camara, "coef_distorsion": datos.coef_distorsion,
+        "tamano_imagen": datos.tamano_imagen})
+    try:
+        return corregir_puntos(puntos, intrinseca, alfa=0.0)
+    except cv2.error:
+        raise HTTPException(422, "No se pudo corregir la distorsión con esa matriz_camara "
+                                 "y esos coef_distorsion") from None
+
+
 def _calcular(datos: CalibracionGuardar) -> ResultadoHomografia:
     """Homografía de los puntos recibidos. Datos inservibles -> 422 con el motivo."""
     try:
         return calcular_homografia(
-            [(p.x, p.y) for p in datos.puntos_imagen],
+            _puntos_imagen(datos),   # T-036: corregidos antes de la homografía
             [(p.x, p.y) for p in datos.puntos_cancha],
         )
     except HomografiaError as e:
@@ -101,7 +126,9 @@ async def guardar_calibracion(
     calibracion.puntos_imagen = [p.model_dump() for p in datos.puntos_imagen]
     calibracion.puntos_cancha = [p.model_dump() for p in datos.puntos_cancha]
     calibracion.coef_distorsion = datos.coef_distorsion
-    # TODO T-036: los puntos entran sin corregir la distorsion del lente (ver homografia.py).
+    # T-036: `resultado` ya se calculó con los puntos corregidos si llegó la intrínseca.
+    calibracion.matriz_camara = datos.matriz_camara
+    calibracion.tamano_imagen = datos.tamano_imagen
     calibracion.matriz_h = resultado.matriz
     calibracion.error_medio_m = resultado.error_medio_m
     calibracion.error_max_m = resultado.error_max_m
@@ -118,6 +145,82 @@ async def guardar_calibracion(
         ) from None
     await db.refresh(calibracion)
     return calibracion, creada
+
+
+# ---------------- CU-23 · Calibración intrínseca del lente (T-036) ----------------
+
+MIN_FOTOS_TABLERO = 5
+MAX_FOTOS_TABLERO = 20
+MAX_BYTES_FOTO = 10 * 1024 * 1024   # 10 MB por foto
+
+
+def calibrar_intrinseca(fotos: list[bytes], patron: tuple[int, int]) -> CalibracionIntrinsecaLente:
+    """CU-23: K y coeficientes del lente a partir de fotos de un tablero de ajedrez.
+
+    Es CPU puro (decodificar y `cv2.calibrateCamera`, cientos de ms): el router
+    la llama con `run_in_threadpool` para no bloquear el event loop. No guarda
+    nada: el resultado se envía después en POST /partidos/{id}/calibracion.
+    """
+    imagenes = []
+    for i, datos in enumerate(fotos):
+        imagen = cv2.imdecode(np.frombuffer(datos, np.uint8), cv2.IMREAD_GRAYSCALE)
+        if imagen is None:
+            raise HTTPException(422, f"La foto {i} no es una imagen JPG o PNG legible")
+        imagenes.append(imagen)
+    try:
+        return calibrar(imagenes, patron)
+    except CalibracionInsuficiente as e:
+        raise HTTPException(422, (
+            f"{e}. El tablero debe verse ENTERO en cada foto, con {patron[0]} x {patron[1]} "
+            "esquinas interiores (columnas y filas en los parámetros)")) from None
+    except ValueError as e:   # fotos de distinto tamaño
+        raise HTTPException(422, str(e)) from None
+
+
+# ---------------- CU-22 · Calibración previa de la sede (T-035) ----------------
+
+ADVERTENCIA_CAMARA_MOVIDA = (
+    "Calibración reutilizada de un partido anterior en la misma sede. Antes de "
+    "usarla, verifica que la cámara no se haya movido (posición, altura, "
+    "inclinación o zoom): si se movió, hay que volver a calibrar. Una forma "
+    "rápida de comprobarlo es POST /calibracion/validar con puntos marcados "
+    "sobre el cuadro actual."
+)
+
+
+def normalizar_sede(sede: str) -> str:
+    """Clave de comparación: sin mayúsculas, sin espacios al inicio o al final
+    y con los espacios repetidos colapsados ("  Cancha   Norte " = "cancha norte")."""
+    return " ".join(sede.split()).casefold()
+
+
+async def calibracion_previa(db: AsyncSession, usuario: UsuarioActual, sede: str) -> Calibracion:
+    """CU-22: la calibración válida más reciente del club en un partido de esa sede.
+
+    La sede vive en `partido` (texto libre), así que se une `calibracion` con
+    `partido` por `partido_id`, las dos filtradas por el club con `tenancy`.
+    La comparación se hace en Python y no en SQL: `lower()` de SQLite no pasa a
+    minúsculas las letras acentuadas ("ESTADIO ÑUÑOA"), y colapsar espacios no
+    se escribe igual en SQLite y PostgreSQL. Son pocas filas: una calibración
+    por partido del club.
+
+    "Más reciente" es por `creada_en` (y luego por id). 404 si no hay ninguna.
+    """
+    clave = normalizar_sede(sede)
+    partidos = del_club(Partido, usuario).subquery()
+    stmt = (
+        del_club(Calibracion, usuario)
+        .add_columns(partidos.c.sede)
+        .join(partidos, partidos.c.id == Calibracion.partido_id)
+        .where(Calibracion.valida.is_(True))
+        .order_by(Calibracion.creada_en.desc(), Calibracion.id.desc())
+    )
+    if clave:
+        for calibracion, sede_partido in (await db.execute(stmt)).all():
+            if normalizar_sede(sede_partido) == clave:
+                return calibracion
+    raise HTTPException(status.HTTP_404_NOT_FOUND,
+                        "No hay una calibración válida previa del club en esa sede")
 
 
 # ---------------- CU-29 · Modelos ----------------

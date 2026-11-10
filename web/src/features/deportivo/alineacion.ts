@@ -224,8 +224,22 @@ export function asignar(
   estado: EstadoAlineacion,
   jugador: Jugador,
   destino: RolEnAlineacion,
+  puestoPreferido: number | null = null,
 ): EstadoAlineacion {
-  if (rolDe(estado, jugador.id) === destino) return estado;
+  if (
+    rolDe(estado, jugador.id) === destino &&
+    (destino !== "titular" || puestoPreferido === null)
+  ) {
+    return estado;
+  }
+  if (
+    destino === "titular" &&
+    puestoPreferido !== null &&
+    puestoPreferido >= 0 &&
+    puestoPreferido < TITULARES
+  ) {
+    return colocarEnPuesto(estado, jugador.id, puestoPreferido);
+  }
   const base = sinJugador(estado, jugador.id);
   if (destino === "suplente") return { ...base, suplentes: [...base.suplentes, jugador.id] };
   if (destino === "fuera") return base;
@@ -235,6 +249,141 @@ export function asignar(
   const { x, y } = PUESTOS[base.formacion][puesto];
   const titulares = [...base.titulares];
   titulares[puesto] = { jugadorId: jugador.id, x, y };
+  return { ...base, titulares };
+}
+
+/**
+ * Coloca o intercambia a un jugador directamente en el puesto `indicePuesto` (0..10)
+ * de la formación activa.
+ */
+export function colocarEnPuesto(
+  estado: EstadoAlineacion,
+  jugadorId: number,
+  indicePuesto: number,
+): EstadoAlineacion {
+  if (indicePuesto < 0 || indicePuesto >= TITULARES) return estado;
+  const puestos = PUESTOS[estado.formacion];
+  const destinoPunto = puestos[indicePuesto];
+  const origenIndice = estado.titulares.findIndex((t) => t?.jugadorId === jugadorId);
+  const ocupanteDestino = estado.titulares[indicePuesto];
+
+  // Si ya estaba de titular en otro puesto, intercambia puestos (o se muda al puesto libre)
+  if (origenIndice !== -1) {
+    if (origenIndice === indicePuesto) {
+      return mover(estado, jugadorId, destinoPunto.x, destinoPunto.y);
+    }
+    const titulares = [...estado.titulares];
+    const origenPunto = puestos[origenIndice];
+    titulares[indicePuesto] = {
+      jugadorId,
+      x: destinoPunto.x,
+      y: destinoPunto.y,
+    };
+    titulares[origenIndice] = ocupanteDestino
+      ? {
+          jugadorId: ocupanteDestino.jugadorId,
+          x: origenPunto.x,
+          y: origenPunto.y,
+        }
+      : null;
+    return { ...estado, titulares };
+  }
+
+  // Viene de suplentes o de fuera
+  const eraSuplente = estado.suplentes.includes(jugadorId);
+  const suplentesSinNuevo = estado.suplentes.filter((id) => id !== jugadorId);
+  const titulares = [...estado.titulares];
+  titulares[indicePuesto] = {
+    jugadorId,
+    x: destinoPunto.x,
+    y: destinoPunto.y,
+  };
+
+  let nuevosSuplentes = suplentesSinNuevo;
+  let nuevoCapitan = estado.capitanId;
+  if (ocupanteDestino) {
+    if (eraSuplente) {
+      nuevosSuplentes = [...suplentesSinNuevo, ocupanteDestino.jugadorId];
+    }
+    if (nuevoCapitan === ocupanteDestino.jugadorId) {
+      nuevoCapitan = jugadorId;
+    }
+  }
+
+  return {
+    ...estado,
+    titulares,
+    suplentes: nuevosSuplentes,
+    capitanId: nuevoCapitan,
+  };
+}
+
+/**
+ * Encuentra el índice de puesto (0..10) más cercano a `(x, y)` dentro de `radioMax`,
+ * considerando tanto las coordenadas base de la formación como la posición actual de la ficha.
+ */
+export function puestoCercanoEnCancha(
+  estado: EstadoAlineacion,
+  x: number,
+  y: number,
+  radioMax = 9,
+): number | null {
+  const puestos = PUESTOS[estado.formacion];
+  let mejorIndice: number | null = null;
+  let mejorDist2 = radioMax * radioMax;
+
+  for (let i = 0; i < TITULARES; i++) {
+    const titular = estado.titulares[i];
+    const refX = titular ? titular.x : puestos[i].x;
+    const refY = titular ? titular.y : puestos[i].y;
+    const d2 = (refX - x) ** 2 + (refY - y) ** 2;
+    if (d2 <= mejorDist2) {
+      mejorDist2 = d2;
+      mejorIndice = i;
+    }
+    // También comprobar contra el círculo base del puesto si el titular se movió lejos
+    const dBase2 = (puestos[i].x - x) ** 2 + (puestos[i].y - y) ** 2;
+    if (dBase2 <= mejorDist2) {
+      mejorDist2 = dBase2;
+      mejorIndice = i;
+    }
+  }
+  return mejorIndice;
+}
+
+/**
+ * Suelta un jugador (desde el listado lateral o arrastrado en cancha) en `(x, y)`.
+ * - Si cae cerca de un puesto (libre u ocupado), se asigna o intercambia en ese puesto.
+ * - Si cae en zona libre de la cancha y aún faltan titulares, ocupa el puesto libre más
+ *   cercano pero conservando la coordenada exacta `(x, y)` donde se soltó.
+ */
+export function soltarEnCancha(
+  estado: EstadoAlineacion,
+  jugadorId: number,
+  x: number,
+  y: number,
+): EstadoAlineacion {
+  const xClamped = redondear(x);
+  const yClamped = redondear(y);
+  const cercano = puestoCercanoEnCancha(estado, xClamped, yClamped, 9);
+
+  if (cercano !== null) {
+    return colocarEnPuesto(estado, jugadorId, cercano);
+  }
+
+  // Si ya es titular y lo soltó en una zona libre de la cancha, solo actualiza su (x, y)
+  if (rolDe(estado, jugadorId) === "titular") {
+    return mover(estado, jugadorId, xClamped, yClamped);
+  }
+
+  // Si viene del banco o fuera y lo soltó en un punto libre de la cancha
+  const puestos = PUESTOS[estado.formacion];
+  const libre = puestoLibreMasCercano(estado.titulares, puestos, xClamped, yClamped);
+  if (libre === -1) return estado; // ya hay 11 titulares y no soltó sobre ninguno para reemplazarlo
+
+  const base = sinJugador(estado, jugadorId);
+  const titulares = [...base.titulares];
+  titulares[libre] = { jugadorId, x: xClamped, y: yClamped };
   return { ...base, titulares };
 }
 

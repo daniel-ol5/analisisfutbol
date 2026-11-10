@@ -119,16 +119,25 @@ No necesita GPU, video ni nada fuera de `requirements.txt`.
 2. Crear una cuenta, si no se tiene: en http://localhost:8000/api/docs, usar
    `POST /api/seguridad/registro`. Esa cuenta es ADMIN; también sirve una
    ANALISTA.
-3. Correr el emisor:
+3. Programar el partido (`POST /api/deportivo/partidos`) y calibrar su cámara
+   con una calibración válida (`POST /api/vision/partidos/{id}/calibracion`):
+   sin eso no se puede iniciar.
+4. Correr el emisor:
 
 ```bash
 cd backend
-python scripts/emisor_simulado.py --partido 1 --email admin@miclub.com --password mi-clave
+python scripts/emisor_simulado.py --partido 1 --email admin@miclub.com --password mi-clave --iniciar-partido
 ```
 
-El emisor inicia sesión, pide el token de ingesta del partido y emite durante
-60 s, mostrando el avance cada 5 s. Mientras tanto, abrir el panel en vivo del
-partido 1 en Web o Móvil.
+El emisor inicia sesión, inicia el partido (`POST /api/partido/{id}/iniciar`),
+pide el token de ingesta y emite durante 60 s, mostrando el avance cada 5 s.
+Mientras tanto, abrir el panel en vivo del partido 1 en Web o Móvil.
+
+La ingesta solo acepta partidos **EN_CURSO**: sin `--iniciar-partido`, el
+partido tiene que haberse iniciado antes (desde la Web, por ejemplo), o el
+servidor cierra la conexión con `4409`. Si el inicio falla, el emisor muestra la
+causa (por ejemplo, que falta una calibración válida) y no emite. Si el partido
+ya estaba en curso, sigue sin error.
 
 | Opción | Por defecto | Para qué |
 |---|---|---|
@@ -138,6 +147,8 @@ partido 1 en Web o Móvil.
 | `--frecuencia` | `5` | Mensajes por segundo |
 | `--email` / `--password` | — | Cuenta ADMIN o ANALISTA del club |
 | `--token` | — | Token de ingesta ya emitido, en vez de email y contraseña |
+| `--iniciar-partido` | no | Iniciar el partido antes de conectarse (necesita email y contraseña) |
+| `--ataca-hacia` | `IZQ` | Con `--iniciar-partido`: hacia dónde ataca el local (`IZQ` o `DER`) |
 | `--largo` / `--ancho` | `105` / `68` | Medidas de la cancha en metros |
 | `--semilla` | aleatoria | Repetir exactamente la misma simulación |
 | `--inicio-t` | `0` | Empezar en otro minuto, p. ej. `2700` para el 2do tiempo |
@@ -147,9 +158,9 @@ el balón, el que tiene la pelota se adelanta, el más cercano presiona, y hay
 pases, pérdidas y remates. Las velocidades son humanas (máximo 8 m/s), con
 unos 11 km por jugador cada 90 minutos.
 
-> El partido debe existir y pertenecer al club de la sesión. Puede programarse
-> mediante `POST /api/deportivo/partidos`. Las posiciones se ven en vivo, pero
-> todavía no se guardan hasta implementar la tabla `posicion`.
+> El partido debe existir y pertenecer al club de la sesión. Las posiciones se
+> ven en vivo y **se guardan** en la tabla `posicion`, igual que las de un
+> partido real: conviene usar un partido de prueba.
 
 ### Si cambiás un router o un schema
 

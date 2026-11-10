@@ -12,6 +12,7 @@ import type {
   AlineacionGuardar,
   AvisoColores,
   Competicion,
+  CompeticionCrear,
   Equipo,
   EquipoCrear,
   EquipoEditar,
@@ -153,6 +154,12 @@ export async function exportarJugadoresCsv(
 /** CU-13: competiciones activas disponibles para programar partidos. */
 export async function listarCompeticiones(): Promise<Competicion[]> {
   const { data } = await api.get<Competicion[]>("/deportivo/competiciones");
+  return data;
+}
+
+/** CU-13: registrar una nueva competición en el club. */
+export async function crearCompeticion(datos: CompeticionCrear): Promise<Competicion> {
+  const { data } = await api.post<Competicion>("/deportivo/competiciones", datos);
   return data;
 }
 
