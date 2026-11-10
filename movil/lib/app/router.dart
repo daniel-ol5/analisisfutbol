@@ -52,6 +52,12 @@ final router = GoRouter(
         GoRoute(path: '/deportivo', builder: (_, _) => const DeportivoPagina()),
         GoRoute(path: '/vision', builder: (_, _) => const VisionPagina()),
         GoRoute(path: '/partido', builder: (_, _) => const PartidoPagina()),
+        GoRoute(
+          path: '/partido/:id',
+          builder: (_, estado) => PartidoPagina(
+            partidoId: int.parse(estado.pathParameters['id']!),
+          ),
+        ),
         GoRoute(path: '/analisis', builder: (_, _) => const AnalisisPagina()),
         GoRoute(path: '/asistencia', builder: (_, _) => const AsistenciaPagina()),
       ],
