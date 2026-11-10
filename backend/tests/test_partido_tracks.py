@@ -652,6 +652,14 @@ def test_ingesta_100_mensajes_seguidos_con_mismos_tracks_hace_una_sola_escritura
             )
             pid = part.json()["id"]
 
+            # T-033: /ingesta solo acepta partidos EN_CURSO (si no, cierra con 4409)
+            cal = tc.post(f"/api/vision/partidos/{pid}/calibracion", headers=auth,
+                          json=cuerpo_valido())
+            assert cal.status_code == 201, cal.text
+            ini = tc.post(f"/api/partido/{pid}/iniciar", headers=auth,
+                          json={"ataca_hacia": "IZQ"})
+            assert ini.status_code == 200, ini.text
+
             ws = pila.enter_context(tc.websocket_connect(f"/api/partido/{pid}/ingesta"))
             ws.send_json({"tipo": "auth", "token": token_ingesta(club_id, pid)})
             assert ws.receive_json() == {"tipo": "listo", "partido": pid}

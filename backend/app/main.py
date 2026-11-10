@@ -16,7 +16,7 @@ from app.asistencia.router import router as asistencia
 from app.core.config import settings
 from app.deportivo.router import router as deportivo
 from app.partido.router import router as partido
-from app.partido.service import avisar_provisorios
+from app.partido.service import vaciar_almacen_posiciones
 from app.seguridad.router import router as seguridad
 from app.vision.router import router as vision
 
@@ -27,8 +27,8 @@ from app.vision.router import router as vision
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
-    avisar_provisorios()   # T-032/T-033: modos provisorios hasta T-047
     yield
+    await vaciar_almacen_posiciones()   # T-033: no perder las posiciones pendientes
 
 
 app = FastAPI(

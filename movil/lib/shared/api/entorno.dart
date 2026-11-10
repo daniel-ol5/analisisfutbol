@@ -3,13 +3,16 @@
 ///
 /// Se elige con --dart-define=ENTORNO=dev|mock|prod (default: dev). Un
 /// --dart-define=API_URL=... explícito tiene prioridad sobre el valor del
-/// entorno; es la forma de apuntar a una IP de red local, como la de la
-/// laptop cuando se prueba desde un dispositivo físico:
+/// entorno; por ejemplo, para probar por WiFi con la IP de la laptop:
 ///
 ///   flutter run --dart-define=API_URL=http://192.168.0.27:8000/api
+///
+/// En Android (celular por USB o emulador) se usa 127.0.0.1 y el puerto se
+/// conecta con adb reverse antes de ejecutar la app:
+///
+///   adb reverse tcp:8000 tcp:8000   (dev)
+///   adb reverse tcp:4010 tcp:4010   (mock)
 library;
-
-import 'package:flutter/foundation.dart';
 
 enum Entorno { dev, mock, prod }
 
@@ -24,14 +27,17 @@ const Entorno entornoActual = _nombreEntorno == 'prod'
 
 const String _urlExplicita = String.fromEnvironment('API_URL');
 
-/// En el emulador de Android, `10.0.2.2` apunta al localhost de la máquina
-/// anfitriona. En Web (Chrome/Edge) y escritorio (Windows/macOS/Linux),
-/// `10.0.2.2` no existe y se queda colgado esperando timeout TCP, por lo que
-/// se usa `127.0.0.1`.
-String get _hostLocal =>
-    (!kIsWeb && defaultTargetPlatform == TargetPlatform.android)
-        ? '10.0.2.2'
-        : '127.0.0.1';
+/// Host del backend local.
+///
+/// 127.0.0.1 sirve en todas las plataformas:
+///  - Web y escritorio: es directamente la máquina local.
+///  - Android (celular real o emulador): adb reverse redirige el puerto del
+///    dispositivo al de la laptop por el cable/ADB.
+///
+/// Si se usa el emulador SIN adb reverse, se puede volver a la dirección
+/// especial del emulador con: --dart-define=HOST_LOCAL=10.0.2.2
+const String _hostLocal =
+    String.fromEnvironment('HOST_LOCAL', defaultValue: '127.0.0.1');
 
 /// URL base de la API para el entorno actual.
 ///

@@ -431,6 +431,7 @@ class _PartidoPaginaState extends State<PartidoPagina>
           onPressed: () => context.go('/partidos'),
         ),
         actions: [
+          if (partido != null) IconButton(key: const Key('abrir-resumen'), tooltip: 'Resumen', icon: const Icon(Icons.insights_rounded), onPressed: () => context.push('/partidos/${partido.id}/resumen')), // T-081 (Alejandra): abre el resumen de métricas
           TextButton.icon(
             key: const Key('eventos-pendientes'),
             onPressed: _pendientes > 0 && !_sincronizando

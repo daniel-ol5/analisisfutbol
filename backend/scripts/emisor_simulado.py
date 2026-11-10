@@ -364,19 +364,57 @@ def url_ws(api: str, partido: int) -> str:
     return f"{base}/partido/{partido}/ingesta"
 
 
-def pedir_token(api: str, partido: int, email: str, password: str) -> str:
-    """Inicia sesión y pide un token de ingesta para el partido."""
+def _detalle(r) -> str:
+    """El `detail` de un error de la API, o el cuerpo tal cual."""
+    try:
+        return str(r.json().get("detail", r.text))
+    except ValueError:
+        return r.text
+
+
+def iniciar_partido(http, partido: int, acceso: str, ataca_hacia: str) -> None:
+    """`POST /partido/{id}/iniciar`. La ingesta solo acepta partidos EN_CURSO.
+
+    Si ya estaba en curso, sigue. Cualquier otro rechazo (sin calibración
+    válida, partido cancelado o finalizado...) corta con la causa.
+    """
+    r = http.post(f"/partido/{partido}/iniciar", json={"ataca_hacia": ataca_hacia},
+                  headers={"Authorization": f"Bearer {acceso}"})
+    if r.status_code == 200:
+        print(f"Partido {partido} iniciado (primer tiempo, ataca hacia {ataca_hacia}).")
+        return
+    detalle = _detalle(r)
+    if r.status_code == 409 and "EN_CURSO" in detalle:
+        print(f"El partido {partido} ya estaba en curso.")
+        return
+    causa = {
+        401: "la sesión no es válida",
+        403: "la cuenta no tiene permiso para iniciar partidos",
+        404: "el partido no existe o es de otro club",
+    }.get(r.status_code, detalle)
+    lineas = [f"No se pudo iniciar el partido {partido} ({r.status_code}): {causa}"]
+    if "calibraci" in detalle:
+        lineas.append("  Primero hay que calibrar la cámara del partido "
+                      f"(POST /api/vision/partidos/{partido}/calibracion).")
+    sys.exit("\n".join(lineas))
+
+
+def pedir_token(api: str, partido: int, email: str, password: str,
+                iniciar: bool = False, ataca_hacia: str = "IZQ") -> str:
+    """Inicia sesión, opcionalmente inicia el partido, y pide un token de ingesta."""
     import httpx
 
     with httpx.Client(base_url=api.rstrip("/"), timeout=10) as http:
         r = http.post("/seguridad/login", json={"email": email, "password": password})
         if r.status_code != 200:
-            sys.exit(f"No se pudo iniciar sesión ({r.status_code}): {r.text}")
+            sys.exit(f"No se pudo iniciar sesión ({r.status_code}): {_detalle(r)}")
         acceso = r.json()["access_token"]
+        if iniciar:
+            iniciar_partido(http, partido, acceso, ataca_hacia)
         r = http.post(f"/partido/{partido}/token-ingesta",
                       headers={"Authorization": f"Bearer {acceso}"})
         if r.status_code != 201:
-            sys.exit(f"No se pudo obtener el token de ingesta ({r.status_code}): {r.text}")
+            sys.exit(f"No se pudo obtener el token de ingesta ({r.status_code}): {_detalle(r)}")
         return r.json()["token"]
 
 
@@ -384,7 +422,8 @@ async def correr(args: argparse.Namespace) -> int:
     from websockets.asyncio.client import connect
     from websockets.exceptions import ConnectionClosed
 
-    token = args.token or pedir_token(args.url, args.partido, args.email, args.password)
+    token = args.token or pedir_token(args.url, args.partido, args.email, args.password,
+                                      args.iniciar_partido, args.ataca_hacia)
     sim = Simulacion(args.partido, args.largo, args.ancho, args.frecuencia, args.semilla,
                      args.inicio_t)
     destino = url_ws(args.url, args.partido)
@@ -397,6 +436,9 @@ async def correr(args: argparse.Namespace) -> int:
         except ConnectionClosed as e:
             print(f"El servidor cerró la conexión: {e.rcvd.code if e.rcvd else '?'} "
                   f"{e.rcvd.reason if e.rcvd else ''}", file=sys.stderr)
+            if e.rcvd and e.rcvd.code == 4409:
+                print("La ingesta solo acepta partidos EN_CURSO: vuelva a correr con "
+                      "--iniciar-partido, o inicie el partido desde la Web.", file=sys.stderr)
             return 1
         if listo.get("tipo") != "listo":
             print(f"Respuesta inesperada: {listo}", file=sys.stderr)
@@ -450,9 +492,16 @@ def argumentos(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--semilla", type=int, help="Para repetir exactamente la misma simulación")
     p.add_argument("--inicio-t", type=float, default=0.0,
                    help="Segundo de partido en el que empieza (por defecto %(default)s)")
+    p.add_argument("--iniciar-partido", action="store_true",
+                   help="Llamar a POST /partido/{id}/iniciar antes de conectarse "
+                        "(la ingesta solo acepta partidos EN_CURSO)")
+    p.add_argument("--ataca-hacia", choices=["IZQ", "DER"], default="IZQ",
+                   help="Con --iniciar-partido: hacia dónde ataca el local (por defecto %(default)s)")
     args = p.parse_args(argv)
     if not args.token and not (args.email and args.password):
         p.error("hace falta --token, o --email y --password")
+    if args.iniciar_partido and not (args.email and args.password):
+        p.error("--iniciar-partido necesita --email y --password (el token de ingesta no alcanza)")
     if args.frecuencia <= 0 or args.duracion <= 0:
         p.error("--frecuencia y --duracion deben ser positivas")
     return args

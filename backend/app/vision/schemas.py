@@ -51,6 +51,47 @@ class CalibracionGuardar(BaseModel):
     coef_distorsion: list[Annotated[float, Field(allow_inf_nan=False)]] | None = Field(
         default=None,
         description="CU-23, opcional. Obligatorio con gran angular o action cam")
+    # CU-23 (T-036). Opcionales y aditivos: con los TRES (matriz_camara,
+    # coef_distorsion y tamano_imagen) los puntos de imagen se corrigen antes de
+    # la homografía. Mismos nombres y formas que devuelve POST /calibracion-intrinseca.
+    matriz_camara: list[list[Annotated[float, Field(allow_inf_nan=False)]]] | None = Field(
+        default=None,
+        description=(
+            "CU-23, opcional. Matriz de la camara K (3x3, en pixeles), de POST "
+            "/calibracion-intrinseca. Va junto con coef_distorsion y tamano_imagen: con los "
+            "tres, los puntos_imagen se corrigen antes de calcular la homografia"))
+    tamano_imagen: list[Annotated[int, Field(gt=0)]] | None = Field(
+        default=None, min_length=2, max_length=2,
+        description=(
+            "CU-23, opcional. [ancho, alto] en pixeles de las fotos con que se calibro la "
+            "camara. Los puntos_imagen deben marcarse sobre un cuadro de ese mismo tamano"))
+
+    @property
+    def tiene_intrinseca(self) -> bool:
+        """True si llegaron los tres datos que hacen falta para corregir el lente."""
+        return None not in (self.matriz_camara, self.coef_distorsion, self.tamano_imagen)
+
+    @model_validator(mode="after")
+    def _intrinseca_completa(self) -> Self:
+        # coef_distorsion solo sigue aceptándose como hasta ahora (no corrige nada).
+        # matriz_camara o tamano_imagen, en cambio, sin los otros dos no sirven.
+        if self.matriz_camara is None and self.tamano_imagen is None:
+            return self
+        if not self.tiene_intrinseca:
+            raise ValueError(
+                "matriz_camara, coef_distorsion y tamano_imagen van juntos (CU-23): envia los "
+                "tres, tal como los devuelve POST /calibracion-intrinseca, o ninguno")
+        k = self.matriz_camara
+        if len(k) != 3 or any(len(fila) != 3 for fila in k):
+            raise ValueError("matriz_camara debe ser de 3x3")
+        if k[0][0] <= 0 or k[1][1] <= 0 or k[2] != [0.0, 0.0, 1.0]:
+            raise ValueError(
+                "matriz_camara no es una matriz de camara: fx y fy deben ser positivos y la "
+                "ultima fila [0, 0, 1]")
+        if len(self.coef_distorsion) not in (4, 5, 8, 12, 14):
+            raise ValueError(
+                "coef_distorsion debe tener 4, 5, 8, 12 o 14 coeficientes (modelo de OpenCV)")
+        return self
 
     @model_validator(mode="after")
     def _misma_cantidad_de_puntos(self) -> Self:
@@ -93,6 +134,28 @@ class Calibracion(BaseModel):
     valida: bool
     coef_distorsion: list[float] | None = None
     creada_en: datetime
+    matriz_camara: list[list[float]] | None = Field(default=None, description=(
+        "CU-23: matriz de la camara K, si se envio. Con ella, matriz_h va de pixeles "
+        "CORREGIDOS a metros: el worker debe corregir cada punto antes de aplicarla"))
+    tamano_imagen: list[int] | None = Field(default=None, description=(
+        "CU-23: [ancho, alto] de la calibracion de la camara, si se envio"))
+    advertencia: str | None = Field(default=None, description=(
+        "CU-22: solo en GET /sedes/{sede}/calibracion-previa. Recuerda verificar "
+        "que la camara no se haya movido antes de reutilizar la calibracion"))
+
+
+class CalibracionIntrinseca(BaseModel):
+    """CU-23: parametros propios de la camara y el lente, de POST /calibracion-intrinseca.
+
+    No se guardan solos: se envian (los tres primeros campos) en
+    POST /partidos/{id}/calibracion junto con los puntos de la cancha.
+    """
+    matriz_camara: list[list[float]] = Field(description="K, 3x3, en pixeles")
+    coef_distorsion: list[float] = Field(description="(k1, k2, p1, p2, k3) de OpenCV")
+    tamano_imagen: list[int] = Field(description="[ancho, alto] en pixeles de las fotos")
+    error_reproyeccion_px: float = Field(
+        description="Error RMS de la calibracion: por debajo de 0,5 px es buena")
+    imagenes_usadas: int = Field(description="Fotos en las que se detecto el tablero")
 
 
 # ---------- CU-29 Modelos ----------

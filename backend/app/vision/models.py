@@ -59,6 +59,14 @@ class Calibracion(Base):
     coef_distorsion: Mapped[list[float] | None] = mapped_column(
         JSON(none_as_null=True), nullable=True
     )
+    # CU-23 (T-036): con estos dos y coef_distorsion, los puntos de imagen se
+    # corrigen antes de la homografía y `matriz_h` va de píxeles corregidos a metros.
+    matriz_camara: Mapped[list[list[float]] | None] = mapped_column(
+        JSON(none_as_null=True), nullable=True
+    )
+    tamano_imagen: Mapped[list[int] | None] = mapped_column(
+        JSON(none_as_null=True), nullable=True
+    )
 
     creada_en: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC)

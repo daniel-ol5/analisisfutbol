@@ -9,31 +9,31 @@ from collections.abc import Callable, Iterator
 from contextlib import ExitStack
 
 import pytest
-from modelos_falsos import (
+from partidos_prueba import (
     CLUB_A,
     CLUB_B,
     INEXISTENTE,
     PARTIDO_A,
     PARTIDO_B,
-    PartidoFalso,
-    PosicionFalsa,
     SesionesPrueba,
-    borrar_tablas_falsas,
-    crear_tablas_falsas,
+    cambiar_estado,
+    contar_posiciones,
     motor,
+    sembrar_partidos,
 )
-from sqlalchemy import event, func, select
+from sqlalchemy import event, select
 from starlette.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
 from app.core.realtime import HubMemoria, obtener_hub
 from app.core.security import token_acceso, token_ingesta
 from app.core.ws import Cierre
+from app.deportivo.models import Partido, Posicion
+from app.deportivo.schemas import EstadoPartido
 from app.main import app
 from app.partido import router as partido_router
 from app.partido.service import (
     PartidosEnTabla,
-    PosicionesDescartadas,
     PosicionesEnLote,
     obtener_almacen_posiciones,
     obtener_repositorio_partidos,
@@ -59,10 +59,8 @@ def _mensaje(partido: int = PARTIDO_A, t: float = 0.0) -> dict:
 # ---------------- Fixtures ----------------
 
 @pytest.fixture
-async def tablas_falsas():
-    await crear_tablas_falsas()
-    yield
-    await borrar_tablas_falsas()
+async def partidos():
+    await sembrar_partidos(EstadoPartido.EN_CURSO)
 
 
 @pytest.fixture
@@ -71,12 +69,18 @@ def hub() -> HubMemoria:
 
 
 @pytest.fixture
-def cliente(hub, tablas_falsas) -> Iterator[TestClient]:
+def almacen() -> PosicionesEnLote:
+    """Un almacén propio de la prueba (en producción hay uno por proceso)."""
+    return PosicionesEnLote(Posicion, SesionesPrueba)
+
+
+@pytest.fixture
+def cliente(hub, partidos, almacen) -> Iterator[TestClient]:
     """Hub aislado, verificación real con `tenancy` y persistencia real por
-    lotes, todo sobre los modelos falsos."""
+    lotes, sobre las tablas `partido` y `posicion`."""
     app.dependency_overrides[obtener_hub] = lambda: hub
-    app.dependency_overrides[obtener_repositorio_partidos] = lambda: PartidosEnTabla(PartidoFalso, SesionesPrueba)
-    app.dependency_overrides[obtener_almacen_posiciones] = lambda: PosicionesEnLote(PosicionFalsa, SesionesPrueba)
+    app.dependency_overrides[obtener_repositorio_partidos] = lambda: PartidosEnTabla(Partido, SesionesPrueba)
+    app.dependency_overrides[obtener_almacen_posiciones] = lambda: almacen
     with TestClient(app) as c:
         yield c
     app.dependency_overrides.clear()
@@ -98,11 +102,11 @@ def abrir(cliente) -> Iterator[Abrir]:
 
 @pytest.fixture
 def inserts() -> Iterator[list[tuple[str, bool, int]]]:
-    """Registra cada INSERT en posicion_falsa: (sql, executemany, filas)."""
+    """Registra cada INSERT en posicion: (sql, executemany, filas)."""
     registro: list[tuple[str, bool, int]] = []
 
     def espiar(conn, cursor, sql, parametros, contexto, executemany):
-        if "INSERT INTO posicion_falsa" in sql:
+        if sql.startswith("INSERT INTO posicion "):
             filas = len(parametros) if executemany else 1
             registro.append((sql, executemany, filas))
 
@@ -117,15 +121,10 @@ def _cierre(ws) -> WebSocketDisconnect:
     return e.value
 
 
-async def _contar_filas() -> int:
-    async with SesionesPrueba() as db:
-        return (await db.execute(select(func.count()).select_from(PosicionFalsa))).scalar_one()
-
-
 def _esperar_filas(cliente: TestClient, esperadas: int, segundos: float = 3.0) -> int:
     limite = time.monotonic() + segundos
     while True:
-        filas = cliente.portal.call(_contar_filas)
+        filas = cliente.portal.call(contar_posiciones)
         if filas >= esperadas or time.monotonic() > limite:
             return filas
         time.sleep(0.02)
@@ -153,9 +152,30 @@ async def test_token_de_otro_partido(abrir):
     assert _cierre(ws).code == Cierre.NO_ENCONTRADO
 
 
-async def test_token_para_un_partido_de_otro_club(abrir):
+async def test_token_para_un_partido_de_otro_club(cliente, abrir):
+    """Un token emitido para el club A no escribe en el partido del club B,
+    aunque nombre ese partido."""
     ws = abrir("ingesta", PARTIDO_B, token_ingesta(CLUB_A, PARTIDO_B))
     assert _cierre(ws).code == Cierre.NO_ENCONTRADO
+    assert cliente.portal.call(contar_posiciones) == 0
+
+
+# ---------------- Solo con el partido EN_CURSO ----------------
+
+@pytest.mark.parametrize("estado", [EstadoPartido.PROGRAMADO, EstadoPartido.FINALIZADO,
+                                    EstadoPartido.CANCELADO])
+async def test_partido_que_no_esta_en_curso_cierra_con_4409(cliente, abrir, estado):
+    cliente.portal.call(cambiar_estado, PARTIDO_A, estado)
+    ws = abrir("ingesta", PARTIDO_A, token_ingesta(CLUB_A, PARTIDO_A))
+    cierre = _cierre(ws)
+    assert cierre.code == Cierre.NO_EN_CURSO == 4409
+    assert estado.value in cierre.reason
+
+
+async def test_el_canal_vivo_no_exige_partido_en_curso(cliente, abrir):
+    cliente.portal.call(cambiar_estado, PARTIDO_A, EstadoPartido.PROGRAMADO)
+    ws = abrir("vivo", PARTIDO_A, token_acceso(1, CLUB_A, "DT"))
+    assert ws.receive_json()["tipo"] == "listo"
 
 
 # ---------------- Validación contra el contrato ----------------
@@ -279,7 +299,7 @@ async def test_no_inserta_antes_de_completar_el_lote(cliente, abrir, inserts):
     ws.receive_json()
 
     assert inserts == []
-    assert cliente.portal.call(_contar_filas) == 0
+    assert cliente.portal.call(contar_posiciones) == 0
 
 
 async def test_al_desconectarse_vacia_lo_pendiente(cliente, abrir, inserts):
@@ -302,7 +322,7 @@ async def test_filas_siguen_el_modelo_de_datos(cliente, abrir):
 
     async def balon():
         async with SesionesPrueba() as db:
-            return (await db.execute(select(PosicionFalsa).where(PosicionFalsa.track_id == 0))
+            return (await db.execute(select(Posicion).where(Posicion.track_id == 0))
                     ).scalar_one()
 
     fila = cliente.portal.call(balon)
@@ -310,11 +330,16 @@ async def test_filas_siguen_el_modelo_de_datos(cliente, abrir):
         PARTIDO_A, 7.5, 52.5, 34.0, 0.7)
 
 
-async def test_sin_tabla_las_posiciones_se_descartan():
-    almacen = PosicionesDescartadas()
-    from app.partido.schemas import MensajeWorker
-    await almacen.agregar(MensajeWorker.model_validate(_mensaje()))
-    await almacen.vaciar()   # no falla ni guarda nada
+async def test_sin_datos_un_tiempo_se_guarda_lo_pendiente(cliente, almacen, abrir):
+    """El worker sigue conectado pero deja de mandar: lo pendiente no espera
+    al lote completo ni a la desconexión."""
+    almacen.inactividad_s = 0.2
+    ws = abrir("ingesta", PARTIDO_A, token_ingesta(CLUB_A, PARTIDO_A))
+    ws.receive_json()
+    for i in range(3):
+        ws.send_json(_mensaje(t=i * 0.2))
+
+    assert _esperar_filas(cliente, 3 * PUNTOS_POR_MENSAJE) == 3 * PUNTOS_POR_MENSAJE
 
 
 # ---------------- Emisión del token ----------------

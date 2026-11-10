@@ -265,11 +265,12 @@ async def test_otros_roles_no_pueden_calibrar_pero_si_leer(cliente, rol):
 
 # ---------- fuera de alcance de T-028 ----------
 
-async def test_calibracion_previa_sigue_en_501_y_validar_ya_no(cliente):
-    """T-035 (calibracion previa) no se implementa acá; /validar pasó a T-029 (antes era 501)."""
+async def test_calibracion_previa_y_validar_ya_no_son_501(cliente):
+    """/validar pasó a T-029 y la calibración previa a T-035 (antes eran 501).
+    Sin calibraciones previas en esa sede, la previa responde 404."""
     token = await _registrar(cliente, "a")
     validar = await cliente.post(f"{_url()}/validar", headers=_auth(token), json=_cuerpo())
     assert validar.status_code == 200
     previa = await cliente.get("/api/vision/sedes/Estadio/calibracion-previa",
                                headers=_auth(token))
-    assert previa.status_code == 501
+    assert previa.status_code == 404

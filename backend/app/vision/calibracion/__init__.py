@@ -14,6 +14,7 @@ from app.vision.calibracion.distorsion import (
     corregir_imagen,
     corregir_puntos,
     detectar_esquinas,
+    matriz_corregida,
     precalcular_mapa,
 )
 
@@ -27,5 +28,6 @@ __all__ = [
     "corregir_imagen",
     "corregir_puntos",
     "detectar_esquinas",
+    "matriz_corregida",
     "precalcular_mapa",
 ]
