@@ -13,6 +13,7 @@ sesión, datos y el almacén.
 """
 
 import asyncio
+import contextlib
 import re
 from collections.abc import AsyncIterator
 from pathlib import Path, PurePosixPath
@@ -304,9 +305,7 @@ async def eliminar_video(
     """CU-28: elimina el registro del video y su archivo en el almacén."""
     video = await video_del_club(db, usuario, video_id)
     if video.archivo_url:
-        try:
+        with contextlib.suppress(Exception):
             await almacen.borrar(video.archivo_url)
-        except Exception:
-            pass
     await db.delete(video)
     await db.commit()

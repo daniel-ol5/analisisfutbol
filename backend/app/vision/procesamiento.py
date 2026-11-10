@@ -16,19 +16,20 @@ renovar `tomado_en` y pasado `PLAZO_SIN_NOTICIAS` otro puede retomarlo.
 import asyncio
 import json
 import logging
-import math
 import os
 import subprocess
 import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
+import cv2
+import numpy as np
 from fastapi import HTTPException, status
 from sqlalchemy import or_, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.core.database import SessionLocal
 from app.core.deps import UsuarioActual
 from app.core.realtime import canal_partido, obtener_hub
 from app.core.security import token_acceso
@@ -43,7 +44,6 @@ from app.partido.schemas import (
 from app.partido.service import (
     AlmacenPosiciones,
     obtener_almacen_posiciones,
-    registrar_tracks_ingesta,
 )
 from app.vision.almacen import AlmacenVideos
 from app.vision.models import Calibracion, ModeloML, Video
@@ -347,7 +347,7 @@ def _guardar_muestras_archivo(ruta: Path, muestras: list[MensajeWorker]) -> None
     existentes: list[dict[str, object]] = []
     if ruta.exists():
         try:
-            with open(ruta, "r", encoding="utf-8") as f:
+            with open(ruta, encoding="utf-8") as f:
                 existentes = json.load(f)
         except Exception:
             existentes = []
@@ -414,7 +414,7 @@ def cargar_muestras_video(video_id: int) -> list[MensajeWorker]:
     if not ruta.exists():
         return []
     try:
-        with open(ruta, "r", encoding="utf-8") as f:
+        with open(ruta, encoding="utf-8") as f:
             datos = json.load(f)
         return [MensajeWorker.model_validate(d) for d in datos]
     except Exception:
@@ -432,7 +432,7 @@ def cargar_muestras_partido(partido_id: int, video_id: int | None = None) -> lis
     if not ruta.exists():
         return []
     try:
-        with open(ruta, "r", encoding="utf-8") as f:
+        with open(ruta, encoding="utf-8") as f:
             datos = json.load(f)
         return [MensajeWorker.model_validate(d) for d in datos]
     except Exception:
@@ -577,10 +577,7 @@ def _obtener_modelo_vivo() -> Any:
             Path(__file__).resolve().parent.parent.parent.parent / "vision" / "pesos" / "yolov8_futbol.pt",
         ]
         ruta_futbol = next((c for c in candidatos if c.exists()), None)
-        if ruta_futbol:
-            _MODELO_YOLO_VIVO = YOLO(str(ruta_futbol))
-        else:
-            _MODELO_YOLO_VIVO = YOLO("yolo11n.pt")
+        _MODELO_YOLO_VIVO = YOLO(str(ruta_futbol)) if ruta_futbol else YOLO("yolo11n.pt")
     return _MODELO_YOLO_VIVO
 
 
@@ -639,7 +636,7 @@ def analizar_fotograma_en_vivo(
     balon_detectado: PosicionDetectada | None = None
     tid_counter = 1
 
-    for b, cls_id, conf in zip(boxes, clases, confs):
+    for b, cls_id, conf in zip(boxes, clases, confs, strict=False):
         cls_int = int(cls_id)
         x1, y1, x2, y2 = float(b[0]), float(b[1]), float(b[2]), float(b[3])
         bbox_pct = [

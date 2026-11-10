@@ -1,8 +1,8 @@
 """Pruebas de asignación de jugadores a identificadores  —  CU-34, CU-35 (T-067)."""
 
+import time
 from contextlib import ExitStack
 from datetime import UTC, datetime, timedelta
-import time
 
 import pytest
 from datos_calibracion import cuerpo_valido

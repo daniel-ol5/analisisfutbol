@@ -6,9 +6,20 @@ Responsables segun el Sprint Planning:
     CU-27 a CU-29  video y modelos           · S3 · Araceli
 """
 
-from typing import Annotated
+from typing import Annotated, Any
 
-from fastapi import APIRouter, Body, Depends, File, Form, Header, Request, Response, UploadFile, status
+from fastapi import (
+    APIRouter,
+    Body,
+    Depends,
+    File,
+    Form,
+    Header,
+    Request,
+    Response,
+    UploadFile,
+    status,
+)
 from fastapi.responses import FileResponse
 
 from app.core.deps import Actual, Db, requiere_rol
