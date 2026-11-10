@@ -1,7 +1,12 @@
-/// Botonera de eventos en vivo — T-069 (HU-32).
+/// Operación del Partido en vivo — T-069, T-070 y T-071 (CU-30, CU-36, CU-37 y CU-38).
 ///
-/// Gol y tarjetas: tipo + jugador. Sustitución: "Cambio" en el titular que
-/// sale + suplente que entra. Ambos recorridos requieren como máximo 2 toques.
+/// Integra:
+/// - Cronómetro sincronizado (CU-30 · T-071): consulta `GET /partido/{id}/estado`
+///   cada 5 s (`intervaloSondeoEstado`) y mantiene un reloj monótono local
+///   (`Stopwatch`) que avanza segundo a segundo sin retroceder el segundero.
+/// - Botonera de eventos en vivo y cola offline (T-069 / T-070): registro en
+///   máximo 2 toques (gol, amarilla, roja, cambio) con opción de deshacer y
+///   sincronización automática de eventos pendientes.
 library;
 
 import 'dart:async';
@@ -40,10 +45,21 @@ class PartidoPagina extends StatefulWidget {
     this.contarPendientes = partido_api.contarPendientes,
     this.sincronizarPendientes = partido_api.sincronizarPendientes,
     this.descartarPendiente = partido_api.descartarPendiente,
+    this.obtenerEstado = partido_api.obtenerEstadoPartido,
+    this.enCache = partido_api.estadoPartidoEnCache,
+    this.listarPartidos = partido_api.listarPartidosVivo,
+    this.partidosEnCache = partido_api.partidosVivoEnCache,
+    this.ahoraMonotonoMs,
+    this.intervaloSondeo = intervaloSondeoEstado,
+    this.intervaloTick = intervaloTickReloj,
   });
 
-  /// null abre el único partido EN_CURSO; la ruta de agenda pasa un id.
+  /// Identificador del partido si se navega a `/partido/:id` o
+  /// `/partidos/:id/eventos`. Si es `null` (`/partido`), se selecciona el
+  /// partido en curso o priorizado.
   final int? partidoId;
+
+  /// Funciones inyectables de la botonera y cola offline (T-069 / T-070).
   final ObtenerPartidos obtenerPartidos;
   final ObtenerAlineacion obtenerAlineacion;
   final RegistrarEvento registrar;
@@ -52,12 +68,35 @@ class PartidoPagina extends StatefulWidget {
   final SincronizarPendientes sincronizarPendientes;
   final DescartarPendiente descartarPendiente;
 
+  /// Funciones inyectables del cronómetro sincronizado (T-071).
+  final Future<EstadoEnVivo> Function(int partidoId) obtenerEstado;
+  final Future<EstadoGuardado?> Function(int partidoId) enCache;
+  final Future<List<ResumenPartidoVivo>> Function() listarPartidos;
+  final Future<List<ResumenPartidoVivo>?> Function() partidosEnCache;
+  final int Function()? ahoraMonotonoMs;
+  final Duration intervaloSondeo;
+  final Duration intervaloTick;
+
   @override
   State<PartidoPagina> createState() => _PartidoPaginaState();
 }
 
 class _PartidoPaginaState extends State<PartidoPagina>
     with WidgetsBindingObserver {
+  final Stopwatch _stopwatch = Stopwatch()..start();
+
+  // Estado del cronómetro sincronizado (T-071)
+  List<ResumenPartidoVivo> _partidos = const [];
+  int? _partidoIdActivo;
+  EstadoEnVivo? _estado;
+  AnclaReloj? _ancla;
+  int _segundosVisibles = 0;
+  bool _sinConexion = false;
+  bool _noEncontrado = false;
+  Timer? _timerSondeo;
+  Timer? _timerTick;
+
+  // Estado de la botonera y cola offline (T-069 / T-070)
   Partido? _partido;
   Alineacion? _alineacion;
   final Set<int> _enCancha = {};
@@ -75,20 +114,52 @@ class _PartidoPaginaState extends State<PartidoPagina>
   int _pendientes = 0;
   bool _sincronizando = false;
 
+  int _leerAhoraMs() =>
+      widget.ahoraMonotonoMs?.call() ?? _stopwatch.elapsedMilliseconds;
+
+  /// Activa el sondeo del cronómetro cuando se usa en producción (ambos por
+  /// defecto) o cuando una prueba inyecta `obtenerEstado`.
+  bool get _usarRelojVivo =>
+      !identical(widget.obtenerEstado, partido_api.obtenerEstadoPartido) ||
+      identical(widget.obtenerPartidos, agenda_api.listarPartidos);
+
+  /// Activa la carga de botonera/cola cuando se usa en producción (ambos por
+  /// defecto) o cuando una prueba inyecta `obtenerPartidos`.
+  bool get _usarBotonera =>
+      !identical(widget.obtenerPartidos, agenda_api.listarPartidos) ||
+      identical(widget.obtenerEstado, partido_api.obtenerEstadoPartido);
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _cargar().then((_) => _actualizarPendientes());
-    _reintentoSincronizacion = Timer.periodic(
-      const Duration(seconds: 15),
-      (_) => _sincronizar(),
-    );
+    _partidoIdActivo = widget.partidoId;
+
+    if (_usarRelojVivo) {
+      _inicializarReloj();
+    }
+    if (_usarBotonera) {
+      _cargar().then((_) => _actualizarPendientes());
+      _reintentoSincronizacion = Timer.periodic(
+        const Duration(seconds: 15),
+        (_) => _sincronizar(),
+      );
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant PartidoPagina oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.partidoId != oldWidget.partidoId && widget.partidoId != null) {
+      _cambiarPartido(widget.partidoId!);
+    }
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _detenerTimers();
+    _stopwatch.stop();
     _venceDeshacer?.cancel();
     _reintentoSincronizacion?.cancel();
     super.dispose();
@@ -96,8 +167,205 @@ class _PartidoPaginaState extends State<PartidoPagina>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) _sincronizar();
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.detached) {
+      if (_usarRelojVivo) {
+        _detenerTimers();
+      }
+      return;
+    }
+    if (state == AppLifecycleState.resumed) {
+      if (_usarRelojVivo) {
+        _actualizarSegundero();
+        _iniciarTimers();
+        if (_partidoIdActivo != null) {
+          _consultarEstado(silencioso: true);
+        }
+      }
+      if (_usarBotonera) {
+        _sincronizar();
+      }
+    }
   }
+
+  // ---------------------------------------------------------------------------
+  // Cronómetro sincronizado (T-071)
+  // ---------------------------------------------------------------------------
+
+  void _iniciarTimers() {
+    _detenerTimers();
+    _timerSondeo = Timer.periodic(widget.intervaloSondeo, (_) {
+      if (_partidoIdActivo != null && !_noEncontrado) {
+        _consultarEstado(silencioso: true);
+      }
+    });
+    _timerTick = Timer.periodic(widget.intervaloTick, (_) {
+      _actualizarSegundero();
+    });
+  }
+
+  void _detenerTimers() {
+    _timerSondeo?.cancel();
+    _timerSondeo = null;
+    _timerTick?.cancel();
+    _timerTick = null;
+  }
+
+  void _actualizarSegundero() {
+    final ancla = _ancla;
+    if (ancla == null || !mounted) return;
+    final calculados = calcularSegundosActuales(ancla, _leerAhoraMs());
+    if (calculados != _segundosVisibles) {
+      setState(() => _segundosVisibles = calculados);
+    }
+  }
+
+  Future<void> _inicializarReloj() async {
+    _iniciarTimers();
+    if (_partidoIdActivo != null) {
+      unawaited(_cargarListaPartidos());
+      await _consultarEstado(silencioso: false);
+      return;
+    }
+    await _cargarListaPartidos();
+    if (!mounted) return;
+    if (_partidoIdActivo != null) {
+      await _consultarEstado(silencioso: false);
+    } else if (!_usarBotonera) {
+      setState(() => _cargando = false);
+    }
+  }
+
+  Future<void> _cargarListaPartidos() async {
+    final enCache = await widget.partidosEnCache();
+    if (mounted && enCache != null && _partidos.isEmpty) {
+      final ordenados = ordenarPartidosParaVivo(enCache);
+      setState(() {
+        _partidos = ordenados;
+        if (_partidoIdActivo == null && ordenados.isNotEmpty) {
+          _partidoIdActivo = ordenados.first.id;
+        }
+      });
+    }
+    try {
+      final frescos = await widget.listarPartidos();
+      if (!mounted) return;
+      final ordenados = ordenarPartidosParaVivo(frescos);
+      setState(() {
+        _partidos = ordenados;
+        if (_partidoIdActivo == null && ordenados.isNotEmpty) {
+          _partidoIdActivo = ordenados.first.id;
+        }
+      });
+    } catch (_) {
+      // Si falla la agenda, conservamos la caché o el partidoId explícito.
+    }
+  }
+
+  void _cambiarPartido(int nuevoId) {
+    if (_partidoIdActivo == nuevoId) return;
+    setState(() {
+      _partidoIdActivo = nuevoId;
+      _estado = null;
+      _ancla = null;
+      _segundosVisibles = 0;
+      _cargando = true;
+      _sinConexion = false;
+      _noEncontrado = false;
+      _error = null;
+    });
+    if (_usarRelojVivo) {
+      _iniciarTimers();
+      _consultarEstado(silencioso: false);
+    }
+    if (_usarBotonera) {
+      _cargar().then((_) => _actualizarPendientes());
+    }
+  }
+
+  Future<void> _consultarEstado({required bool silencioso}) async {
+    final id = _partidoIdActivo;
+    if (id == null) return;
+
+    if (!silencioso && mounted) {
+      setState(() => _cargando = true);
+    }
+
+    if (_estado == null) {
+      final guardado = await widget.enCache(id);
+      if (mounted && guardado != null && _estado == null) {
+        final ahora = _leerAhoraMs();
+        final anclaCache = AnclaReloj(
+          partidoId: guardado.estado.partidoId,
+          parte: guardado.estado.parte,
+          enCurso: false,
+          baseSegundos: guardado.estado.segundosRemotos,
+          marcaMonotonicaMs: ahora,
+        );
+        setState(() {
+          _estado = guardado.estado;
+          _ancla = anclaCache;
+          _segundosVisibles = guardado.estado.segundosRemotos;
+          _sinConexion = true;
+        });
+      }
+    }
+
+    try {
+      final remoto = await widget.obtenerEstado(id);
+      if (!mounted || _partidoIdActivo != id) return;
+      final ahora = _leerAhoraMs();
+      final nuevaAncla = reconciliarAnclaReloj(_ancla, remoto, ahora);
+      final segundos = calcularSegundosActuales(nuevaAncla, ahora);
+      setState(() {
+        _estado = remoto;
+        _ancla = nuevaAncla;
+        _segundosVisibles = segundos;
+        _sinConexion = false;
+        _noEncontrado = false;
+        _error = null;
+      });
+    } on ErrorApi catch (e) {
+      if (!mounted || _partidoIdActivo != id) return;
+      setState(() {
+        _sinConexion = false;
+        if (e.codigo == 404) {
+          _noEncontrado = true;
+          _estado = null;
+          _ancla = null;
+          _error = null;
+        } else if (_partido == null) {
+          _error = e.detalle;
+        }
+      });
+    } catch (_) {
+      if (!mounted || _partidoIdActivo != id) return;
+      setState(() {
+        _sinConexion = _estado != null;
+        if (_estado == null && _partido == null) {
+          _error = 'Sin conexión con el servidor.';
+        }
+      });
+    } finally {
+      if (mounted && !silencioso && _partidoIdActivo == id) {
+        setState(() => _cargando = false);
+      }
+    }
+  }
+
+  ResumenPartidoVivo? get _partidoSeleccionado {
+    final id = _partidoIdActivo;
+    if (id == null) return null;
+    for (final p in _partidos) {
+      if (p.id == id) return p;
+    }
+    return null;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Botonera de eventos y cola offline (T-069 / T-070)
+  // ---------------------------------------------------------------------------
 
   Future<void> _cargar() async {
     setState(() {
@@ -112,16 +380,20 @@ class _PartidoPaginaState extends State<PartidoPagina>
         setState(() {
           _partido = null;
           _alineacion = null;
-          _error = widget.partidoId == null
-              ? 'No hay un partido en curso.'
-              : 'Este partido no está en curso.';
+          if (_estado == null && !_noEncontrado) {
+            _error = widget.partidoId == null
+                ? 'No hay un partido en curso.'
+                : 'Este partido no está en curso.';
+          }
         });
         return;
       }
       final alineacion = await widget.obtenerAlineacion(partido.id);
       if (!mounted) return;
+      final habiaPartidoId = _partidoIdActivo != null;
       setState(() {
         _partido = partido;
+        _partidoIdActivo ??= partido.id;
         _alineacion = alineacion;
         _enCancha
           ..clear()
@@ -130,10 +402,15 @@ class _PartidoPaginaState extends State<PartidoPagina>
         _golesFavor = partido.golesFavor;
         _golesContra = partido.golesContra;
       });
+      if (_usarRelojVivo && !habiaPartidoId && _partidoIdActivo != null) {
+        unawaited(_consultarEstado(silencioso: true));
+      }
     } on ErrorApi catch (e) {
-      if (mounted) setState(() => _error = e.detalle);
+      if (mounted && _estado == null && !_noEncontrado) {
+        setState(() => _error = e.detalle);
+      }
     } catch (_) {
-      if (mounted) {
+      if (mounted && _estado == null && !_noEncontrado) {
         setState(
           () => _error = 'Sin conexión con el servidor. Intenta nuevamente.',
         );
@@ -144,9 +421,9 @@ class _PartidoPaginaState extends State<PartidoPagina>
   }
 
   Partido? _buscarActivo(List<Partido> partidos) {
+    final idBuscado = _partidoIdActivo ?? widget.partidoId;
     for (final partido in partidos) {
-      final coincide =
-          widget.partidoId == null || partido.id == widget.partidoId;
+      final coincide = idBuscado == null || partido.id == idBuscado;
       if (coincide && partido.estado == 'EN_CURSO') return partido;
     }
     return null;
@@ -413,24 +690,61 @@ class _PartidoPaginaState extends State<PartidoPagina>
   }
 
   Future<void> _recargar() async {
-    await _cargar();
-    await _actualizarPendientes();
-    await _sincronizar();
+    if (_usarRelojVivo) {
+      await _cargarListaPartidos();
+      if (_partidoIdActivo != null) {
+        await _consultarEstado(silencioso: false);
+      }
+    }
+    if (_usarBotonera) {
+      await _cargar();
+      await _actualizarPendientes();
+      await _sincronizar();
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final estado = _estado;
     final partido = _partido;
     final alineacion = _alineacion;
+    final partidoInfo = _partidoSeleccionado;
+    final fase = determinarFasePartido(
+      estado,
+      estadoPartido: partidoInfo?.estado ?? partido?.estado,
+    );
+    final textoReloj = formatearCronometroPartido(
+      _segundosVisibles,
+      estado?.parte ?? 0,
+    );
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Eventos en vivo'),
+        title: const Text('Partido en vivo'),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           tooltip: 'Volver a partidos',
           onPressed: () => context.go('/partidos'),
         ),
         actions: [
+          if (_usarBotonera)
+            TextButton.icon(
+              key: const Key('eventos-pendientes'),
+              onPressed: _pendientes > 0 && !_sincronizando
+                  ? () => _sincronizar(anunciar: true)
+                  : null,
+              icon: _sincronizando
+                  ? const SizedBox.square(
+                      dimension: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.cloud_upload_outlined),
+              label: Text('Pendientes: $_pendientes'),
+            ),
+          IconButton(
+            tooltip: 'Actualizar estado',
+            icon: const Icon(Icons.refresh_rounded),
+            onPressed: _recargar,
           if (partido != null) IconButton(key: const Key('abrir-resumen'), tooltip: 'Resumen', icon: const Icon(Icons.insights_rounded), onPressed: () => context.push('/partidos/${partido.id}/resumen')), // T-081 (Alejandra): abre el resumen de métricas
           TextButton.icon(
             key: const Key('eventos-pendientes'),
@@ -449,20 +763,86 @@ class _PartidoPaginaState extends State<PartidoPagina>
       ),
       body: RefreshIndicator(
         onRefresh: _recargar,
+        color: verde,
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
           children: [
-            if (_cargando)
+            if (_partidos.isNotEmpty) ...[
+              _SelectorPartido(
+                partidos: _partidos,
+                seleccionadoId: _partidoIdActivo,
+                onChanged: _cambiarPartido,
+              ),
+              const SizedBox(height: 14),
+            ],
+            if (_cargando &&
+                estado == null &&
+                partido == null &&
+                !_noEncontrado &&
+                _error == null)
               const Padding(
                 padding: EdgeInsets.all(32),
                 child: Center(child: CircularProgressIndicator()),
               ),
-            if (_error != null && !_cargando) ...[
-              _Mensaje(texto: _error!, error: true),
+            if (_usarRelojVivo &&
+                !_usarBotonera &&
+                _partidoIdActivo == null &&
+                !_cargando)
+              const _Mensaje(
+                texto: 'Todavía no hay partidos programados en la agenda.',
+              ),
+            if (_sinConexion && estado != null) ...[
+              const _Mensaje(
+                texto: 'Sin conexión: se muestra el último estado guardado.',
+              ),
               OutlinedButton(
-                onPressed: _cargar,
+                onPressed: () => _consultarEstado(silencioso: false),
                 child: const Text('Reintentar'),
               ),
+              const SizedBox(height: 12),
+            ] else if (_noEncontrado) ...[
+              const _Mensaje(
+                texto: 'Partido no encontrado.',
+                error: true,
+              ),
+              OutlinedButton(
+                onPressed: () => _consultarEstado(silencioso: false),
+                child: const Text('Reintentar'),
+              ),
+              const SizedBox(height: 12),
+            ] else if (_error != null &&
+                !_cargando &&
+                estado == null &&
+                partido == null) ...[
+              _Mensaje(texto: _error!, error: true),
+              OutlinedButton(
+                onPressed: _recargar,
+                child: const Text('Reintentar'),
+              ),
+              const SizedBox(height: 12),
+            ],
+            if (estado != null && !_noEncontrado) ...[
+              _TarjetaCronometro(
+                fase: fase,
+                textoCronometro: textoReloj,
+                parte: estado.parte,
+                enCurso: estado.enCurso,
+                sinConexion: _sinConexion,
+              ),
+              const SizedBox(height: 14),
+              if (partido == null || alineacion == null) ...[
+                _TarjetaMarcador(
+                  partido: partidoInfo,
+                  partidoId: estado.partidoId,
+                  golesFavor: estado.golesFavor,
+                  golesContra: estado.golesContra,
+                ),
+                const SizedBox(height: 14),
+              ],
+              _TarjetaCalidad(calidad: estado.calidad),
+              const SizedBox(height: 14),
+              if (partido == null || alineacion == null)
+                const _AvisoSoloLectura(),
             ],
             if (partido != null && alineacion != null) ...[
               _PartidoActivo(
@@ -592,6 +972,304 @@ class _PartidoPaginaState extends State<PartidoPagina>
       ),
     ],
   );
+}
+
+class _SelectorPartido extends StatelessWidget {
+  const _SelectorPartido({
+    required this.partidos,
+    required this.seleccionadoId,
+    required this.onChanged,
+  });
+
+  final List<ResumenPartidoVivo> partidos;
+  final int? seleccionadoId;
+  final ValueChanged<int> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final existeSeleccionado =
+        seleccionadoId != null && partidos.any((p) => p.id == seleccionadoId);
+
+    return DropdownButtonFormField<int>(
+      key: const Key('selector-partido'),
+      initialValue: existeSeleccionado ? seleccionadoId : partidos.first.id,
+      decoration: const InputDecoration(
+        labelText: 'Partido seleccionado',
+        contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      ),
+      items: [
+        for (final p in partidos)
+          DropdownMenuItem<int>(
+            value: p.id,
+            child: Text(
+              'vs ${p.rival} (${p.estadoLegible})',
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+      ],
+      onChanged: (valor) {
+        if (valor != null) onChanged(valor);
+      },
+    );
+  }
+}
+
+class _TarjetaCronometro extends StatelessWidget {
+  const _TarjetaCronometro({
+    required this.fase,
+    required this.textoCronometro,
+    required this.parte,
+    required this.enCurso,
+    required this.sinConexion,
+  });
+
+  final FasePartido fase;
+  final String textoCronometro;
+  final int parte;
+  final bool enCurso;
+  final bool sinConexion;
+
+  String get _textoParte => switch (parte) {
+        1 => '1.er tiempo',
+        2 => '2.º tiempo',
+        _ => 'Sin iniciar',
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    final e = t.colorScheme;
+    final colorInsignia = fase.enJuego
+        ? verde
+        : (fase == FasePartido.entretiempo ? ambar : e.outline);
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              alignment: WrapAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 5,
+                  ),
+                  decoration: BoxDecoration(
+                    color: colorInsignia.withValues(alpha: 0.14),
+                    border: Border.all(color: colorInsignia, width: 1.5),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    fase.etiqueta,
+                    key: const Key('insignia-fase'),
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      color: fase.enJuego ? verde : e.onSurface,
+                    ),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 5,
+                  ),
+                  decoration: BoxDecoration(
+                    color: e.surfaceContainerHighest,
+                    border: Border.all(color: e.outline),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    sinConexion ? 'Sin red' : 'Sincronizado',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: e.onSurface,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            Text(
+              textoCronometro,
+              key: const Key('cronometro-texto'),
+              textAlign: TextAlign.center,
+              style: t.textTheme.titleLarge?.copyWith(
+                fontSize: 52,
+                fontWeight: FontWeight.w900,
+                letterSpacing: -1,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Parte: $_textoParte · '
+              '${enCurso ? 'Reloj corriendo' : 'Reloj pausado'}',
+              textAlign: TextAlign.center,
+              style: t.textTheme.bodyLarge?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            if (fase == FasePartido.entretiempo) ...[
+              const SizedBox(height: 10),
+              Text(
+                'ENTRETIEMPO: cronómetro en pausa al cierre del 1.er tiempo.',
+                textAlign: TextAlign.center,
+                style: t.textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TarjetaMarcador extends StatelessWidget {
+  const _TarjetaMarcador({
+    required this.partido,
+    required this.partidoId,
+    required this.golesFavor,
+    required this.golesContra,
+  });
+
+  final ResumenPartidoVivo? partido;
+  final int partidoId;
+  final int golesFavor;
+  final int golesContra;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    final p = partido;
+    final titulo = p != null
+        ? 'Nuestro equipo vs ${p.rival} (${p.esLocal ? 'Local' : 'Visitante'})'
+        : 'Partido #$partidoId';
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          children: [
+            Text(
+              titulo,
+              textAlign: TextAlign.center,
+              style: t.textTheme.titleMedium,
+            ),
+            const SizedBox(height: 14),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                Column(
+                  children: [
+                    Text('A favor', style: t.textTheme.bodyMedium),
+                    const SizedBox(height: 4),
+                    Text(
+                      '$golesFavor',
+                      key: const Key('goles-favor'),
+                      style: t.textTheme.titleLarge?.copyWith(
+                        fontSize: 38,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ],
+                ),
+                Text(
+                  '—',
+                  style: t.textTheme.titleLarge?.copyWith(fontSize: 28),
+                ),
+                Column(
+                  children: [
+                    Text('En contra', style: t.textTheme.bodyMedium),
+                    const SizedBox(height: 4),
+                    Text(
+                      '$golesContra',
+                      key: const Key('goles-contra'),
+                      style: t.textTheme.titleLarge?.copyWith(
+                        fontSize: 38,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TarjetaCalidad extends StatelessWidget {
+  const _TarjetaCalidad({required this.calidad});
+
+  final IndicadorCalidad calidad;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Estado del seguimiento óptico',
+              style: t.textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Worker: ${calidad.workerConectado ? 'Conectado' : 'Desconectado'} · '
+              'Detectados: ${calidad.jugadoresDetectados}',
+              style: t.textTheme.bodyMedium,
+            ),
+            if (calidad.degradado) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Calidad degradada: '
+                '${calidad.motivo ?? 'Revisar visibilidad de cámara.'}',
+                style: t.textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AvisoSoloLectura extends StatelessWidget {
+  const _AvisoSoloLectura();
+
+  @override
+  Widget build(BuildContext context) {
+    final e = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: e.surface,
+        border: Border.all(color: e.outline),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: const Text(
+        'Modo lectura en móvil: el inicio, entretiempo, descuento y cierre del '
+        'partido se operan desde la aplicación web.',
+        style: TextStyle(fontSize: 16),
+      ),
+    );
+  }
 }
 
 class _PartidoActivo extends StatelessWidget {
@@ -733,6 +1411,7 @@ class _Mensaje extends StatelessWidget {
       child: Text(
         texto,
         style: TextStyle(
+          fontSize: 16,
           color: error ? e.onErrorContainer : e.onSecondaryContainer,
           fontWeight: FontWeight.w600,
         ),
