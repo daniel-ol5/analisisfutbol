@@ -2024,6 +2024,75 @@
         }
       }
     },
+    "/api/vision/partidos/{partido_id}/calibracion/detectar-ia": {
+      "post": {
+        "tags": [
+          "P3 · Visión por Computadora"
+        ],
+        "summary": "Detectar puntos clave de la cancha automáticamente con IA (YOLO Pose)",
+        "operationId": "detectar_calibracion_ia_api_vision_partidos__partido_id__calibracion_detectar_ia_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "partido_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Partido Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_detectar_calibracion_ia_api_vision_partidos__partido_id__calibracion_detectar_ia_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Detectar Calibracion Ia Api Vision Partidos  Partido Id  Calibracion Detectar Ia Post"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "Declarado en el contrato, pendiente de implementacion",
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/vision/sedes/{sede}/calibracion-previa": {
       "get": {
         "tags": [
@@ -2646,6 +2715,57 @@
             }
           }
         }
+      },
+      "delete": {
+        "tags": [
+          "P3 · Visión por Computadora"
+        ],
+        "summary": "CU-28 · Eliminar un video del partido",
+        "operationId": "eliminar_video_api_vision_videos__video_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "video_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Video Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "501": {
+            "description": "Declarado en el contrato, pendiente de implementacion",
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Partido o video inexistente, o de otro club"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/vision/videos/{video_id}/procesar": {
@@ -2822,7 +2942,7 @@
         "tags": [
           "P3 · Visión por Computadora"
         ],
-        "summary": "T-061 · Worker: descargar el video",
+        "summary": "T-061 · Worker / Visor: descargar o reproducir el video",
         "operationId": "descargar_video_api_vision_videos__video_id__archivo_get",
         "security": [
           {
@@ -2862,6 +2982,277 @@
           },
           "409": {
             "description": "El video todavía no terminó de subirse"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/vision/partidos/{partido_id}/transmitir-vivo": {
+      "post": {
+        "tags": [
+          "P3 · Visión por Computadora"
+        ],
+        "summary": "CU-24, CU-40, CU-41 · Iniciar emisión sincronizada a 5 Hz con visor de video/cámara",
+        "operationId": "iniciar_transmision_vivo_api_vision_partidos__partido_id__transmitir_vivo_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "partido_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Partido Id"
+            }
+          },
+          {
+            "name": "t_inicio_s",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "default": 0.0,
+              "title": "T Inicio S"
+            }
+          },
+          {
+            "name": "duracion_s",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "default": 60.0,
+              "title": "Duracion S"
+            }
+          },
+          {
+            "name": "video_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Video Id"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Iniciar Transmision Vivo Api Vision Partidos  Partido Id  Transmitir Vivo Post"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "Declarado en el contrato, pendiente de implementacion",
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/vision/partidos/{partido_id}/pausar-vivo": {
+      "post": {
+        "tags": [
+          "P3 · Visión por Computadora"
+        ],
+        "summary": "CU-24, CU-40 · Pausar emisión sincronizada cuando el video o cámara se pausa",
+        "operationId": "pausar_transmision_vivo_api_vision_partidos__partido_id__pausar_vivo_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "partido_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Partido Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Pausar Transmision Vivo Api Vision Partidos  Partido Id  Pausar Vivo Post"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "Declarado en el contrato, pendiente de implementacion",
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/vision/vivo/analizar-cuadro": {
+      "post": {
+        "tags": [
+          "P3 · Visión por Computadora"
+        ],
+        "summary": "CU-24, CU-40 · Inferencia YOLO + Color en tiempo real desde cámara web o video local",
+        "operationId": "analizar_cuadro_en_vivo_api_vision_vivo_analizar_cuadro_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_analizar_cuadro_en_vivo_api_vision_vivo_analizar_cuadro_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MensajeWorker"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "Declarado en el contrato, pendiente de implementacion",
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/vision/videos/{video_id}/muestras": {
+      "get": {
+        "tags": [
+          "P3 · Visión por Computadora"
+        ],
+        "summary": "CU-24, CU-40, CU-41 · Descargar telemetría persistida del video para sincronización directa",
+        "operationId": "obtener_muestras_video_api_vision_videos__video_id__muestras_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "video_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Video Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MensajeWorker"
+                  },
+                  "title": "Response Obtener Muestras Video Api Vision Videos  Video Id  Muestras Get"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "Declarado en el contrato, pendiente de implementacion",
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
+                }
+              }
+            }
           },
           "422": {
             "description": "Validation Error",
@@ -5535,6 +5926,32 @@
             "type": "array",
             "title": "Imagenes",
             "description": "Fotos del tablero, de 5 a 20, JPG o PNG, hasta 10 MB cada una"
+      "Body_analizar_cuadro_en_vivo_api_vision_vivo_analizar_cuadro_post": {
+        "properties": {
+          "archivo": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "Archivo"
+          },
+          "color_local": {
+            "type": "string",
+            "title": "Color Local",
+            "default": "#6CABDD"
+          },
+          "color_rival": {
+            "type": "string",
+            "title": "Color Rival",
+            "default": "#FFFFFF"
+          },
+          "partido_id": {
+            "type": "integer",
+            "title": "Partido Id",
+            "default": 1
+          },
+          "t_actual": {
+            "type": "number",
+            "title": "T Actual",
+            "default": 0.0
           }
         },
         "type": "object",
@@ -5542,6 +5959,33 @@
           "imagenes"
         ],
         "title": "Body_calibracion_intrinseca_api_vision_calibracion_intrinseca_post"
+          "archivo"
+        ],
+        "title": "Body_analizar_cuadro_en_vivo_api_vision_vivo_analizar_cuadro_post"
+      },
+      "Body_detectar_calibracion_ia_api_vision_partidos__partido_id__calibracion_detectar_ia_post": {
+        "properties": {
+          "archivo": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "Archivo"
+          },
+          "largo_m": {
+            "type": "number",
+            "title": "Largo M",
+            "default": 105.0
+          },
+          "ancho_m": {
+            "type": "number",
+            "title": "Ancho M",
+            "default": 68.0
+          }
+        },
+        "type": "object",
+        "required": [
+          "archivo"
+        ],
+        "title": "Body_detectar_calibracion_ia_api_vision_partidos__partido_id__calibracion_detectar_ia_post"
       },
       "Body_importar_plantel_api_deportivo_equipos__equipo_id__jugadores_importar_post": {
         "properties": {
@@ -7560,6 +8004,22 @@
             "title": "Modelo Id",
             "description": "Si se omite, usa el modelo marcado como activo; sin modelo activo, el worker usa el YOLO preentrenado"
           },
+          "color_propio": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^#[0-9A-Fa-f]{6}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color Propio",
+            "description": "Color de camiseta del equipo propio para este análisis. Si se omite, se usa el color titular/alternativo registrado del equipo.",
+            "examples": [
+              "#1E5AA8"
+            ]
+          },
           "color_rival": {
             "anyOf": [
               {
@@ -8638,6 +9098,33 @@
             "maximum": 1.0,
             "minimum": 0.0,
             "title": "Conf"
+          },
+          "bbox": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bbox",
+            "description": "Bounding box [x1, y1, x2, y2] en porcentaje (0..100) del cuadro de video"
+          },
+          "dorsal": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dorsal",
+            "description": "Número dorsal o slot canónico persistente del jugador (1..11)"
           }
         },
         "type": "object",
@@ -9859,6 +10346,28 @@
               }
             ],
             "title": "Mensaje Error"
+          },
+          "color_propio": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color Propio"
+          },
+          "color_rival": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color Rival"
           },
           "creado_en": {
             "type": "string",

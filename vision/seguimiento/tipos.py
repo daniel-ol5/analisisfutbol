@@ -23,6 +23,7 @@ class Clase(StrEnum):
     JUGADOR = "JUGADOR"
     ARBITRO = "ARBITRO"
     BALON = "BALON"
+    PORTERO = "PORTERO"
 
 
 class EquipoDetectado(StrEnum):

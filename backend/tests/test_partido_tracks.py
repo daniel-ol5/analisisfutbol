@@ -1,5 +1,6 @@
 """Pruebas de asignación de jugadores a identificadores  —  CU-34, CU-35 (T-067)."""
 
+import time
 from contextlib import ExitStack
 from datetime import UTC, datetime, timedelta
 
@@ -692,6 +693,11 @@ def test_ingesta_100_mensajes_seguidos_con_mismos_tracks_hace_una_sola_escritura
                 pid, 25.0, [(1, "LOCAL", 0.9), (2, "LOCAL", 0.9), (99, "ARBITRO", 0.85)]
             )
             ws.send_json(msg_post_reinicio)
+            # Esperar determinísticamente a que el hilo del WebSocket procese el mensaje e inserte
+            for _ in range(50):
+                if len(inserts_tracks) >= 2:
+                    break
+                time.sleep(0.02)
 
             resp_post = tc.get(f"/api/partido/{pid}/tracks?solo_activos=false", headers=auth)
             assert resp_post.status_code == 200

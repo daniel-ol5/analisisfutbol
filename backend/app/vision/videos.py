@@ -13,6 +13,7 @@ sesión, datos y el almacén.
 """
 
 import asyncio
+import contextlib
 import re
 from collections.abc import AsyncIterator
 from pathlib import Path, PurePosixPath
@@ -296,3 +297,15 @@ async def _cerrar_carga(db: AsyncSession, video: Video, almacen: AlmacenVideos) 
         video.mensaje_error = None
     await db.commit()
     await db.refresh(video)
+
+
+async def eliminar_video(
+    db: AsyncSession, usuario: UsuarioActual, video_id: int, almacen: AlmacenVideos
+) -> None:
+    """CU-28: elimina el registro del video y su archivo en el almacén."""
+    video = await video_del_club(db, usuario, video_id)
+    if video.archivo_url:
+        with contextlib.suppress(Exception):
+            await almacen.borrar(video.archivo_url)
+    await db.delete(video)
+    await db.commit()

@@ -32,14 +32,15 @@ class ErrorApi(Exception):
 
 
 class ApiBackend:
-    def __init__(self, base: str, email: str, password: str,
-                 abrir: Abrir = urllib.request.urlopen, timeout: float = 60) -> None:
+    def __init__(self, base: str, email: str = "", password: str = "",
+                 abrir: Abrir = urllib.request.urlopen, timeout: float = 60,
+                 token: str | None = None) -> None:
         self.base = base.rstrip("/")
         self.email = email
         self.password = password
         self._abrir = abrir
         self.timeout = timeout
-        self._token: str | None = None
+        self._token: str | None = token
 
     # ---------- HTTP ----------
 
@@ -79,6 +80,10 @@ class ApiBackend:
     # ---------- Contrato ----------
 
     def iniciar_sesion(self) -> None:
+        if not self.email or not self.password:
+            if self._token:
+                raise ErrorApi(401, "Token de acceso expirado y sin credenciales para renovar")
+            raise ErrorApi(401, "Faltan credenciales de acceso para iniciar sesión")
         self._token = None
         datos = self._json("POST", "/seguridad/login",
                            {"email": self.email, "password": self.password}, autenticar=False)

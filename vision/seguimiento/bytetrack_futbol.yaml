@@ -1,0 +1,10 @@
+# Configuración de ByteTrack optimizada para cámaras tácticas de fútbol (CU-24)
+# match_thresh es el umbral de distancia (costo = 1 - IoU). 
+# match_thresh = 0.80 permite asociar detecciones con IoU >= 0.20 (cruces rápidos y sprints).
+tracker_type: bytetrack
+track_high_thresh: 0.20
+track_low_thresh: 0.08
+new_track_thresh: 0.22
+track_buffer: 90
+match_thresh: 0.80
+fuse_score: True

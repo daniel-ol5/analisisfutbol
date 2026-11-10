@@ -8,7 +8,7 @@
  * Soporta actualización en tiempo real a 5 Hz y modo de alto contraste para banco de suplentes.
  */
 
-import { memo, useId, useState } from "react";
+import { memo, useId, useMemo, useState } from "react";
 
 import type {
   ConfiguracionPlano2D,
@@ -40,6 +40,16 @@ const CONFIG_DEFECTO: ConfiguracionPlano2D = {
 const LARGO = 105;
 const ANCHO = 68;
 
+export function esColorClaro(hex: string): boolean {
+  const limpio = hex.replace("#", "");
+  if (limpio.length !== 6) return false;
+  const r = parseInt(limpio.slice(0, 2), 16);
+  const g = parseInt(limpio.slice(2, 4), 16);
+  const b = parseInt(limpio.slice(4, 6), 16);
+  const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return lum > 165;
+}
+
 function obtenerColorEquipo(
   equipo: EquipoDetectado,
   altoContraste: boolean,
@@ -59,19 +69,26 @@ function obtenerColorEquipo(
     }
   }
 
+  const cLocal = colorLocal || "#1d4ed8";
+  const cVisitante = colorVisitante || "#dc2626";
+
   switch (equipo) {
-    case "LOCAL":
+    case "LOCAL": {
+      const claro = esColorClaro(cLocal);
       return {
-        relleno: colorLocal || "#1d4ed8",
-        borde: "#ffffff",
-        texto: "#ffffff",
+        relleno: cLocal,
+        borde: claro ? "#0f172a" : "#ffffff",
+        texto: claro ? "#0f172a" : "#ffffff",
       };
-    case "VISITANTE":
+    }
+    case "VISITANTE": {
+      const claro = esColorClaro(cVisitante);
       return {
-        relleno: colorVisitante || "#dc2626",
-        borde: "#ffffff",
-        texto: "#ffffff",
+        relleno: cVisitante,
+        borde: claro ? "#0f172a" : "#ffffff",
+        texto: claro ? "#0f172a" : "#ffffff",
       };
+    }
     case "ARBITRO":
       return { relleno: "#eab308", borde: "#1e293b", texto: "#1e293b" };
     default:
@@ -92,6 +109,18 @@ export const Plano2DCancha = memo(function Plano2DCancha({
 }: Props) {
   const [jugadorSeleccionado, setJugadorSeleccionado] = useState<PosicionDetectada | null>(null);
   const clipId = useId();
+
+  // Deduplica jugadores por Track ID asegurando una sola ficha por jugador en el radar
+  const jugadoresUnicos = useMemo(() => {
+    const mapa = new Map<number, PosicionDetectada>();
+    for (const j of jugadores) {
+      const actual = mapa.get(j.tid);
+      if (!actual || j.conf > (actual.conf ?? 0)) {
+        mapa.set(j.tid, j);
+      }
+    }
+    return Array.from(mapa.values());
+  }, [jugadores]);
 
   const cfg: ConfiguracionPlano2D = { ...CONFIG_DEFECTO, ...configuracion };
   const { mostrarEtiquetas, mostrarEstelaBalon, altoContraste, invertirLados } = cfg;
@@ -195,19 +224,21 @@ export const Plano2DCancha = memo(function Plano2DCancha({
           <rect x="105" y="30.34" width="2.44" height="7.32" fill="url(#red-arco)" />
         </g>
 
-        {/* Estela de trayectoria reciente del balón */}
+        {/* Estela de trayectoria reciente del balón (resaltada en color ámbar neón) */}
         {mostrarEstelaBalon && estelaBalon.length > 1 && (
-          <g>
+          <g className="plano-estela-grupo">
             {estelaBalon.map((p, idx) => {
-              const opacidad = ((idx + 1) / estelaBalon.length) * 0.7;
+              const opacidad = ((idx + 1) / estelaBalon.length) * 0.75;
               const radio = 0.35 + ((idx + 1) / estelaBalon.length) * 0.45;
+              const ex = transformarX(Math.min(LARGO - 0.5, Math.max(0.5, p.x)));
+              const ey = transformarY(Math.min(ANCHO - 0.5, Math.max(0.5, p.y)));
               return (
                 <circle
                   key={`estela-${idx}`}
-                  cx={transformarX(p.x)}
-                  cy={transformarY(p.y)}
+                  cx={ex}
+                  cy={ey}
                   r={radio}
-                  fill="#ffffff"
+                  fill="#ff8533"
                   opacity={opacidad}
                 />
               );
@@ -215,62 +246,40 @@ export const Plano2DCancha = memo(function Plano2DCancha({
           </g>
         )}
 
-        {/* Balón */}
-        {balon && (
-          <g className="plano-balon-grupo">
-            {/* Resplandor del balón */}
-            <circle
-              cx={transformarX(balon.x)}
-              cy={transformarY(balon.y)}
-              r="1.4"
-              fill="rgba(255, 255, 255, 0.35)"
-            />
-            {/* Balón visible */}
-            <circle
-              cx={transformarX(balon.x)}
-              cy={transformarY(balon.y)}
-              r="0.85"
-              fill="#ffffff"
-              stroke="#0f172a"
-              strokeWidth="0.3"
-            />
-            {/* Detalle interno pentágono */}
-            <circle
-              cx={transformarX(balon.x)}
-              cy={transformarY(balon.y)}
-              r="0.32"
-              fill="#0f172a"
-            />
-            <title>{`Balón\nPosición: (${balon.x.toFixed(1)} m, ${balon.y.toFixed(1)} m)\nConfianza: ${(balon.conf * 100).toFixed(0)}%`}</title>
-          </g>
-        )}
-
-        {/* Jugadores detectados */}
-        {jugadores.map((j) => {
+        {/* Jugadores detectados con interpolación fluida de posición y acotados al campo */}
+        {jugadoresUnicos.map((j) => {
           const col = obtenerColorEquipo(j.equipo, altoContraste, colorLocal, colorVisitante);
-          const px = transformarX(j.x);
-          const py = transformarY(j.y);
+          const px = transformarX(Math.min(LARGO - 0.8, Math.max(0.8, j.x)));
+          const py = transformarY(Math.min(ANCHO - 0.8, Math.max(0.8, j.y)));
           const esSeleccionado = jugadorSeleccionado?.tid === j.tid;
 
           const etiqueta =
             mostrarEtiquetas === "dorsal"
-              ? String(j.dorsal ?? j.tid)
+              ? j.dorsal != null
+                ? String(j.dorsal)
+                : ""
               : mostrarEtiquetas === "tid"
                 ? String(j.tid)
                 : "";
+
+          const tamanoFuente = etiqueta.length > 3 ? "0.95" : etiqueta.length > 2 ? "1.15" : "1.35";
 
           return (
             <g
               key={j.tid}
               className={`plano-jugador-grupo ${esSeleccionado ? "plano-jugador--activo" : ""}`}
+              transform={`translate(${px}, ${py})`}
+              style={{
+                cursor: "pointer",
+                transition: "transform 0.22s cubic-bezier(0.25, 0.1, 0.25, 1)",
+              }}
               onClick={() => setJugadorSeleccionado(j)}
-              style={{ cursor: "pointer" }}
             >
               {/* Halo de selección */}
               {esSeleccionado && (
                 <circle
-                  cx={px}
-                  cy={py}
+                  cx={0}
+                  cy={0}
                   r="2.6"
                   fill="none"
                   stroke="#38bdf8"
@@ -281,8 +290,8 @@ export const Plano2DCancha = memo(function Plano2DCancha({
 
               {/* Ficha circular del jugador (radio 1.55 m) */}
               <circle
-                cx={px}
-                cy={py}
+                cx={0}
+                cy={0}
                 r="1.55"
                 fill={col.relleno}
                 stroke={col.borde}
@@ -292,10 +301,10 @@ export const Plano2DCancha = memo(function Plano2DCancha({
               {/* Etiqueta / Número */}
               {etiqueta && (
                 <text
-                  x={px}
-                  y={py + 0.1}
+                  x={0}
+                  y={0.1}
                   fill={col.texto}
-                  fontSize="1.35"
+                  fontSize={tamanoFuente}
                   fontWeight="bold"
                   textAnchor="middle"
                   dominantBaseline="central"
@@ -308,12 +317,55 @@ export const Plano2DCancha = memo(function Plano2DCancha({
               <title>
                 {`Jugador ${j.tid} (${j.equipo})\n` +
                   `Dorsal: ${j.dorsal ?? "Sin asignar"}\n` +
-                  `Posición: ${j.x.toFixed(1)} m, ${j.y.toFixed(1)} m\n` +
+                  `Posición: (${j.x.toFixed(1)} m, ${j.y.toFixed(1)} m)\n` +
                   `Confianza: ${(j.conf * 100).toFixed(0)}%`}
               </title>
             </g>
           );
         })}
+
+        {/* Balón táctico: SIEMPRE por encima de todos los jugadores y en color naranja neón resaltante */}
+        {balon && (
+          <g
+            className="plano-balon-grupo"
+            transform={`translate(${transformarX(Math.min(LARGO - 0.5, Math.max(0.5, balon.x)))}, ${transformarY(Math.min(ANCHO - 0.5, Math.max(0.5, balon.y)))})`}
+            style={{
+              transition: "transform 0.18s cubic-bezier(0.25, 0.1, 0.25, 1)",
+              filter: "drop-shadow(0 0 3px rgba(255, 107, 0, 0.75))",
+            }}
+          >
+            {/* Halo pulsante de visibilidad máxima */}
+            <circle
+              cx={0}
+              cy={0}
+              r="2.2"
+              fill="rgba(255, 107, 0, 0.45)"
+            />
+            {/* Esfera del balón en Naranja Neón Eléctrico */}
+            <circle
+              cx={0}
+              cy={0}
+              r="1.15"
+              fill="#ff6b00"
+              stroke="#ffffff"
+              strokeWidth="0.4"
+            />
+            {/* Núcleo reflectivo de alto contraste */}
+            <circle
+              cx={-0.25}
+              cy={-0.25}
+              r="0.4"
+              fill="#ffffff"
+            />
+            <circle
+              cx={0.2}
+              cy={0.2}
+              r="0.28"
+              fill="#0f172a"
+            />
+            <title>{`Balón\nPosición: (${balon.x.toFixed(1)} m, ${balon.y.toFixed(1)} m)\nConfianza: ${(balon.conf * 100).toFixed(0)}%`}</title>
+          </g>
+        )}
       </svg>
 
       {/* Barra de estado inferior del plano */}

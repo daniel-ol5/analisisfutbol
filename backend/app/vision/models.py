@@ -143,9 +143,10 @@ class Video(Base):
     progreso_pct: Mapped[int] = mapped_column(Integer, default=0)
     mensaje_error: Mapped[str | None] = mapped_column(String(400), nullable=True)
 
-    # T-061: procesamiento diferido. `color_rival` lo indica quien lanza el
+    # T-061: procesamiento diferido. `color_propio` y `color_rival` los indica quien lanza el
     # proceso; `tomado_en` es cuándo un worker tomó el trabajo, y se renueva con
     # cada lote: si deja de llegar (worker caído), otro worker puede retomarlo.
+    color_propio: Mapped[str | None] = mapped_column(String(7), nullable=True)
     color_rival: Mapped[str | None] = mapped_column(String(7), nullable=True)
     tomado_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     # HU-25 · Criterio 2: cuándo el worker empezó; base del tiempo restante.

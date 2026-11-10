@@ -252,6 +252,8 @@ class Video(BaseModel):
     tiempo_restante_s: int | None = Field(default=None, ge=0,
         description="HU-25. Estimado al ritmo actual; null en cola o sin avance, 0 al terminar")
     mensaje_error: str | None = None
+    color_propio: str | None = None
+    color_rival: str | None = None
     creado_en: datetime
     procesado_en: datetime | None = None
 
@@ -263,6 +265,9 @@ class LanzarProceso(BaseModel):
     modelo_id: int | None = Field(default=None,
         description="Si se omite, usa el modelo marcado como activo; sin modelo activo, "
                     "el worker usa el YOLO preentrenado")
+    color_propio: str | None = Field(default=None, pattern=_HEX, examples=["#1E5AA8"],
+        description="Color de camiseta del equipo propio para este análisis. "
+                    "Si se omite, se usa el color titular/alternativo registrado del equipo.")
     color_rival: str | None = Field(default=None, pattern=_HEX, examples=["#C8102E"],
         description="Color de camiseta del rival en este partido. El backend solo conoce los "
                     "del equipo propio; sin este dato el worker separa los equipos por K-means "
