@@ -14,6 +14,7 @@ renovar `tomado_en` y pasado `PLAZO_SIN_NOTICIAS` otro puede retomarlo.
 """
 
 import asyncio
+import json
 import logging
 import math
 import os
@@ -24,6 +25,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import or_, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.database import SessionLocal
 from app.core.deps import UsuarioActual
 from app.core.realtime import canal_partido, obtener_hub
@@ -230,6 +232,23 @@ async def recibir_resultados(
         await posiciones.agregar(muestra)
     await posiciones.vaciar()
 
+    # Guardar en disco para que el reproductor y el radar 2D puedan sincronizarlo
+    if lote.muestras:
+        guardar_muestras_partido(video.partido_id, lote.muestras)
+        guardar_muestras_video(video.id, lote.muestras)
+        hub = obtener_hub()
+        canal = canal_partido(usuario.club_id, video.partido_id)
+        ultima = lote.muestras[-1]
+        _ULTIMA_MUESTRA_PARTIDO[video.partido_id] = ultima
+        await hub.difundir(
+            canal,
+            {"tipo": "posiciones", "datos": ultima.model_dump(mode="json")},
+        )
+        await hub.difundir(
+            canal,
+            {"tipo": "calidad", "datos": ultima.calidad.model_dump(mode="json")},
+        )
+
     video.progreso_pct = max(video.progreso_pct, lote.progreso_pct)
     video.tomado_en = _ahora()  # sigue vivo
     await db.commit()
@@ -427,17 +446,140 @@ _TRANSMISIONES_ACTIVAS: dict[int, asyncio.Task[None]] = {}
 _ULTIMA_MUESTRA_PARTIDO: dict[int, MensajeWorker] = {}
 
 
+def _guardar_muestras_archivo(ruta: Path, muestras: list[MensajeWorker]) -> None:
+    ruta.parent.mkdir(parents=True, exist_ok=True)
+    existentes: list[dict[str, object]] = []
+    if ruta.exists():
+        try:
+            with open(ruta, "r", encoding="utf-8") as f:
+                existentes = json.load(f)
+        except Exception:
+            existentes = []
+    existentes.extend(m.model_dump(mode="json") for m in muestras)
+    vistos: set[float] = set()
+    unicas: list[dict[str, object]] = []
+    for d in existentes:
+        t_val = round(float(d.get("t", 0.0)), 2)
+        if t_val not in vistos:
+            vistos.add(t_val)
+            unicas.append(d)
+    unicas.sort(key=lambda x: float(x.get("t", 0.0)))
+    with open(ruta, "w", encoding="utf-8") as f:
+        json.dump(unicas, f)
+
+
+def _ruta_muestras_partido(partido_id: int) -> Path:
+    candidatos = [
+        Path(settings.videos_dir).parent / "muestras" / f"partido-{partido_id}.json",
+        Path("almacen/muestras") / f"partido-{partido_id}.json",
+        Path(r"C:\Users\Daniel\Desktop\SW1\Deportivo\backend\almacen\muestras") / f"partido-{partido_id}.json",
+        Path(r"C:\Users\Daniel\Desktop\SW1\Deportivo\almacen\muestras") / f"partido-{partido_id}.json",
+    ]
+    for c in candidatos:
+        if c.exists():
+            return c
+    p = candidatos[0]
+    p.parent.mkdir(parents=True, exist_ok=True)
+    return p
+
+
+def _ruta_muestras_video(video_id: int) -> Path:
+    candidatos = [
+        Path(settings.videos_dir).parent / "muestras" / f"video-{video_id}.json",
+        Path("almacen/muestras") / f"video-{video_id}.json",
+        Path(r"C:\Users\Daniel\Desktop\SW1\Deportivo\backend\almacen\muestras") / f"video-{video_id}.json",
+        Path(r"C:\Users\Daniel\Desktop\SW1\Deportivo\almacen\muestras") / f"video-{video_id}.json",
+    ]
+    for c in candidatos:
+        if c.exists():
+            return c
+    p = candidatos[0]
+    p.parent.mkdir(parents=True, exist_ok=True)
+    return p
+
+
+def guardar_muestras_partido(partido_id: int, muestras: list[MensajeWorker]) -> None:
+    """Persiste en disco las muestras reales generadas por YOLO + ByteTrack."""
+    _guardar_muestras_archivo(_ruta_muestras_partido(partido_id), muestras)
+    for otra_raiz in [Path("almacen/muestras"), Path("backend/almacen/muestras")]:
+        if otra_raiz.exists():
+            _guardar_muestras_archivo(otra_raiz / f"partido-{partido_id}.json", muestras)
+
+
+def guardar_muestras_video(video_id: int, muestras: list[MensajeWorker]) -> None:
+    """Persiste en disco las muestras del video procesado."""
+    _guardar_muestras_archivo(_ruta_muestras_video(video_id), muestras)
+    for otra_raiz in [Path("almacen/muestras"), Path("backend/almacen/muestras")]:
+        if otra_raiz.exists():
+            _guardar_muestras_archivo(otra_raiz / f"video-{video_id}.json", muestras)
+
+
+def cargar_muestras_video(video_id: int) -> list[MensajeWorker]:
+    """Recupera las muestras reales detectadas para un video específico."""
+    ruta = _ruta_muestras_video(video_id)
+    if not ruta.exists():
+        return []
+    try:
+        with open(ruta, "r", encoding="utf-8") as f:
+            datos = json.load(f)
+        return [MensajeWorker.model_validate(d) for d in datos]
+    except Exception:
+        log.exception("Error cargando muestras persistidas para video %s", video_id)
+        return []
+
+
+def cargar_muestras_partido(partido_id: int, video_id: int | None = None) -> list[MensajeWorker]:
+    """Recupera las muestras reales detectadas para el partido o video."""
+    if video_id is not None:
+        muestras_vid = cargar_muestras_video(video_id)
+        if muestras_vid:
+            return muestras_vid
+    ruta = _ruta_muestras_partido(partido_id)
+    if not ruta.exists():
+        return []
+    try:
+        with open(ruta, "r", encoding="utf-8") as f:
+            datos = json.load(f)
+        return [MensajeWorker.model_validate(d) for d in datos]
+    except Exception:
+        log.exception("Error cargando muestras persistidas para partido %s", partido_id)
+        return []
+
+
 async def transmitir_telemetria_partido_en_background(
     partido_id: int,
     club_id: int,
     duracion_s: float = 60.0,
     t_inicio_s: float = 0.0,
+    video_id: int | None = None,
 ) -> None:
     """Emite telemetría a 5 Hz para el partido sincronizada con el visor de video/cámara."""
     try:
         hub = obtener_hub()
         canal = canal_partido(club_id, partido_id)
         almacen_pos = obtener_almacen_posiciones()
+
+        muestras_reales = cargar_muestras_partido(partido_id, video_id=video_id)
+        if muestras_reales:
+            # Emitir las muestras reales detectadas por YOLO del video
+            muestras_a_emitir = [m for m in muestras_reales if m.t >= (t_inicio_s - 0.05)]
+            if not muestras_a_emitir:
+                muestras_a_emitir = muestras_reales
+            for muestra in muestras_a_emitir:
+                await asyncio.sleep(0.2)
+                _ULTIMA_MUESTRA_PARTIDO[partido_id] = muestra
+                await hub.difundir(
+                    canal,
+                    {"tipo": "posiciones", "datos": muestra.model_dump(mode="json")},
+                )
+                await hub.difundir(
+                    canal,
+                    {"tipo": "calidad", "datos": muestra.calidad.model_dump(mode="json")},
+                )
+                await almacen_pos.agregar(muestra)
+            await almacen_pos.vaciar()
+            return
+
         largo_m = 105.0
         ancho_m = 68.0
         paso_inicial = max(1, int(t_inicio_s * 5))
@@ -560,6 +702,7 @@ def programar_transmision_vivo_partido(
     usuario: UsuarioActual,
     duracion_s: float = 60.0,
     t_inicio_s: float = 0.0,
+    video_id: int | None = None,
 ) -> None:
     """Inicia o reinicia la emisión de telemetría a 5 Hz para el partido indicado."""
     if "PYTEST_CURRENT_TEST" in os.environ:
@@ -571,7 +714,7 @@ def programar_transmision_vivo_partido(
             anterior.cancel()
         _TRANSMISIONES_ACTIVAS[partido_id] = loop.create_task(
             transmitir_telemetria_partido_en_background(
-                partido_id, usuario.club_id, duracion_s, t_inicio_s
+                partido_id, usuario.club_id, duracion_s, t_inicio_s, video_id=video_id
             )
         )
     except RuntimeError:

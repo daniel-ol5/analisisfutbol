@@ -15,6 +15,8 @@ export interface PosicionDetectada {
   conf: number;
   /** Número de dorsal si está asignado */
   dorsal?: number | null;
+  /** Bounding box [x1, y1, x2, y2] en porcentaje (0..100) sobre el video */
+  bbox?: [number, number, number, number] | null;
 }
 
 export interface IndicadorCalidad {

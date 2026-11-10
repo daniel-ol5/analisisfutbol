@@ -112,26 +112,40 @@ def equipos_de(cuadro: np.ndarray, personas: Sequence[Deteccion], ctx: Contexto)
     return [e or EquipoDetectado.DESCONOCIDO for e in equipos]
 
 
-def _punto(d: Deteccion, equipo: EquipoDetectado, xy: tuple[float, float]) -> dict[str, Any]:
-    return {
+def _punto(
+    d: Deteccion,
+    equipo: EquipoDetectado,
+    xy: tuple[float, float],
+    ancho_px: int | None = None,
+    alto_px: int | None = None,
+) -> dict[str, Any]:
+    punto: dict[str, Any] = {
         "tid": d.tid,
         "equipo": equipo.value,
         "x": round(float(xy[0]), 2),
         "y": round(float(xy[1]), 2),
         "conf": round(min(max(float(d.conf), 0.0), 1.0), 3),
     }
+    if ancho_px and alto_px and ancho_px > 0 and alto_px > 0:
+        x1_pct = round(100.0 * max(0.0, float(d.caja[0])) / ancho_px, 2)
+        y1_pct = round(100.0 * max(0.0, float(d.caja[1])) / alto_px, 2)
+        x2_pct = round(100.0 * min(float(ancho_px), float(d.caja[2])) / ancho_px, 2)
+        y2_pct = round(100.0 * min(float(alto_px), float(d.caja[3])) / alto_px, 2)
+        punto["bbox"] = [x1_pct, y1_pct, x2_pct, y2_pct]
+    return punto
 
 
 def armar_mensaje(
     ctx: Contexto, t: float, cuadro: np.ndarray, detecciones: Sequence[Deteccion]
 ) -> dict[str, Any]:
     """Un `MensajeWorker` (como diccionario JSON) para el cuadro del segundo `t`."""
+    alto, ancho = cuadro.shape[:2] if isinstance(cuadro, np.ndarray) and cuadro.ndim >= 2 else (None, None)
     personas = [d for d in detecciones if d.clase in (Clase.JUGADOR, Clase.ARBITRO)]
     balones = [d for d in detecciones if d.clase == Clase.BALON]
 
     equipos = equipos_de(cuadro, personas, ctx)
     jugadores = [
-        _punto(d, equipo, xy)
+        _punto(d, equipo, xy, ancho, alto)
         for (d, xy), equipo in zip(proyectar_detecciones(personas, ctx.homografia), equipos, strict=True)
     ]
 
@@ -140,7 +154,7 @@ def armar_mensaje(
         # Solo hay una pelota: la detección más segura.
         mejor = max(balones, key=lambda d: d.conf)
         (_, xy), = proyectar_detecciones([mejor], ctx.homografia)
-        balon = _punto(mejor, EquipoDetectado.DESCONOCIDO, xy)
+        balon = _punto(mejor, EquipoDetectado.DESCONOCIDO, xy, ancho, alto)
 
     degradado = len(personas) < MIN_JUGADORES_SANO
     return {

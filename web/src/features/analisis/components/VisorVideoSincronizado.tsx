@@ -13,6 +13,7 @@ import {
   descargarArchivoVideo,
   iniciarTransmisionVivoPartido,
   listarVideos,
+  pausarTransmisionVivoPartido,
 } from "@/features/vision/api";
 import type { Video } from "@/features/vision/types";
 
@@ -77,7 +78,7 @@ export function VisorVideoSincronizado({
   const [videoSrcUrl, setVideoSrcUrl] = useState<string | null>(null);
   const [nombreArchivoLocal, setNombreArchivoLocal] = useState<string | null>(null);
   const [errorFuente, setErrorFuente] = useState<string | null>(null);
-  const [mostrarOverlayYolo, setMostrarOverlayYolo] = useState(false);
+  const [mostrarOverlayYolo, setMostrarOverlayYolo] = useState(true);
   const [iniciandoStream, setIniciandoStream] = useState(false);
 
   // Estado de cámara en vivo
@@ -175,19 +176,32 @@ export function VisorVideoSincronizado({
     };
   }, [fuente, videoSeleccionadoId, limpiarUrlObjeto]);
 
-  const activarSincronizacion5Hz = useCallback(async () => {
-    setIniciandoStream(true);
+  const activarSincronizacion5Hz = useCallback(
+    async (tInicioS = 0, vidIdOverride?: number | null) => {
+      setIniciandoStream(true);
+      try {
+        const idVid = vidIdOverride !== undefined ? vidIdOverride : (fuente === "servidor" ? videoSeleccionadoId : null);
+        await iniciarTransmisionVivoPartido(partidoId, tInicioS, 120, idVid);
+      } catch {
+        // Si falla por permisos o red, no bloquea la reproducción local
+      } finally {
+        setIniciandoStream(false);
+      }
+    },
+    [partidoId, fuente, videoSeleccionadoId],
+  );
+
+  const pausarSincronizacion = useCallback(async () => {
     try {
-      await iniciarTransmisionVivoPartido(partidoId, 90);
+      await pausarTransmisionVivoPartido(partidoId);
     } catch {
-      // Si falla por permisos o red, no bloquea la reproducción local
-    } finally {
-      setIniciandoStream(false);
+      // Ignorar error al pausar
     }
   }, [partidoId]);
 
   const manejarReproducirYSincronizar = async () => {
-    await activarSincronizacion5Hz();
+    const tActual = videoRef.current ? videoRef.current.currentTime : 0;
+    await activarSincronizacion5Hz(tActual);
     if (fuente !== "camara" && videoRef.current) {
       try {
         await videoRef.current.play();
@@ -372,7 +386,11 @@ export function VisorVideoSincronizado({
                     id="select-video-partido"
                     className="panel-control-select"
                     value={videoSeleccionadoId ?? ""}
-                    onChange={(e) => setVideoSeleccionadoId(Number(e.target.value))}
+                    onChange={(e) => {
+                      const nuevoId = Number(e.target.value);
+                      setVideoSeleccionadoId(nuevoId);
+                      void activarSincronizacion5Hz(0, nuevoId);
+                    }}
                   >
                     {videosServidor.map((v) => (
                       <option key={v.id} value={v.id}>
@@ -462,127 +480,225 @@ export function VisorVideoSincronizado({
           <div className="visor-sincro-stage">
             {fuente === "camara" ? (
               <div className="visor-video-canvas-wrapper">
-                <video
-                  ref={camaraVideoRef}
-                  className="visor-sincro-video"
-                  playsInline
-                  muted
-                  autoPlay
-                />
-                {/* Capa de superposición YOLO + ByteTrack sincronizada con `jugadores` y `balon` */}
-                {mostrarOverlayYolo && jugadores.length > 0 && (
-                  <div className="visor-yolo-overlay" aria-hidden="true">
-                    <div className="visor-yolo-badge-superior">
-                      <span>YOLOv8 + ByteTrack · {jugadores.length} tracks activos</span>
-                      <span>Homografía 105x68m sincronizada (5.0 Hz)</span>
-                    </div>
-
-                    {jugadores.map((j) => {
-                      const pos = proyectarCanchaACamara(j.x, j.y);
-                      const esLocal = j.equipo === "LOCAL";
-                      const colorCaja = esLocal ? colorLocal : colorVisitante;
-                      const anchoPx = Math.round(24 * pos.escala);
-                      const altoPx = Math.round(48 * pos.escala);
-                      return (
-                        <div
-                          key={j.tid}
-                          className="visor-yolo-bbox"
-                          style={{
-                            left: `${pos.leftPct}%`,
-                            top: `${pos.topPct}%`,
-                            width: `${anchoPx}px`,
-                            height: `${altoPx}px`,
-                            borderColor: colorCaja,
-                          }}
-                        >
-                          <span
-                            className="visor-yolo-bbox-tag"
-                            style={{ backgroundColor: colorCaja }}
-                          >
-                            {j.dorsal ? `#${j.dorsal}` : `ID:${j.tid}`}
-                          </span>
-                        </div>
-                      );
-                    })}
-
-                    {balon && (
-                      <div
-                        className="visor-yolo-balon"
-                        style={{
-                          left: `${proyectarCanchaACamara(balon.x, balon.y).leftPct}%`,
-                          top: `${proyectarCanchaACamara(balon.x, balon.y).topPct}%`,
-                        }}
-                      >
-                        <span className="visor-yolo-balon-tag">BALÓN</span>
+                <div className="visor-video-inner-container">
+                  <video
+                    ref={camaraVideoRef}
+                    className="visor-sincro-video"
+                    playsInline
+                    muted
+                    autoPlay
+                  />
+                  {/* Capa de superposición YOLO + ByteTrack sincronizada con `jugadores` y `balon` */}
+                  {mostrarOverlayYolo && (jugadores.length > 0 || balon !== null) && (
+                    <div className="visor-yolo-overlay" aria-hidden="true">
+                      <div className="visor-yolo-badge-superior">
+                        <span>YOLOv8 + ByteTrack · {jugadores.length} tracks activos</span>
+                        <span>Homografía 105x68m sincronizada (5.0 Hz)</span>
                       </div>
-                    )}
-                  </div>
-                )}
+
+                      {jugadores.map((j) => {
+                        const esLocal = j.equipo === "LOCAL";
+                        const colorCaja = esLocal ? colorLocal : colorVisitante;
+
+                        if (j.bbox && j.bbox.length === 4) {
+                          const [x1, y1, x2, y2] = j.bbox;
+                          const wPct = Math.max(1.8, x2 - x1);
+                          const hPct = Math.max(3.2, y2 - y1);
+                          return (
+                            <div
+                              key={j.tid}
+                              className="visor-yolo-bbox"
+                              style={{
+                                left: `${x1}%`,
+                                top: `${y1}%`,
+                                width: `${wPct}%`,
+                                height: `${hPct}%`,
+                                transform: "none",
+                                borderColor: colorCaja,
+                              }}
+                            >
+                              <span
+                                className="visor-yolo-bbox-tag"
+                                style={{ backgroundColor: colorCaja }}
+                              >
+                                {j.dorsal ? `#${j.dorsal}` : `ID:${j.tid}`}
+                              </span>
+                            </div>
+                          );
+                        }
+
+                        const pos = proyectarCanchaACamara(j.x, j.y);
+                        const anchoPx = Math.round(24 * pos.escala);
+                        const altoPx = Math.round(48 * pos.escala);
+                        return (
+                          <div
+                            key={j.tid}
+                            className="visor-yolo-bbox"
+                            style={{
+                              left: `${pos.leftPct}%`,
+                              top: `${pos.topPct}%`,
+                              width: `${anchoPx}px`,
+                              height: `${altoPx}px`,
+                              borderColor: colorCaja,
+                            }}
+                          >
+                            <span
+                              className="visor-yolo-bbox-tag"
+                              style={{ backgroundColor: colorCaja }}
+                            >
+                              {j.dorsal ? `#${j.dorsal}` : `ID:${j.tid}`}
+                            </span>
+                          </div>
+                        );
+                      })}
+
+                      {balon &&
+                        (balon.bbox && balon.bbox.length === 4 ? (
+                          <div
+                            className="visor-yolo-balon"
+                            style={{
+                              left: `${balon.bbox[0]}%`,
+                              top: `${balon.bbox[1]}%`,
+                              width: `${Math.max(1.4, balon.bbox[2] - balon.bbox[0])}%`,
+                              height: `${Math.max(2.2, balon.bbox[3] - balon.bbox[1])}%`,
+                              transform: "none",
+                            }}
+                          >
+                            <span className="visor-yolo-balon-tag">BALÓN</span>
+                          </div>
+                        ) : (
+                          <div
+                            className="visor-yolo-balon"
+                            style={{
+                              left: `${proyectarCanchaACamara(balon.x, balon.y).leftPct}%`,
+                              top: `${proyectarCanchaACamara(balon.x, balon.y).topPct}%`,
+                            }}
+                          >
+                            <span className="visor-yolo-balon-tag">BALÓN</span>
+                          </div>
+                        ))}
+                    </div>
+                  )}
+                </div>
               </div>
             ) : videoSrcUrl ? (
               <div className="visor-video-canvas-wrapper">
-                <video
-                  ref={videoRef}
-                  src={videoSrcUrl}
-                  className="visor-sincro-video"
-                  controls
-                  playsInline
-                  loop
-                  onPlay={() => {
-                    if (!workerTransmitiendo) {
-                      void activarSincronizacion5Hz();
-                    }
-                  }}
-                />
-                {/* Capa de superposición YOLO + ByteTrack sincronizada con `jugadores` y `balon` */}
-                {mostrarOverlayYolo && jugadores.length > 0 && (
-                  <div className="visor-yolo-overlay" aria-hidden="true">
-                    <div className="visor-yolo-badge-superior">
-                      <span>YOLOv8 + ByteTrack · {jugadores.length} tracks activos</span>
-                      <span>Homografía 105x68m sincronizada (5.0 Hz)</span>
-                    </div>
-
-                    {jugadores.map((j) => {
-                      const pos = proyectarCanchaACamara(j.x, j.y);
-                      const esLocal = j.equipo === "LOCAL";
-                      const colorCaja = esLocal ? colorLocal : colorVisitante;
-                      const anchoPx = Math.round(24 * pos.escala);
-                      const altoPx = Math.round(48 * pos.escala);
-                      return (
-                        <div
-                          key={j.tid}
-                          className="visor-yolo-bbox"
-                          style={{
-                            left: `${pos.leftPct}%`,
-                            top: `${pos.topPct}%`,
-                            width: `${anchoPx}px`,
-                            height: `${altoPx}px`,
-                            borderColor: colorCaja,
-                          }}
-                        >
-                          <span
-                            className="visor-yolo-bbox-tag"
-                            style={{ backgroundColor: colorCaja }}
-                          >
-                            {j.dorsal ? `#${j.dorsal}` : `ID:${j.tid}`}
-                          </span>
-                        </div>
-                      );
-                    })}
-
-                    {balon && (
-                      <div
-                        className="visor-yolo-balon"
-                        style={{
-                          left: `${proyectarCanchaACamara(balon.x, balon.y).leftPct}%`,
-                          top: `${proyectarCanchaACamara(balon.x, balon.y).topPct}%`,
-                        }}
-                      >
-                        <span className="visor-yolo-balon-tag">BALÓN</span>
+                <div className="visor-video-inner-container">
+                  <video
+                    ref={videoRef}
+                    src={videoSrcUrl}
+                    className="visor-sincro-video"
+                    controls
+                    playsInline
+                    loop
+                    onPlay={() => {
+                      const t = videoRef.current ? videoRef.current.currentTime : 0;
+                      void activarSincronizacion5Hz(t);
+                    }}
+                    onPause={() => {
+                      void pausarSincronizacion();
+                    }}
+                    onSeeked={() => {
+                      if (videoRef.current && !videoRef.current.paused) {
+                        void activarSincronizacion5Hz(videoRef.current.currentTime);
+                      }
+                    }}
+                    onEnded={() => {
+                      void pausarSincronizacion();
+                    }}
+                  />
+                  {/* Capa de superposición YOLO + ByteTrack sincronizada con `jugadores` y `balon` */}
+                  {mostrarOverlayYolo && (jugadores.length > 0 || balon !== null) && (
+                    <div className="visor-yolo-overlay" aria-hidden="true">
+                      <div className="visor-yolo-badge-superior">
+                        <span>YOLOv8 + ByteTrack · {jugadores.length} tracks activos</span>
+                        <span>Homografía 105x68m sincronizada (5.0 Hz)</span>
                       </div>
-                    )}
-                  </div>
-                )}
+
+                      {jugadores.map((j) => {
+                        const esLocal = j.equipo === "LOCAL";
+                        const colorCaja = esLocal ? colorLocal : colorVisitante;
+
+                        if (j.bbox && j.bbox.length === 4) {
+                          const [x1, y1, x2, y2] = j.bbox;
+                          const wPct = Math.max(1.8, x2 - x1);
+                          const hPct = Math.max(3.2, y2 - y1);
+                          return (
+                            <div
+                              key={j.tid}
+                              className="visor-yolo-bbox"
+                              style={{
+                                left: `${x1}%`,
+                                top: `${y1}%`,
+                                width: `${wPct}%`,
+                                height: `${hPct}%`,
+                                transform: "none",
+                                borderColor: colorCaja,
+                              }}
+                            >
+                              <span
+                                className="visor-yolo-bbox-tag"
+                                style={{ backgroundColor: colorCaja }}
+                              >
+                                {j.dorsal ? `#${j.dorsal}` : `ID:${j.tid}`}
+                              </span>
+                            </div>
+                          );
+                        }
+
+                        const pos = proyectarCanchaACamara(j.x, j.y);
+                        const anchoPx = Math.round(24 * pos.escala);
+                        const altoPx = Math.round(48 * pos.escala);
+                        return (
+                          <div
+                            key={j.tid}
+                            className="visor-yolo-bbox"
+                            style={{
+                              left: `${pos.leftPct}%`,
+                              top: `${pos.topPct}%`,
+                              width: `${anchoPx}px`,
+                              height: `${altoPx}px`,
+                              borderColor: colorCaja,
+                            }}
+                          >
+                            <span
+                              className="visor-yolo-bbox-tag"
+                              style={{ backgroundColor: colorCaja }}
+                            >
+                              {j.dorsal ? `#${j.dorsal}` : `ID:${j.tid}`}
+                            </span>
+                          </div>
+                        );
+                      })}
+
+                      {balon &&
+                        (balon.bbox && balon.bbox.length === 4 ? (
+                          <div
+                            className="visor-yolo-balon"
+                            style={{
+                              left: `${balon.bbox[0]}%`,
+                              top: `${balon.bbox[1]}%`,
+                              width: `${Math.max(1.4, balon.bbox[2] - balon.bbox[0])}%`,
+                              height: `${Math.max(2.2, balon.bbox[3] - balon.bbox[1])}%`,
+                              transform: "none",
+                            }}
+                          >
+                            <span className="visor-yolo-balon-tag">BALÓN</span>
+                          </div>
+                        ) : (
+                          <div
+                            className="visor-yolo-balon"
+                            style={{
+                              left: `${proyectarCanchaACamara(balon.x, balon.y).leftPct}%`,
+                              top: `${proyectarCanchaACamara(balon.x, balon.y).topPct}%`,
+                            }}
+                          >
+                            <span className="visor-yolo-balon-tag">BALÓN</span>
+                          </div>
+                        ))}
+                    </div>
+                  )}
+                </div>
               </div>
             ) : (
               <div className="visor-sincro-placeholder">

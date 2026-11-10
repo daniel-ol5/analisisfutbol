@@ -137,6 +137,10 @@ class PosicionDetectada(BaseModel):
     x: float = Field(description="Metros sobre el largo de la cancha")
     y: float = Field(description="Metros sobre el ancho de la cancha")
     conf: float = Field(ge=0, le=1)
+    bbox: list[float] | None = Field(
+        default=None,
+        description="Bounding box [x1, y1, x2, y2] en porcentaje (0..100) del cuadro de video",
+    )
 
 
 class MensajeWorker(BaseModel):

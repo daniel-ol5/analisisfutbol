@@ -1448,6 +1448,15 @@
   line-height: 0;
 }
 
+.visor-video-inner-container {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+  line-height: 0;
+  border-radius: 0.35rem;
+  overflow: hidden;
+}
+
 .visor-sincro-video {
   max-width: 100%;
   max-height: 500px;
@@ -1455,7 +1464,6 @@
   height: auto;
   display: block;
   border-radius: 0.35rem;
-  object-fit: contain;
 }
 
 .visor-sincro-placeholder {

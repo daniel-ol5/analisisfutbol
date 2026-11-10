@@ -204,6 +204,15 @@ async def estado_video(video_id: int, usuario: Actual, db: Db) -> Video:
     return Video.model_validate(await videos.ver_video(db, usuario, video_id))
 
 
+@router.delete("/videos/{video_id}", status_code=status.HTTP_204_NO_CONTENT,
+               dependencies=[PUEDEN_SUBIR],
+               responses=_RESPUESTA_404,
+               summary="CU-28 · Eliminar un video del partido")
+async def eliminar_video(video_id: int, usuario: Actual, db: Db,
+                         almacen: AlmacenDep) -> None:
+    await videos.eliminar_video(db, usuario, video_id, almacen)
+
+
 # ---------------- CU-27 · Procesamiento diferido (T-061) ----------------
 
 # CU-27 lo lanza el analista; el worker se autentica como ADMIN o ANALISTA.
@@ -273,11 +282,18 @@ async def descargar_video(video_id: int, usuario: Actual, db: Db,
              summary="CU-24, CU-40, CU-41 · Iniciar emisión sincronizada a 5 Hz con visor de video/cámara")
 async def iniciar_transmision_vivo(partido_id: int, usuario: Actual,
                                    t_inicio_s: float = 0.0,
-                                   duracion_s: float = 60.0) -> dict[str, object]:
+                                   duracion_s: float = 60.0,
+                                   video_id: int | None = None) -> dict[str, object]:
     procesamiento.programar_transmision_vivo_partido(
-        partido_id, usuario, duracion_s=duracion_s, t_inicio_s=t_inicio_s
+        partido_id, usuario, duracion_s=duracion_s, t_inicio_s=t_inicio_s, video_id=video_id
     )
-    return {"ok": True, "partido_id": partido_id, "t_inicio_s": t_inicio_s, "duracion_s": duracion_s}
+    return {
+        "ok": True,
+        "partido_id": partido_id,
+        "video_id": video_id,
+        "t_inicio_s": t_inicio_s,
+        "duracion_s": duracion_s,
+    }
 
 
 @router.post("/partidos/{partido_id}/pausar-vivo", status_code=status.HTTP_200_OK,

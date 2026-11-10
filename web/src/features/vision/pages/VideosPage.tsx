@@ -8,7 +8,7 @@
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 import { useSesion } from "@/features/seguridad";
 import { estadoHttp, mensajeDeError } from "@/shared/lib/errors";
@@ -17,6 +17,7 @@ import type { TonoBadge } from "@/shared/ui/Badge";
 
 import {
   cancelarProceso,
+  eliminarVideo,
   enviarTrozo,
   iniciarCarga,
   lanzarProceso,
@@ -187,12 +188,14 @@ export function VideosPage() {
 
   // ---------- Procesamiento ----------
 
+  const navegar = useNavigate();
   const procesar = useMutation({
     mutationFn: ({ id, colorRival }: { id: number; colorRival: string | null }) =>
       lanzarProceso(id, { color_rival: colorRival }),
     onSettled: refrescar,
   });
   const cancelar = useMutation({ mutationFn: cancelarProceso, onSettled: refrescar });
+  const eliminar = useMutation({ mutationFn: eliminarVideo, onSettled: refrescar });
 
   // ---------- Vista ----------
 
@@ -290,6 +293,12 @@ export function VideosPage() {
                 cancelar.mutate(v.id);
             }}
             cancelando={cancelar.isPending && cancelar.variables === v.id}
+            onAnalizar={() => navegar(`/analisis?partidoId=${v.partido_id}&videoId=${v.id}`)}
+            onEliminar={() => {
+              if (window.confirm(`¿Eliminar definitivamente el video «${v.nombre}»?`))
+                eliminar.mutate(v.id);
+            }}
+            eliminando={eliminar.isPending && eliminar.variables === v.id}
           />
         ))}
       </ul>
@@ -313,6 +322,9 @@ interface PropsTarjeta {
   errorProcesar: unknown;
   onCancelar: () => void;
   cancelando: boolean;
+  onAnalizar: () => void;
+  onEliminar: () => void;
+  eliminando: boolean;
 }
 
 function TarjetaVideo(p: PropsTarjeta) {
@@ -366,6 +378,29 @@ function TarjetaVideo(p: PropsTarjeta) {
       )}
 
       {p.puedeProcesar && sePuedeProcesar(v) && <FormularioProceso {...p} />}
+
+      <div
+        className="vid-estado-fila"
+        style={{
+          marginTop: "0.75rem",
+          paddingTop: "0.65rem",
+          borderTop: "1px solid var(--border-subtle, rgba(255,255,255,0.08))",
+          justifyContent: "flex-end",
+          gap: "0.6rem",
+          flexWrap: "wrap",
+        }}
+      >
+        {legible && (
+          <Button variante="secundario" onClick={p.onAnalizar}>
+            Analizar en panel en vivo
+          </Button>
+        )}
+        {p.puedeSubir && (
+          <Button variante="peligro" onClick={p.onEliminar} disabled={p.eliminando}>
+            {p.eliminando ? "Eliminando…" : "Eliminar video"}
+          </Button>
+        )}
+      </div>
     </li>
   );
 }
