@@ -42,8 +42,10 @@ class CalibracionIntrinseca:
     matriz_camara: np.ndarray        # K, 3x3, en píxeles
     coef_distorsion: np.ndarray      # (k1, k2, p1, p2, k3)
     tamano_imagen: tuple[int, int]   # (ancho, alto) en píxeles
-    error_reproyeccion_px: float     # RMS: < 0,5 px es una buena calibración
-    imagenes_usadas: int
+    # RMS: < 0,5 px es una buena calibración. None si llegó por el contrato de
+    # la calibración de la cancha, que solo guarda K, coeficientes y tamaño.
+    error_reproyeccion_px: float | None = None
+    imagenes_usadas: int | None = None
 
     def a_dict(self) -> dict[str, Any]:
         """Serializable a JSON, para guardarlo junto a la calibración (T-028)."""
@@ -57,12 +59,16 @@ class CalibracionIntrinseca:
 
     @classmethod
     def desde_dict(cls, datos: dict[str, Any]) -> "CalibracionIntrinseca":
+        """Acepta el `a_dict()` completo o solo matriz_camara, coef_distorsion y
+        tamano_imagen (lo que guarda la calibración de la cancha, T-036)."""
+        error = datos.get("error_reproyeccion_px")
+        imagenes = datos.get("imagenes_usadas")
         return cls(
             matriz_camara=np.asarray(datos["matriz_camara"], dtype=np.float64),
             coef_distorsion=np.asarray(datos["coef_distorsion"], dtype=np.float64),
             tamano_imagen=(int(datos["tamano_imagen"][0]), int(datos["tamano_imagen"][1])),
-            error_reproyeccion_px=float(datos["error_reproyeccion_px"]),
-            imagenes_usadas=int(datos["imagenes_usadas"]),
+            error_reproyeccion_px=None if error is None else float(error),
+            imagenes_usadas=None if imagenes is None else int(imagenes),
         )
 
 
@@ -125,6 +131,18 @@ def calibrar(imagenes: Iterable[np.ndarray],
 
 # ---------------- 2. Precalcular el mapa ----------------
 
+def matriz_corregida(calibracion: CalibracionIntrinseca, alfa: float = 0.0) -> np.ndarray:
+    """K' de la imagen corregida, sin calcular el mapa de píxeles (barato).
+
+    Es la misma que `precalcular_mapa(calibracion, alfa).matriz_nueva`: la que
+    usa la API para corregir los puntos marcados antes de la homografía.
+    """
+    tamano = calibracion.tamano_imagen
+    nueva, _ = cv2.getOptimalNewCameraMatrix(
+        calibracion.matriz_camara, calibracion.coef_distorsion, tamano, alfa, tamano)
+    return nueva
+
+
 def precalcular_mapa(calibracion: CalibracionIntrinseca, alfa: float = 0.0) -> MapaCorreccion:
     """Mapa de corrección para todo el cuadro. Se calcula una vez por cámara.
 
@@ -133,8 +151,7 @@ def precalcular_mapa(calibracion: CalibracionIntrinseca, alfa: float = 0.0) -> M
     salvo que se pierda una banda.
     """
     tamano = calibracion.tamano_imagen
-    nueva, _ = cv2.getOptimalNewCameraMatrix(
-        calibracion.matriz_camara, calibracion.coef_distorsion, tamano, alfa, tamano)
+    nueva = matriz_corregida(calibracion, alfa)
     mapa1, mapa2 = cv2.initUndistortRectifyMap(
         calibracion.matriz_camara, calibracion.coef_distorsion, None, nueva, tamano, cv2.CV_16SC2)
     return MapaCorreccion(mapa1, mapa2, nueva, tamano)
@@ -152,18 +169,22 @@ def corregir_imagen(imagen: np.ndarray, mapa: MapaCorreccion) -> np.ndarray:
 
 def corregir_puntos(puntos: Sequence[Sequence[float]] | np.ndarray,
                     calibracion: CalibracionIntrinseca,
-                    mapa: MapaCorreccion) -> np.ndarray:
+                    mapa: MapaCorreccion | None = None,
+                    alfa: float = 0.0) -> np.ndarray:
     """Lleva puntos de la imagen ORIGINAL a la imagen CORREGIDA.
 
     Entra una lista de (x, y) en píxeles del cuadro de la cámara; sale un array
     Nx2 en píxeles de la imagen corregida (la de `corregir_imagen`, con la
     matriz `mapa.matriz_nueva`). Es exacto, no pasa por el mapa de píxeles.
+    Sin `mapa`, usa `matriz_corregida(calibracion, alfa)`: mismo resultado que
+    con `precalcular_mapa(calibracion, alfa)`, sin calcular el mapa entero.
     """
     pts = np.asarray(puntos, dtype=np.float64).reshape(-1, 1, 2)
     if pts.size == 0:
         return np.empty((0, 2))
+    nueva = mapa.matriz_nueva if mapa is not None else matriz_corregida(calibracion, alfa)
     corregidos = invertir_distorsion(pts, calibracion.matriz_camara, calibracion.coef_distorsion,
-                                     mapa.matriz_nueva)
+                                     nueva)
     return corregidos.reshape(-1, 2)
 
 

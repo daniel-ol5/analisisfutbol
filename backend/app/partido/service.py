@@ -4,6 +4,7 @@ Este módulo no conoce FastAPI: recibe una sesión y datos, devuelve objetos o
 lanza excepciones de dominio. Así se prueba sin levantar el servidor.
 """
 
+import asyncio
 import logging
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -19,7 +20,7 @@ from app.core.config import settings
 from app.core.database import SessionLocal
 from app.core.deps import UsuarioActual
 from app.core.tenancy import del_club, verificar_pertenencia
-from app.deportivo.models import Alineacion, AlineacionJugador, Jugador, Partido
+from app.deportivo.models import Alineacion, AlineacionJugador, Jugador, Partido, Posicion
 from app.deportivo.schemas import Direccion, EstadoPartido
 from app.partido.models import AsignacionTrack, RelojPartido
 from app.partido.models import EventoManual as EventoManualModelo
@@ -965,8 +966,11 @@ MODELO_PARTIDO: type[Any] = Partido
 
 
 class RepositorioPartidos(Protocol):
-    async def verificar(self, partido_id: int, usuario: UsuarioActual) -> None:
-        """No devuelve nada si el partido es accesible; si no, lanza 404."""
+    async def verificar(self, partido_id: int, usuario: UsuarioActual) -> str | None:
+        """Devuelve el estado del partido si es accesible; si no, lanza 404.
+
+        `None` significa "estado desconocido" (solo `PartidosSinTabla`).
+        """
         ...
 
 
@@ -983,21 +987,23 @@ class PartidosEnTabla:
         self.modelo = modelo
         self.sesiones = sesiones
 
-    async def verificar(self, partido_id: int, usuario: UsuarioActual) -> None:
+    async def verificar(self, partido_id: int, usuario: UsuarioActual) -> str | None:
         async with self.sesiones() as db:
-            verificar_pertenencia(await db.get(self.modelo, partido_id), usuario)
+            partido = verificar_pertenencia(await db.get(self.modelo, partido_id), usuario)
+            return partido.estado
 
 
 class PartidosSinTabla:
-    """Provisorio mientras no exista la tabla: acepta cualquier `partido_id`.
+    """SOLO PARA PRUEBAS: acepta cualquier `partido_id` sin consultar la base.
 
-    No hay fuga entre clubes aun así: el canal del Hub lleva el `club_id` del
-    token (`canal_partido`), de modo que un usuario de otro club que use el
-    mismo número cae en un canal vacío, nunca en el ajeno.
+    Lo usan las pruebas del canal y del emisor que no necesitan sembrar
+    partidos. En producción se usa siempre `PartidosEnTabla`. Aun así no hay
+    fuga entre clubes: el canal del Hub lleva el `club_id` del token
+    (`canal_partido`).
     """
 
-    async def verificar(self, partido_id: int, usuario: UsuarioActual) -> None:
-        log.warning("Partido %s sin verificar: la tabla partido no existe (T-047)", partido_id)
+    async def verificar(self, partido_id: int, usuario: UsuarioActual) -> str | None:
+        return None
 
 
 def obtener_repositorio_partidos() -> RepositorioPartidos:
@@ -1006,19 +1012,8 @@ def obtener_repositorio_partidos() -> RepositorioPartidos:
 
 
 # ---------------- Persistencia de posiciones (T-033) ----------------
-#
-# La tabla `posicion` necesita la tabla `partido` (T-047), así que todavía no
-# existe. La inserción masiva ya está escrita en `PosicionesEnLote`.
-#
-# >>> PUNTO ÚNICO DE CONEXIÓN CON EL MODELO REAL <<<
-# Cuando exista el modelo, con las columnas de docs/diagramas/modelo-datos.puml
-# (partido_id, t, track_id, x_m, y_m, confianza), reemplazar por:
-#
-#     from app.partido.models import Posicion
-#     MODELO_POSICION = Posicion
-#
-# ⚠️ PROVISORIO: con None, las posiciones se difunden en vivo pero no se guardan.
-MODELO_POSICION: type[Any] | None = None
+
+MODELO_POSICION: type[Any] = Posicion
 
 
 def filas_de(mensaje: MensajeWorker) -> list[dict[str, Any]]:
@@ -1035,7 +1030,7 @@ class AlmacenPosiciones(Protocol):
     async def agregar(self, mensaje: MensajeWorker) -> None: ...
 
     async def vaciar(self) -> None:
-        """Guarda lo pendiente. Se llama también al desconectarse el worker."""
+        """Guarda todo lo pendiente. Se llama también al desconectarse el worker."""
         ...
 
 
@@ -1046,29 +1041,76 @@ class PosicionesEnLote:
     (ver la nota de `posicion` en el modelo de datos). `insert(Modelo)` con una
     lista de diccionarios es la inserción masiva de SQLAlchemy 2, el equivalente
     al `bulk_create` de Django: un único `executemany` por lote.
+
+    Hay UNA instancia por proceso (`obtener_almacen_posiciones`), con un buffer
+    por partido. Así da igual cuántas veces se pida el almacén: todas las
+    llamadas de un mismo partido acumulan en el mismo buffer. Un partido se
+    guarda cuando:
+      - junta `tamano_lote` mensajes,
+      - alguien llama a `vaciar()` (fin de la ingesta, fin de un lote de video),
+      - pasan `inactividad_s` segundos sin datos nuevos de ese partido, o
+      - la API se apaga (`lifespan` en `app/main.py`).
     """
 
-    TAMANO_LOTE = 25   # mensajes: 5 s de partido, unas 575 filas
+    TAMANO_LOTE = 25       # mensajes: 5 s de partido, unas 575 filas
+    INACTIVIDAD_S = 3.0    # sin datos durante este tiempo, se guarda lo pendiente
 
     def __init__(self, modelo: type[Any],
                  sesiones: async_sessionmaker[AsyncSession] = SessionLocal,
-                 tamano_lote: int = TAMANO_LOTE) -> None:
+                 tamano_lote: int = TAMANO_LOTE,
+                 inactividad_s: float = INACTIVIDAD_S) -> None:
         self.modelo = modelo
         self.sesiones = sesiones
         self.tamano_lote = tamano_lote
-        self._filas: list[dict[str, Any]] = []
-        self._mensajes = 0
+        self.inactividad_s = inactividad_s
+        self._filas: dict[int, list[dict[str, Any]]] = {}
+        self._mensajes: dict[int, int] = {}
+        self._temporizadores: dict[int, asyncio.TimerHandle] = {}
+        self._tareas: set[asyncio.Task[None]] = set()
+
+    def pendientes(self, partido_id: int) -> int:
+        """Filas que esperan ser guardadas para ese partido."""
+        return len(self._filas.get(partido_id, ()))
 
     async def agregar(self, mensaje: MensajeWorker) -> None:
-        self._filas.extend(filas_de(mensaje))
-        self._mensajes += 1
-        if self._mensajes >= self.tamano_lote:
-            await self.vaciar()
+        partido = mensaje.partido
+        self._filas.setdefault(partido, []).extend(filas_de(mensaje))
+        self._mensajes[partido] = self._mensajes.get(partido, 0) + 1
+        if self._mensajes[partido] >= self.tamano_lote:
+            await self._guardar(partido)
+        else:
+            self._programar(partido)
 
     async def vaciar(self) -> None:
-        if not self._filas:
+        for partido in list(self._filas):
+            await self._guardar(partido)
+
+    def _programar(self, partido: int) -> None:
+        """(Re)inicia la cuenta de inactividad del partido."""
+        self._cancelar(partido)
+        loop = asyncio.get_running_loop()
+        self._temporizadores[partido] = loop.call_later(
+            self.inactividad_s, self._al_vencer, partido)
+
+    def _cancelar(self, partido: int) -> None:
+        temporizador = self._temporizadores.pop(partido, None)
+        if temporizador is not None:
+            temporizador.cancel()
+
+    def _al_vencer(self, partido: int) -> None:
+        self._temporizadores.pop(partido, None)
+        tarea = asyncio.get_running_loop().create_task(self._guardar(partido))
+        self._tareas.add(tarea)   # referencia viva hasta que termine
+        tarea.add_done_callback(self._tareas.discard)
+
+    async def _guardar(self, partido: int) -> None:
+        self._cancelar(partido)
+        # Se saca del buffer ANTES del await: otro guardado concurrente del
+        # mismo partido no puede insertar las mismas filas dos veces.
+        filas = self._filas.pop(partido, None)
+        self._mensajes.pop(partido, None)
+        if not filas:
             return
-        filas, self._filas, self._mensajes = self._filas, [], 0
         try:
             async with self.sesiones() as db:
                 await db.execute(insert(self.modelo), filas)
@@ -1076,11 +1118,12 @@ class PosicionesEnLote:
         except SQLAlchemyError:
             # Perder un lote es preferible a cortar la ingesta: el panel en vivo
             # sigue funcionando aunque la base falle un momento.
-            log.exception("No se pudo guardar un lote de %d posiciones", len(filas))
+            log.exception("No se pudo guardar un lote de %d posiciones del partido %s",
+                          len(filas), partido)
 
 
 class PosicionesDescartadas:
-    """Provisorio mientras no exista la tabla: no guarda nada."""
+    """SOLO PARA PRUEBAS: no guarda nada (pruebas que no miran la tabla)."""
 
     async def agregar(self, mensaje: MensajeWorker) -> None:
         pass
@@ -1089,17 +1132,27 @@ class PosicionesDescartadas:
         pass
 
 
+_almacen: dict[str, PosicionesEnLote] = {}
+
+
 def obtener_almacen_posiciones() -> AlmacenPosiciones:
-    """Dependencia de FastAPI. Devuelve uno nuevo por conexión de worker."""
-    if MODELO_POSICION is None:
-        return PosicionesDescartadas()
-    return PosicionesEnLote(MODELO_POSICION)
+    """Dependencia de FastAPI. Siempre devuelve el MISMO almacén del proceso.
+
+    Así, llamarla en cada mensaje (como hace el procesamiento local de video)
+    no pierde nada: todo cae en el buffer de su partido.
+    """
+    if "unico" not in _almacen:
+        _almacen["unico"] = PosicionesEnLote(MODELO_POSICION)
+    return _almacen["unico"]
 
 
-# ---------------- Aviso al arrancar ----------------
+async def vaciar_almacen_posiciones() -> None:
+    """Guarda lo pendiente de todos los partidos. Se llama al apagar la API."""
+    almacen = _almacen.get("unico")
+    if almacen is not None:
+        await almacen.vaciar()
 
-def avisar_provisorios() -> None:
-    """Deja en el log, al arrancar la API, lo que funciona en modo provisorio."""
-    if MODELO_POSICION is None:
-        log.warning("PROVISORIO: no existe la tabla posicion; la ingesta difunde "
-                    "en vivo pero no guarda las posiciones.")
+
+def reiniciar_almacen_posiciones() -> None:
+    """Para pruebas: descarta el almacén del proceso (y su buffer)."""
+    _almacen.clear()

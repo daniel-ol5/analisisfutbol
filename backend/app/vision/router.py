@@ -1,18 +1,32 @@
 """Endpoints de Vision por Computadora  —  CU-18 … CU-29.
 
 Responsables segun el Sprint Planning:
-    CU-19 a CU-23  calibracion y homografia  · S2 · Jhon
+    CU-19 a CU-21  calibracion y homografia  · S2 · Jhon
+    CU-22, CU-23   calibracion previa y lente · S2 · Alejandra (T-035, T-036)
     CU-24 a CU-26  worker de vision          · S3 · Alex  (corre fuera de este backend)
     CU-27 a CU-29  video y modelos           · S3 · Araceli
 """
 
 from typing import Annotated
 
-from fastapi import APIRouter, Body, Depends, Header, Request, Response, status
+from fastapi import (
+    APIRouter,
+    Body,
+    Depends,
+    File,
+    Header,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    UploadFile,
+    status,
+)
 from fastapi.responses import FileResponse
+from starlette.concurrency import run_in_threadpool
 
 from app.core.deps import Actual, Db, requiere_rol
-from app.core.pendiente import RESPUESTA_501, pendiente
+from app.core.pendiente import RESPUESTA_501
 from app.partido.service import AlmacenPosiciones, obtener_almacen_posiciones
 from app.vision import procesamiento, service, videos
 from app.vision.almacen import AlmacenVideos, obtener_almacen_videos
@@ -20,6 +34,7 @@ from app.vision.schemas import (
     ActivarModelo,
     Calibracion,
     CalibracionGuardar,
+    CalibracionIntrinseca,
     ErrorCalibracion,
     FinTrabajo,
     LanzarProceso,
@@ -88,10 +103,90 @@ async def validar_calibracion(partido_id: int, datos: CalibracionGuardar,
 
 
 @router.get("/sedes/{sede}/calibracion-previa", response_model=Calibracion,
+            responses={404: {"description": "No hay una calibracion valida previa del club "
+                                            "en esa sede"}},
             summary="CU-22 · Recuperar una calibracion anterior de la misma sede")
 async def calibracion_previa(sede: str, usuario: Actual, db: Db) -> Calibracion:
-    pendiente("CU-22", "Sprint 2", "Jhon")
+    """La calibracion valida mas reciente del club en un partido de esa sede (T-035).
 
+    La sede se compara sin distinguir mayusculas ni espacios sobrantes. La
+    respuesta trae `advertencia`: hay que verificar que la camara no se movio.
+    Para usarla en el partido nuevo, enviar sus puntos y medidas en
+    POST /partidos/{id}/calibracion.
+    """
+    calibracion = await service.calibracion_previa(db, usuario, sede)
+    return Calibracion.model_validate(calibracion).model_copy(
+        update={"advertencia": service.ADVERTENCIA_CAMARA_MOVIDA})
+
+
+
+DESCRIPCION_INTRINSECA = """
+Calibra la **camara y el lente** (no la cancha) con fotos de un tablero de ajedrez
+impreso, rigido y plano. Se hace una vez por camara, lente y resolucion. **No
+guarda nada**: devuelve los parametros para enviarlos en la calibracion de la cancha.
+
+**Fotos:** entre 5 y 20, JPG o PNG, hasta 10 MB cada una, todas del mismo tamano y
+con la misma resolucion con la que se va a filmar. El tablero entero en cada foto,
+inclinado de distintas formas y llegando a las esquinas y bordes del cuadro, que es
+donde mas deforma el lente. `columnas` y `filas` son las esquinas INTERIORES del
+tablero (uno de 10 x 7 casillas tiene 9 x 6).
+
+**Uso en dos pasos:**
+
+1. `POST /api/vision/calibracion-intrinseca?columnas=9&filas=6` (multipart, campo
+   `imagenes` repetido una vez por foto). Respuesta:
+
+```json
+{"matriz_camara": [[1012.4, 0, 960.7], [0, 1011.9, 541.2], [0, 0, 1]],
+ "coef_distorsion": [-0.31, 0.11, 0.0004, -0.0003, -0.017],
+ "tamano_imagen": [1920, 1080], "error_reproyeccion_px": 0.27, "imagenes_usadas": 18}
+```
+
+2. `POST /api/vision/partidos/{partido_id}/calibracion` con los puntos de la cancha
+   y esos tres campos (los demas se pueden enviar tambien; se ignoran):
+
+```json
+{"puntos_imagen": [...], "puntos_cancha": [...], "largo_m": 100, "ancho_m": 64,
+ "matriz_camara": [[1012.4, 0, 960.7], [0, 1011.9, 541.2], [0, 0, 1]],
+ "coef_distorsion": [-0.31, 0.11, 0.0004, -0.0003, -0.017],
+ "tamano_imagen": [1920, 1080]}
+```
+
+Con los tres campos, los `puntos_imagen` se corrigen antes de calcular la homografia
+y el error de reproyeccion (CU-21) ya no crece cerca de las bandas.
+"""
+
+
+@router.post("/calibracion-intrinseca", response_model=CalibracionIntrinseca,
+             dependencies=[Depends(requiere_rol("ADMIN", "ANALISTA"))],
+             responses={
+                 403: {"description": "Requiere rol ADMIN o ANALISTA"},
+                 413: {"description": "Alguna foto supera los 10 MB"},
+                 422: {"description": (
+                     "Menos de 5 o mas de 20 fotos, una foto ilegible, fotos de distinto "
+                     "tamano, o el tablero se detecto en menos de 5 fotos")},
+             },
+             summary="CU-23 · Calibrar el lente con fotos de un tablero de ajedrez",
+             description=DESCRIPCION_INTRINSECA)
+async def calibracion_intrinseca(
+    imagenes: Annotated[list[UploadFile], File(
+        description="Fotos del tablero, de 5 a 20, JPG o PNG, hasta 10 MB cada una")],
+    columnas: Annotated[int, Query(ge=3, le=30, description="Esquinas interiores por fila")] = 9,
+    filas: Annotated[int, Query(ge=3, le=30, description="Esquinas interiores por columna")] = 6,
+) -> CalibracionIntrinseca:
+    if not service.MIN_FOTOS_TABLERO <= len(imagenes) <= service.MAX_FOTOS_TABLERO:
+        raise HTTPException(422, (
+            f"Hacen falta entre {service.MIN_FOTOS_TABLERO} y {service.MAX_FOTOS_TABLERO} "
+            f"fotos del tablero (llegaron {len(imagenes)})"))
+    fotos = []
+    for i, imagen in enumerate(imagenes):
+        datos = await imagen.read(service.MAX_BYTES_FOTO + 1)
+        if len(datos) > service.MAX_BYTES_FOTO:
+            raise HTTPException(413, f"La foto {i} supera los 10 MB")
+        fotos.append(datos)
+    # OpenCV tarda cientos de ms: fuera del event loop para no frenar a los demas
+    resultado = await run_in_threadpool(service.calibrar_intrinseca, fotos, (columnas, filas))
+    return CalibracionIntrinseca(**resultado.a_dict())
 
 # ---------------- CU-29 · Modelos ----------------
 

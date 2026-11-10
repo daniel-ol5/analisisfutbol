@@ -1,7 +1,13 @@
 # Corrección de la distorsión del lente — T-036 (CU-23)
 
-Módulo independiente con **funciones puras**: no tiene modelos, tablas,
-migraciones ni endpoints. Lo integra la homografía de T-028/T-029 (Jhon).
+Módulo con **funciones puras** (sin base de datos ni HTTP). Ya está integrado
+con la API:
+
+- `POST /api/vision/calibracion-intrinseca` calibra el lente a partir de fotos
+  del tablero (`app/vision/router.py` y `service.calibrar_intrinseca`).
+- `POST /api/vision/partidos/{id}/calibracion` y `/validar` corrigen los
+  `puntos_imagen` antes de la homografía de T-029 cuando reciben
+  `matriz_camara`, `coef_distorsion` y `tamano_imagen` (`service._puntos_imagen`).
 
 **Por qué hace falta.** Con un gran angular o una action cam, las rectas de la
 cancha salen curvas cerca de los bordes del cuadro. La homografía supone que
@@ -61,31 +67,38 @@ pies del jugador ──────────────▶ corregir_puntos �
 |---|---|---|
 | `calibrar(imagenes, patron=(9, 6))` | Fotos del ajedrez (BGR o gris), todas del mismo tamaño | `CalibracionIntrinseca` |
 | `precalcular_mapa(calibracion, alfa=0.0)` | La calibración | `MapaCorreccion` (mapas para `remap` y `matriz_nueva`, la K' de la imagen corregida) |
-| `corregir_puntos(puntos, calibracion, mapa)` | Lista o array de `(x, y)` en píxeles del cuadro **original** | Array `Nx2` en píxeles de la imagen **corregida** |
+| `corregir_puntos(puntos, calibracion, mapa=None, alfa=0)` | Lista o array de `(x, y)` en píxeles del cuadro **original** | Array `Nx2` en píxeles de la imagen **corregida**. Sin `mapa` usa `matriz_corregida(calibracion, alfa)` |
+| `matriz_corregida(calibracion, alfa=0.0)` | La calibración | K' de la imagen corregida, sin calcular el mapa (lo que usa la API) |
 | `corregir_imagen(imagen, mapa)` | Un cuadro del tamaño calibrado | El cuadro corregido, mismo tamaño |
 | `CalibracionIntrinseca.a_dict()` / `desde_dict()` | — | JSON con `matriz_camara`, `coef_distorsion`, `tamano_imagen`, `error_reproyeccion_px`, `imagenes_usadas` |
 
-Pasos para conectar en T-028/T-029:
+Cómo quedó integrado (T-036):
 
-1. **Al guardar la calibración de la cancha** (`POST /vision/partidos/{id}/calibracion`):
-   si el cliente envía la calibración intrínseca, pasar `puntos_imagen` por
-   `corregir_puntos` antes de `cv2.findHomography`. Los residuos de CU-21
-   (`error_medio_m`, `error_max_m`) se calculan también con los puntos corregidos.
-2. **En el worker**, al arrancar: `desde_dict` + `precalcular_mapa`, una vez.
-   Por fotograma: `corregir_puntos` sobre el punto de apoyo de cada detección
-   (centro inferior de la caja) y después `perspectiveTransform` con H.
-3. Sin calibración intrínseca (cámara sin distorsión apreciable), se salta
-   `corregir_puntos` y todo sigue igual que hoy.
+1. **Calibrar el lente:** `POST /api/vision/calibracion-intrinseca` con 5 a 20
+   fotos del tablero. Devuelve `matriz_camara`, `coef_distorsion`,
+   `tamano_imagen`, `error_reproyeccion_px` e `imagenes_usadas`. No guarda nada.
+2. **Calibrar la cancha:** `POST /api/vision/partidos/{id}/calibracion` con los
+   puntos y esos tres campos (campos nuevos y opcionales del contrato; los
+   extra se ignoran). La API corrige `puntos_imagen` con `alfa=0` antes de
+   `calcular_homografia`, y los residuos de CU-21 salen ya corregidos.
+   `matriz_camara` y `tamano_imagen` se guardan en dos columnas JSON nuevas de
+   `calibracion`.
+3. **En el worker** (pendiente, ver abajo): al arrancar, `desde_dict` con los
+   tres campos de la calibración + `precalcular_mapa(alfa=0)`, una vez. Por
+   fotograma: `corregir_puntos` sobre el punto de apoyo de cada detección
+   (centro inferior de la caja) y después `matriz_h`.
+4. Sin los tres campos (cámara sin distorsión apreciable, o clientes viejos que
+   mandan solo `coef_distorsion`), no se corrige nada y todo sigue igual que
+   antes de T-036.
 
-### ⚠️ Lo que falta en el contrato actual
+### ⚠️ Lo que falta del lado del worker
 
-`CalibracionGuardar.coef_distorsion` (`app/vision/schemas.py`) es solo
-`list[float]`, pero **los coeficientes solos no alcanzan**: para corregir hace
-falta también la matriz de la cámara (`matriz_camara`, 3×3) y el tamaño de
-imagen con el que se calibró. Propuesta para T-028: guardar en la columna JSON
-`coef_distorsion` del modelo de datos el diccionario completo de `a_dict()`, y
-cambiar el schema a un objeto con esos campos. Es un cambio de contrato: avisar
-a Web y Móvil antes de mergear.
+Cuando una calibración trae `matriz_camara`, su `matriz_h` va de píxeles
+**corregidos** a metros. Si el worker la aplica a píxeles crudos, las
+posiciones salen mal en toda la cancha. Hoy `POST /vision/trabajos/tomar`
+(`Trabajo`) entrega `matriz_h` pero no la intrínseca: hay que agregarle esos
+tres campos (cambio aditivo) y corregir en el worker antes de aplicar H. Hasta
+entonces, no enviar la intrínseca en partidos que se procesen con el worker.
 
 ### Notas
 

@@ -4,10 +4,12 @@ La simulación se prueba sin red. Al final, una prueba de punta a punta manda
 la simulación por /ingesta y comprueba que llega a un cliente de /vivo.
 """
 
+import json
 import math
 from collections.abc import Iterator
 from contextlib import ExitStack
 
+import httpx
 import pytest
 from starlette.testclient import TestClient
 
@@ -15,13 +17,20 @@ from app.core.realtime import HubMemoria, obtener_hub
 from app.core.security import token_acceso, token_ingesta
 from app.main import app
 from app.partido.schemas import MensajeWorker
-from app.partido.service import PartidosSinTabla, obtener_repositorio_partidos
+from app.partido.service import (
+    PartidosSinTabla,
+    PosicionesDescartadas,
+    obtener_almacen_posiciones,
+    obtener_repositorio_partidos,
+)
 from scripts.emisor_simulado import (
     ACEL_MAX,
     VEL_MAX,
     Simulacion,
     argumentos,
     emitir,
+    iniciar_partido,
+    pedir_token,
     url_ws,
 )
 
@@ -146,6 +155,83 @@ def test_argumentos_exigen_credenciales():
         argumentos(["--partido", "4", "--token", "t", "--frecuencia", "0"])
 
 
+def test_iniciar_partido_necesita_cuenta_y_no_solo_token():
+    with pytest.raises(SystemExit):
+        argumentos(["--partido", "4", "--token", "t", "--iniciar-partido"])
+    args = argumentos(["--partido", "4", "--email", "a@b.c", "--password", "x",
+                       "--iniciar-partido", "--ataca-hacia", "DER"])
+    assert (args.iniciar_partido, args.ataca_hacia) == (True, "DER")
+    assert argumentos(["--partido", "4", "--token", "t"]).iniciar_partido is False
+
+
+_CLIENTE_HTTP = httpx.Client   # el real, antes de que `api` lo reemplace
+
+
+def _api_falsa(respuesta_iniciar: httpx.Response, llamadas: list[str]) -> httpx.Client:
+    """La API con login, iniciar y token-ingesta, registrando el orden de llamadas."""
+    def atender(peticion: httpx.Request) -> httpx.Response:
+        llamadas.append(peticion.url.path)
+        if peticion.url.path.endswith("/login"):
+            return httpx.Response(200, json={"access_token": "acceso"})
+        if peticion.url.path.endswith("/iniciar"):
+            assert json.loads(peticion.content) == {"ataca_hacia": "IZQ"}
+            assert peticion.headers["Authorization"] == "Bearer acceso"
+            return respuesta_iniciar
+        return httpx.Response(201, json={"token": "de-ingesta"})
+    return _CLIENTE_HTTP(transport=httpx.MockTransport(atender), base_url="http://api/api")
+
+
+@pytest.fixture
+def api(monkeypatch):
+    """Hace que `pedir_token` use la API falsa en vez de la red."""
+    estado: dict = {"llamadas": [], "iniciar": httpx.Response(200, json={})}
+    monkeypatch.setattr(httpx, "Client",
+                        lambda **_: _api_falsa(estado["iniciar"], estado["llamadas"]))
+    return estado
+
+
+def test_inicia_el_partido_antes_de_pedir_el_token(api, capsys):
+    token = pedir_token("http://api/api", 4, "a@b.c", "x", iniciar=True)
+    assert token == "de-ingesta"
+    assert api["llamadas"] == ["/api/seguridad/login", "/api/partido/4/iniciar",
+                               "/api/partido/4/token-ingesta"]
+    assert "iniciado" in capsys.readouterr().out
+
+
+def test_sin_la_opcion_no_inicia_el_partido(api):
+    pedir_token("http://api/api", 4, "a@b.c", "x")
+    assert "/api/partido/4/iniciar" not in api["llamadas"]
+
+
+def test_si_ya_estaba_en_curso_sigue(api, capsys):
+    api["iniciar"] = httpx.Response(
+        409, json={"detail": "No se puede iniciar un partido en estado EN_CURSO"})
+    assert pedir_token("http://api/api", 4, "a@b.c", "x", iniciar=True) == "de-ingesta"
+    assert "ya estaba en curso" in capsys.readouterr().out
+
+
+def test_sin_calibracion_valida_corta_con_la_causa(api):
+    api["iniciar"] = httpx.Response(409, json={
+        "detail": "No se puede iniciar el partido: calibración no válida, error medio 3.1 m"})
+    with pytest.raises(SystemExit) as e:
+        pedir_token("http://api/api", 4, "a@b.c", "x", iniciar=True)
+    mensaje = str(e.value.code)
+    assert "No se pudo iniciar el partido 4 (409)" in mensaje
+    assert "calibración no válida, error medio 3.1 m" in mensaje
+    assert "/api/vision/partidos/4/calibracion" in mensaje
+    assert "/api/partido/4/token-ingesta" not in api["llamadas"]
+
+
+@pytest.mark.parametrize(("codigo", "causa"), [(403, "no tiene permiso"),
+                                               (404, "no existe o es de otro club")])
+def test_otros_rechazos_al_iniciar(codigo, causa):
+    with httpx.Client(transport=httpx.MockTransport(
+            lambda _: httpx.Response(codigo, json={"detail": "x"})),
+            base_url="http://api") as http, pytest.raises(SystemExit) as e:
+        iniciar_partido(http, 4, "acceso", "IZQ")
+    assert causa in str(e.value.code)
+
+
 async def test_emitir_respeta_la_cantidad_de_mensajes():
     enviados: list[str] = []
 
@@ -163,7 +249,9 @@ async def test_emitir_respeta_la_cantidad_de_mensajes():
 def cliente() -> Iterator[TestClient]:
     hub = HubMemoria()
     app.dependency_overrides[obtener_hub] = lambda: hub
+    # Esta prueba mira el canal, no la tabla: sin verificar el partido ni guardar.
     app.dependency_overrides[obtener_repositorio_partidos] = PartidosSinTabla
+    app.dependency_overrides[obtener_almacen_posiciones] = PosicionesDescartadas
     with TestClient(app) as c:
         yield c
     app.dependency_overrides.clear()

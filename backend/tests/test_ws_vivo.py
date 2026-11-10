@@ -1,7 +1,8 @@
 """Pruebas del canal en vivo  —  T-032.
 
-La tabla `partido` todavía no existe (T-047). Para probar el aislamiento real
-se usa un modelo falso con `club_id` (tests/modelos_falsos.py).
+El aislamiento se prueba con la tabla `partido` real (T-047), sembrada en
+tests/partidos_prueba.py. El canal /vivo acepta un partido en cualquier estado:
+el panel puede conectarse antes del inicio.
 """
 
 import time
@@ -9,16 +10,14 @@ from collections.abc import Callable, Iterator
 from contextlib import ExitStack
 
 import pytest
-from modelos_falsos import (
+from partidos_prueba import (
     CLUB_A,
     CLUB_B,
     INEXISTENTE,
     PARTIDO_A,
     PARTIDO_B,
-    PartidoFalso,
     SesionesPrueba,
-    borrar_tablas_falsas,
-    crear_tablas_falsas,
+    sembrar_partidos,
 )
 from starlette.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
@@ -27,6 +26,8 @@ from app.core import ws as ws_auth
 from app.core.realtime import HubMemoria, canal_partido, obtener_hub
 from app.core.security import token_acceso, token_refresco
 from app.core.ws import Cierre
+from app.deportivo.models import Partido
+from app.deportivo.schemas import EstadoPartido
 from app.main import app
 from app.partido.service import (
     PartidosEnTabla,
@@ -40,10 +41,9 @@ def _token(club_id: int, usuario_id: int = 1, rol: str = "DT") -> str:
 
 
 @pytest.fixture
-async def partidos_falsos():
-    await crear_tablas_falsas()
-    yield
-    await borrar_tablas_falsas()
+async def partidos():
+    # PROGRAMADO: /vivo no exige que el partido esté en curso
+    await sembrar_partidos(EstadoPartido.PROGRAMADO)
 
 
 @pytest.fixture
@@ -52,10 +52,10 @@ def hub() -> HubMemoria:
 
 
 @pytest.fixture
-def cliente(hub, partidos_falsos) -> Iterator[TestClient]:
-    """Cliente con el repositorio real (`tenancy`) sobre el modelo falso."""
+def cliente(hub, partidos) -> Iterator[TestClient]:
+    """Cliente con el repositorio real (`tenancy`) sobre la tabla `partido`."""
     app.dependency_overrides[obtener_hub] = lambda: hub
-    app.dependency_overrides[obtener_repositorio_partidos] = lambda: PartidosEnTabla(PartidoFalso, SesionesPrueba)
+    app.dependency_overrides[obtener_repositorio_partidos] = lambda: PartidosEnTabla(Partido, SesionesPrueba)
     with TestClient(app) as c:
         yield c
     app.dependency_overrides.clear()
@@ -231,11 +231,11 @@ async def test_hub_descarta_clientes_caidos_sin_cortar_la_difusion():
     assert await hub.conectados("c") == 1
 
 
-# ---------------- Mientras no exista la tabla partido ----------------
+# ---------------- Segunda barrera: el canal lleva el club ----------------
 
-async def test_sin_tabla_otro_club_cae_en_un_canal_aislado(hub):
-    """Con `PartidosSinTabla` se acepta cualquier número, pero el canal lleva
-    el club del token: el mismo `partido_id` en otro club no recibe nada."""
+async def test_sin_verificar_el_partido_otro_club_cae_en_un_canal_aislado(hub):
+    """Aun saltando la verificación (`PartidosSinTabla`, solo pruebas), el canal
+    lleva el club del token: el mismo `partido_id` en otro club no recibe nada."""
     app.dependency_overrides[obtener_hub] = lambda: hub
     app.dependency_overrides[obtener_repositorio_partidos] = PartidosSinTabla
     try:

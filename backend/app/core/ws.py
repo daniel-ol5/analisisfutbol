@@ -30,6 +30,7 @@ class Cierre(IntEnum):
     NO_AUTENTICADO = 4401
     NO_ENCONTRADO = 4404   # partido inexistente u otro club: no se distinguen a propósito
     TIEMPO_AGOTADO = 4408
+    NO_EN_CURSO = 4409     # /ingesta: el partido existe pero no está EN_CURSO
 
 
 async def cerrar(ws: WebSocket, codigo: Cierre, motivo: str) -> None:

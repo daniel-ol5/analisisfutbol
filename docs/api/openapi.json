@@ -2030,6 +2030,7 @@
           "P3 · Visión por Computadora"
         ],
         "summary": "CU-22 · Recuperar una calibracion anterior de la misma sede",
+        "description": "La calibracion valida mas reciente del club en un partido de esa sede (T-035).\n\nLa sede se compara sin distinguir mayusculas ni espacios sobrantes. La\nrespuesta trae `advertencia`: hay que verificar que la camara no se movio.\nPara usarla en el partido nuevo, enviar sus puntos y medidas en\nPOST /partidos/{id}/calibracion.",
         "operationId": "calibracion_previa_api_vision_sedes__sede__calibracion_previa_get",
         "security": [
           {
@@ -2068,6 +2069,9 @@
               }
             }
           },
+          "404": {
+            "description": "No hay una calibracion valida previa del club en esa sede"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -2077,6 +2081,92 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/api/vision/calibracion-intrinseca": {
+      "post": {
+        "tags": [
+          "P3 · Visión por Computadora"
+        ],
+        "summary": "CU-23 · Calibrar el lente con fotos de un tablero de ajedrez",
+        "description": "Calibra la **camara y el lente** (no la cancha) con fotos de un tablero de ajedrez\nimpreso, rigido y plano. Se hace una vez por camara, lente y resolucion. **No\nguarda nada**: devuelve los parametros para enviarlos en la calibracion de la cancha.\n\n**Fotos:** entre 5 y 20, JPG o PNG, hasta 10 MB cada una, todas del mismo tamano y\ncon la misma resolucion con la que se va a filmar. El tablero entero en cada foto,\ninclinado de distintas formas y llegando a las esquinas y bordes del cuadro, que es\ndonde mas deforma el lente. `columnas` y `filas` son las esquinas INTERIORES del\ntablero (uno de 10 x 7 casillas tiene 9 x 6).\n\n**Uso en dos pasos:**\n\n1. `POST /api/vision/calibracion-intrinseca?columnas=9&filas=6` (multipart, campo\n   `imagenes` repetido una vez por foto). Respuesta:\n\n```json\n{\"matriz_camara\": [[1012.4, 0, 960.7], [0, 1011.9, 541.2], [0, 0, 1]],\n \"coef_distorsion\": [-0.31, 0.11, 0.0004, -0.0003, -0.017],\n \"tamano_imagen\": [1920, 1080], \"error_reproyeccion_px\": 0.27, \"imagenes_usadas\": 18}\n```\n\n2. `POST /api/vision/partidos/{partido_id}/calibracion` con los puntos de la cancha\n   y esos tres campos (los demas se pueden enviar tambien; se ignoran):\n\n```json\n{\"puntos_imagen\": [...], \"puntos_cancha\": [...], \"largo_m\": 100, \"ancho_m\": 64,\n \"matriz_camara\": [[1012.4, 0, 960.7], [0, 1011.9, 541.2], [0, 0, 1]],\n \"coef_distorsion\": [-0.31, 0.11, 0.0004, -0.0003, -0.017],\n \"tamano_imagen\": [1920, 1080]}\n```\n\nCon los tres campos, los `puntos_imagen` se corrigen antes de calcular la homografia\ny el error de reproyeccion (CU-21) ya no crece cerca de las bandas.",
+        "operationId": "calibracion_intrinseca_api_vision_calibracion_intrinseca_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "columnas",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 30,
+              "minimum": 3,
+              "description": "Esquinas interiores por fila",
+              "default": 9,
+              "title": "Columnas"
+            },
+            "description": "Esquinas interiores por fila"
+          },
+          {
+            "name": "filas",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 30,
+              "minimum": 3,
+              "description": "Esquinas interiores por columna",
+              "default": 6,
+              "title": "Filas"
+            },
+            "description": "Esquinas interiores por columna"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_calibracion_intrinseca_api_vision_calibracion_intrinseca_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CalibracionIntrinseca"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "Declarado en el contrato, pendiente de implementacion",
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Requiere rol ADMIN o ANALISTA"
+          },
+          "413": {
+            "description": "Alguna foto supera los 10 MB"
+          },
+          "422": {
+            "description": "Menos de 5 o mas de 20 fotos, una foto ilegible, fotos de distinto tamano, o el tablero se detecto en menos de 5 fotos"
           }
         }
       }
@@ -5271,6 +5361,24 @@
         "title": "AvisoColores",
         "description": "CU-10: los colores de ambos equipos quedaron demasiado cerca en HSV."
       },
+      "Body_calibracion_intrinseca_api_vision_calibracion_intrinseca_post": {
+        "properties": {
+          "imagenes": {
+            "items": {
+              "type": "string",
+              "contentMediaType": "application/octet-stream"
+            },
+            "type": "array",
+            "title": "Imagenes",
+            "description": "Fotos del tablero, de 5 a 20, JPG o PNG, hasta 10 MB cada una"
+          }
+        },
+        "type": "object",
+        "required": [
+          "imagenes"
+        ],
+        "title": "Body_calibracion_intrinseca_api_vision_calibracion_intrinseca_post"
+      },
       "Body_importar_plantel_api_deportivo_equipos__equipo_id__jugadores_importar_post": {
         "properties": {
           "archivo": {
@@ -5381,6 +5489,51 @@
             "type": "string",
             "format": "date-time",
             "title": "Creada En"
+          },
+          "matriz_camara": {
+            "anyOf": [
+              {
+                "items": {
+                  "items": {
+                    "type": "number"
+                  },
+                  "type": "array"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matriz Camara",
+            "description": "CU-23: matriz de la camara K, si se envio. Con ella, matriz_h va de pixeles CORREGIDOS a metros: el worker debe corregir cada punto antes de aplicarla"
+          },
+          "tamano_imagen": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tamano Imagen",
+            "description": "CU-23: [ancho, alto] de la calibracion de la camara, si se envio"
+          },
+          "advertencia": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Advertencia",
+            "description": "CU-22: solo en GET /sedes/{sede}/calibracion-previa. Recuerda verificar que la camara no se haya movido antes de reutilizar la calibracion"
           }
         },
         "type": "object",
@@ -5445,6 +5598,42 @@
             ],
             "title": "Coef Distorsion",
             "description": "CU-23, opcional. Obligatorio con gran angular o action cam"
+          },
+          "matriz_camara": {
+            "anyOf": [
+              {
+                "items": {
+                  "items": {
+                    "type": "number"
+                  },
+                  "type": "array"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matriz Camara",
+            "description": "CU-23, opcional. Matriz de la camara K (3x3, en pixeles), de POST /calibracion-intrinseca. Va junto con coef_distorsion y tamano_imagen: con los tres, los puntos_imagen se corrigen antes de calcular la homografia"
+          },
+          "tamano_imagen": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0.0
+                },
+                "type": "array",
+                "maxItems": 2,
+                "minItems": 2
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tamano Imagen",
+            "description": "CU-23, opcional. [ancho, alto] en pixeles de las fotos con que se calibro la camara. Los puntos_imagen deben marcarse sobre un cuadro de ese mismo tamano"
           }
         },
         "type": "object",
@@ -5454,6 +5643,57 @@
         ],
         "title": "CalibracionGuardar",
         "description": "Se exigen al menos 8 puntos repartidos por toda la cancha.\n\nCon 4 la homografia ajusta exacta y el residual da cero, que no informa nada.\nSolo puntos sobre el plano del suelo: nunca el travesano, que esta a 2,44 m."
+      },
+      "CalibracionIntrinseca": {
+        "properties": {
+          "matriz_camara": {
+            "items": {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            "type": "array",
+            "title": "Matriz Camara",
+            "description": "K, 3x3, en pixeles"
+          },
+          "coef_distorsion": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "title": "Coef Distorsion",
+            "description": "(k1, k2, p1, p2, k3) de OpenCV"
+          },
+          "tamano_imagen": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Tamano Imagen",
+            "description": "[ancho, alto] en pixeles de las fotos"
+          },
+          "error_reproyeccion_px": {
+            "type": "number",
+            "title": "Error Reproyeccion Px",
+            "description": "Error RMS de la calibracion: por debajo de 0,5 px es buena"
+          },
+          "imagenes_usadas": {
+            "type": "integer",
+            "title": "Imagenes Usadas",
+            "description": "Fotos en las que se detecto el tablero"
+          }
+        },
+        "type": "object",
+        "required": [
+          "matriz_camara",
+          "coef_distorsion",
+          "tamano_imagen",
+          "error_reproyeccion_px",
+          "imagenes_usadas"
+        ],
+        "title": "CalibracionIntrinseca",
+        "description": "CU-23: parametros propios de la camara y el lente, de POST /calibracion-intrinseca.\n\nNo se guardan solos: se envian (los tres primeros campos) en\nPOST /partidos/{id}/calibracion junto con los puntos de la cancha."
       },
       "CambioPassword": {
         "properties": {

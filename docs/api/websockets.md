@@ -69,6 +69,7 @@ otro mensaje se ignora sin cerrar la conexión.
 | `4401` | Token inválido, expirado o de refresco | `Token inválido o expirado` | Tras renovar el token |
 | `4404` | El partido no existe **o es de otro club** | `Partido no encontrado` | No |
 | `4408` | No llegó la autenticación en 5 s | `No se recibió la autenticación a tiempo` | Sí |
+| `4409` | Solo `/ingesta`: el partido existe pero no está `EN_CURSO` | `El partido no está en curso (estado …)` | Tras iniciar el partido |
 | `1006` | Conexión perdida (red) | — | Sí, con espera creciente |
 
 `4404` es el mismo para "no existe" y "es de otro club" **a propósito**: si
@@ -83,7 +84,15 @@ de aceptarlo y el cliente solo ve un error de conexión.
 Lo usa el worker de visión para publicar las posiciones del partido en metros.
 `backend/scripts/emisor_simulado.py` es el cliente de referencia: implementa
 este canal completo y sirve para probar sin el worker (ver el README). Todo lo válido se difunde al canal `/vivo`
-del mismo partido y se guarda por lotes.
+del mismo partido y se guarda por lotes en la tabla `posicion`.
+
+**Solo se acepta con el partido `EN_CURSO`** (después de
+`POST /api/partido/{id}/iniciar`). En cualquier otro estado (`PROGRAMADO`,
+`FINALIZADO`, `CANCELADO`…) la conexión se cierra con `4409` tras la
+autenticación. El estado se comprueba al conectarse. El video grabado no usa
+este canal: sus posiciones entran por `POST /api/vision/videos/{id}/resultados`,
+sin esta restricción. El canal `/vivo` tampoco la tiene: el panel puede
+conectarse antes del inicio.
 
 ### Token de ingesta
 
@@ -116,6 +125,7 @@ expire. No se puede revocar antes (no hay lista negra todavía).
 worker                                   servidor
    │── abre ws://…/api/partido/42/ingesta ─▶│  accept
    │── {"tipo":"auth","token":"<ingesta>"} ─▶│  token de ingesta del partido 42 (≤ 5 s)
+   │                                         │  partido 42 EN_CURSO (si no, cierra 4409)
    │◀───────── {"tipo":"listo","partido":42}│
    │── MensajeWorker ───────────────────────▶│  válido: se difunde a /vivo y se guarda
    │── MensajeWorker ───────────────────────▶│  (sin respuesta: a 5 Hz sería ruido)
@@ -179,14 +189,22 @@ cuenta.
 
 ### Persistencia
 
-Las posiciones se insertan **por lotes de 25 mensajes** (5 s, unas 575 filas)
-con un único INSERT masivo, y lo pendiente se guarda al desconectarse el
-worker. Si la base falla, se pierde ese lote pero la difusión en vivo sigue.
+Cada punto (jugador o balón) es una fila de la tabla `posicion`:
+`partido_id, t, track_id, x_m, y_m, confianza`. No guarda el equipo: a qué
+jugador corresponde cada track lo dice `asignacion_track`.
 
-> ⚠️ **Provisorio:** la tabla `posicion` todavía no existe (necesita la tabla
-> `partido`, T-047). Hasta entonces las posiciones **se difunden pero no se
-> guardan**. Se activa cambiando `MODELO_POSICION` en
-> `app/partido/service.py`.
+Las posiciones se insertan **por lotes de 25 mensajes** (5 s, unas 575 filas)
+con un único INSERT masivo. Hay **un almacén por proceso con un buffer por
+partido** (`PosicionesEnLote` en `app/partido/service.py`), compartido por la
+ingesta en vivo y el procesamiento de video. Lo pendiente de un partido se
+guarda también:
+
+- al desconectarse el worker,
+- tras **3 s sin datos** de ese partido (`INACTIVIDAD_S`), aunque el worker
+  siga conectado,
+- al apagarse la API.
+
+Si la base falla, se pierde ese lote pero la difusión en vivo sigue.
 
 ### Códigos de cierre de `/ingesta`
 
@@ -197,6 +215,7 @@ Los mismos de la tabla general, con estos matices:
 | `4400` | Además: 50 mensajes inválidos seguidos |
 | `4401` | Token de usuario en vez de token de ingesta, o token inválido o expirado |
 | `4404` | El token es de otro partido, o el partido no existe o es de otro club |
+| `4409` | El partido no está `EN_CURSO`. El `reason` incluye el estado actual |
 
 ---
 
@@ -273,10 +292,9 @@ const dejarDeEscuchar = escucharPartido({
 - **Canales aislados por club.** El canal interno es
   `club:{club_id}:partido:{partido_id}`, con el club tomado del token. Aunque la
   verificación del partido fallara, dos clubes nunca comparten canal.
-- **Mientras no exista la tabla `partido`** (T-047), el backend acepta cualquier
-  `partido_id` (`PartidosSinTabla` en `app/partido/service.py`) y el aislamiento
-  lo garantiza el canal por club. Cuando exista, se activa la verificación real
-  cambiando `MODELO_PARTIDO` en ese mismo archivo, y empieza a responder `4404`.
+- **Verificación del partido** con `tenancy` sobre la tabla `partido`
+  (`PartidosEnTabla` en `app/partido/service.py`). `PartidosSinTabla` queda solo
+  para pruebas.
 - **Un solo proceso por ahora.** El Hub vive en memoria (`HubMemoria`). Para
   escalar a varias instancias se implementa la misma interfaz `Hub` sobre Redis
   pub/sub y se cambia solo `obtener_hub()` en `app/core/realtime.py`.
