@@ -3877,6 +3877,7 @@
           "P5 · Análisis Táctico"
         ],
         "summary": "CU-42 · Metricas de equipo acumuladas y de los ultimos 5 minutos",
+        "description": "T-074. Posesion: en cada muestra con balon visible, el jugador de campo mas cercano; a 2 m o menos posee su equipo, si no es disputa. Sin balon visible no se asigna. local + visitante + disputa = 100. Con el partido en juego incluye el intervalo en curso y `ultimos_5_min_*` es una ventana movil.",
         "operationId": "metricas_api_analisis_partidos__partido_id__metricas_get",
         "security": [
           {
@@ -3915,6 +3916,9 @@
               }
             }
           },
+          "404": {
+            "description": "Partido inexistente o de otro club"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -3934,6 +3938,7 @@
           "P5 · Análisis Táctico"
         ],
         "summary": "CU-46 · Evolucion por intervalos de 5 minutos",
+        "description": "T-076. Solo intervalos CERRADOS: se cierran durante el partido, al llegar la primera muestra del siguiente. Al finalizar, el ultimo se cierra como parcial (`minuto_hasta` es el de su ultima muestra).",
         "operationId": "intervalos_api_analisis_partidos__partido_id__metricas_intervalos_get",
         "security": [
           {
@@ -3976,6 +3981,76 @@
               }
             }
           },
+          "404": {
+            "description": "Partido inexistente o de otro club"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/analisis/partidos/{partido_id}/metricas/recalcular": {
+      "post": {
+        "tags": [
+          "P5 · Análisis Táctico"
+        ],
+        "summary": "CU-46 · Recalcular las metricas desde las posiciones guardadas",
+        "description": "T-076. Pasa las filas de `posicion`, ordenadas por t, por el mismo motor que en vivo y reemplaza los intervalos guardados. Util tras procesar un video grabado o tras asignar el arquero. No disponible con el partido EN_CURSO.",
+        "operationId": "recalcular_metricas_api_analisis_partidos__partido_id__metricas_recalcular_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "partido_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Partido Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetricasPartido"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "Declarado en el contrato, pendiente de implementacion",
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Partido inexistente o de otro club"
+          },
+          "403": {
+            "description": "Requiere rol ADMIN o ANALISTA"
+          },
+          "409": {
+            "description": "El partido esta EN_CURSO"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -3995,6 +4070,7 @@
           "P5 · Análisis Táctico"
         ],
         "summary": "CU-43 · Distancia, velocidad maxima y sprints por jugador",
+        "description": "T-075. Ordenado por distancia. Distancia sobre la trayectoria suavizada; velocidad en ventana de 1 s; sprint = mas de 21 km/h sostenido 1 s. Se calcula por track y se convierte a jugador con las asignaciones (CU-34, CU-35): un track sin asignar suma a su equipo pero no aparece aqui.",
         "operationId": "metricas_jugadores_api_analisis_partidos__partido_id__metricas_jugadores_get",
         "security": [
           {
@@ -4024,8 +4100,10 @@
                   "type": "null"
                 }
               ],
+              "description": "LOCAL o VISITANTE; sin filtro, los dos. Otro valor: 422",
               "title": "Equipo"
-            }
+            },
+            "description": "LOCAL o VISITANTE; sin filtro, los dos. Otro valor: 422"
           }
         ],
         "responses": {
@@ -4052,6 +4130,92 @@
                 }
               }
             }
+          },
+          "404": {
+            "description": "Partido inexistente o de otro club"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/analisis/partidos/{partido_id}/metricas/jugadores/intervalos": {
+      "get": {
+        "tags": [
+          "P5 · Análisis Táctico"
+        ],
+        "summary": "CU-43 · Metricas fisicas por jugador en cada intervalo de 5 minutos",
+        "description": "T-075. Una entrada por intervalo cerrado con `minuto_desde`, `minuto_hasta`, `distancia_m`, `velocidad_max_kmh`, `sprints` y `minutos_jugados`. Un sprint cuenta en el intervalo donde empieza.",
+        "operationId": "metricas_jugadores_intervalos_api_analisis_partidos__partido_id__metricas_jugadores_intervalos_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "partido_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Partido Id"
+            }
+          },
+          {
+            "name": "equipo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "LOCAL o VISITANTE; sin filtro, los dos. Otro valor: 422",
+              "title": "Equipo"
+            },
+            "description": "LOCAL o VISITANTE; sin filtro, los dos. Otro valor: 422"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MetricasJugadorPorIntervalo"
+                  },
+                  "title": "Response Metricas Jugadores Intervalos Api Analisis Partidos  Partido Id  Metricas Jugadores Intervalos Get"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "Declarado en el contrato, pendiente de implementacion",
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Partido inexistente o de otro club"
           },
           "422": {
             "description": "Validation Error",
@@ -6863,6 +7027,14 @@
           },
           "visitante": {
             "$ref": "#/components/schemas/MetricaEquipo"
+          },
+          "posesion_disputa_pct": {
+            "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Posesion Disputa Pct",
+            "description": "T-074. Tiempo con el balon lejos de todos (> 2 m); local + visitante + disputa = 100",
+            "default": 0
           }
         },
         "type": "object",
@@ -7735,6 +7907,29 @@
         ],
         "title": "MetricaJugador"
       },
+      "MetricasJugadorPorIntervalo": {
+        "properties": {
+          "jugador_id": {
+            "type": "integer",
+            "title": "Jugador Id"
+          },
+          "intervalos": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Intervalos",
+            "description": "Uno por bloque de 5 minutos, con distancia, velocidad max y sprints"
+          }
+        },
+        "type": "object",
+        "required": [
+          "jugador_id",
+          "intervalos"
+        ],
+        "title": "MetricasJugadorPorIntervalo"
+      },
       "MetricasPartido": {
         "properties": {
           "partido_id": {
@@ -7766,6 +7961,14 @@
                 "type": "null"
               }
             ]
+          },
+          "posesion_disputa_pct": {
+            "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Posesion Disputa Pct",
+            "description": "T-074. Acumulado en disputa; local + visitante + disputa = 100",
+            "default": 0
           }
         },
         "type": "object",

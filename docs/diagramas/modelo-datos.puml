@@ -188,6 +188,7 @@ package "P4 · partido" {
     * x_m : numeric(6,2)
     * y_m : numeric(6,2)
     confianza : numeric(4,3)
+    * es_balon : boolean
   }
 
   entity "asignacion_track" as asig_track {
@@ -228,29 +229,38 @@ package "P5 · analisis" {
     * id : integer <<PK>>
     --
     * partido_id : integer <<FK>>
+    * intervalo : integer <<UQ con partido y equipo>>
     * equipo : enum(LOCAL|VISITANTE)
-    * min_desde : integer
-    * min_hasta : integer
-    posesion_pct : numeric(5,2)
-    pases_intentados : integer
-    pases_completados : integer
-    distancia_m : numeric(9,2)
-    tiros : integer
-    altura_linea_m : numeric(5,2)
-    amplitud_m : numeric(5,2)
-    compacidad_m : numeric(5,2)
+    * minuto_desde : integer
+    * minuto_hasta : integer
+    * t_desde : float
+    * t_hasta : float
+    * parcial : boolean
+    * posesion_s : float
+    * disputa_s : float
+    * pases_intentados : integer
+    * pases_completados : integer
+    * distancia_m : float
+    * suma_altura_m : float
+    * n_altura : integer
+    * suma_amplitud_m : float
+    * suma_compacidad_m : float
+    * n_forma : integer
   }
 
-  entity "metrica_jugador_intervalo" as m_jugador {
+  entity "metrica_track_intervalo" as m_track {
     * id : integer <<PK>>
     --
     * partido_id : integer <<FK>>
-    * jugador_id : integer <<FK>>
-    * min_desde : integer
-    * min_hasta : integer
-    distancia_m : numeric(8,2)
-    vel_max_kmh : numeric(5,2)
-    sprints : integer
+    * intervalo : integer <<UQ con partido y track>>
+    * track_id : integer
+    * equipo : enum(LOCAL|VISITANTE|ARBITRO|DESCONOCIDO)
+    * t_desde : float
+    * t_hasta : float
+    * tiempo_s : float
+    * distancia_m : float
+    * velocidad_max_ms : float
+    * sprints : integer
   }
 
   entity "evento_derivado" as ev_derivado {
@@ -332,8 +342,7 @@ jugador     "0..1" ||--o{ "0..*" ev_manual     : protagoniza
 usuario     "1"    ||--o{ "0..*" ev_manual     : carga
 
 partido     "1"    ||--o{ "0..*" m_intervalo   : acumula
-partido     "1"    ||--o{ "0..*" m_jugador     : mide
-jugador     "1"    ||--o{ "0..*" m_jugador     : rinde en
+partido     "1"    ||--o{ "0..*" m_track       : mide
 partido     "1"    ||--o{ "0..*" ev_derivado   : produce
 jugador     "0..1" ||--o{ "0..*" ev_derivado   : origina
 jugador     "0..1" ||--o{ "0..*" ev_derivado   : recibe
@@ -375,6 +384,21 @@ note bottom of calibracion
 
   **error_medio_m > 2** bloquea el inicio
   del partido (Pb-21).
+end note
+
+note bottom of m_track
+  **Por track, no por jugador** (T-075).
+  El analista asigna los tracks después
+  (CU-34, CU-35): la conversión a jugador
+  se hace al consultar, con las vigencias
+  de asignacion_track. Sin club_id: se
+  accede tras verificar el partido.
+
+  metrica_intervalo guarda sumas
+  (segundos, suma + cantidad de muestras)
+  para poder acumular intervalos. Se
+  escriben al cerrarse cada intervalo,
+  durante el partido (T-076).
 end note
 
 note bottom of ev_derivado

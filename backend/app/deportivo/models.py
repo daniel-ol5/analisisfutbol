@@ -11,6 +11,7 @@ from datetime import UTC, date, datetime
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     Date,
     DateTime,
     Float,
@@ -20,6 +21,7 @@ from sqlalchemy import (
     Numeric,
     String,
     UniqueConstraint,
+    false,
     text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -208,3 +210,5 @@ class Posicion(Base):
     x_m: Mapped[float] = mapped_column(Numeric(6, 2, asdecimal=False))
     y_m: Mapped[float] = mapped_column(Numeric(6, 2, asdecimal=False))
     confianza: Mapped[float | None] = mapped_column(Numeric(4, 3, asdecimal=False), nullable=True)
+    # T-074: el balón es una fila más; esto lo distingue de los jugadores al recalcular.
+    es_balon: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())

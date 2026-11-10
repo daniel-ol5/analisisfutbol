@@ -49,6 +49,9 @@ class Intervalo(BaseModel):
     minuto_hasta: int
     local: MetricaEquipo
     visitante: MetricaEquipo
+    posesion_disputa_pct: float = Field(default=0, ge=0, le=100,
+        description="T-074. Tiempo con el balon lejos de todos (> 2 m); "
+                    "local + visitante + disputa = 100")
 
 
 class MetricasPartido(BaseModel):
@@ -57,6 +60,8 @@ class MetricasPartido(BaseModel):
     acumulado_visitante: MetricaEquipo
     ultimos_5_min_local: MetricaEquipo | None = None
     ultimos_5_min_visitante: MetricaEquipo | None = None
+    posesion_disputa_pct: float = Field(default=0, ge=0, le=100,
+        description="T-074. Acumulado en disputa; local + visitante + disputa = 100")
 
 
 # ---------- CU-43 Metricas por jugador ----------

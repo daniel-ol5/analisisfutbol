@@ -52,6 +52,12 @@ cliente                                  servidor
 | `listo` | Tras autenticar y verificar el partido | `{"tipo": "listo", "partido": 42}` |
 | `pong` | Respuesta a un `ping` | `{"tipo": "pong"}` |
 | `posiciones` | Cada mensaje válido que publica el worker (5 por segundo) | `{"tipo": "posiciones", "datos": <MensajeWorker>}` |
+| `posesion` | Cada segundo de partido (T-074) | `{"tipo": "posesion", "datos": {…}}`, ver [Métricas en vivo](#métricas-en-vivo-t-074-t-075-t-076) |
+| `metricas_jugadores` | Cada 60 s de partido (T-075) | `{"tipo": "metricas_jugadores", "datos": {…}}` |
+| `intervalo` | Al cerrarse cada intervalo de 5 min, y el último (parcial) al finalizar (T-076) | `{"tipo": "intervalo", "datos": <Intervalo>}` |
+
+Los clientes deben ignorar los `tipo` que no conocen: así se pueden agregar
+mensajes nuevos sin romper versiones viejas.
 
 ### Mensajes del cliente
 
@@ -190,8 +196,9 @@ cuenta.
 ### Persistencia
 
 Cada punto (jugador o balón) es una fila de la tabla `posicion`:
-`partido_id, t, track_id, x_m, y_m, confianza`. No guarda el equipo: a qué
-jugador corresponde cada track lo dice `asignacion_track`.
+`partido_id, t, track_id, x_m, y_m, confianza, es_balon`. `es_balon` (T-074)
+marca la fila del balón. No guarda el equipo: a qué jugador corresponde cada
+track lo dice `asignacion_track`.
 
 Las posiciones se insertan **por lotes de 25 mensajes** (5 s, unas 575 filas)
 con un único INSERT masivo. Hay **un almacén por proceso con un buffer por
@@ -284,6 +291,68 @@ const dejarDeEscuchar = escucharPartido({
   },
 });
 ```
+
+---
+
+## Métricas en vivo (T-074, T-075, T-076)
+
+El backend calcula las métricas en un motor por partido (`app/analisis/vivo.py`)
+que se alimenta del almacén de posiciones, el único punto por el que pasan TODAS
+las posiciones: `/ingesta`, `POST /vision/videos/{id}/resultados` y el
+procesamiento local de respaldo. Solo se analizan partidos `EN_CURSO`. Los
+tiempos son de partido (`t` del worker), no de reloj.
+
+Los porcentajes de posesión siempre cumplen local + visitante + disputa = 100.
+**Disputa** es el tiempo con el balón visible pero a más de 2 m de todos los
+jugadores de campo. El tiempo sin balón visible no se asigna a nadie.
+
+### `posesion`, cada segundo de partido
+
+```json
+{
+  "tipo": "posesion",
+  "datos": {
+    "partido_id": 42,
+    "t": 1873.4,
+    "acumulado": {"local_pct": 54.1, "visitante_pct": 38.2, "disputa_pct": 7.7},
+    "intervalo": {"minuto_desde": 30, "minuto_hasta": 35,
+                  "local_pct": 61.0, "visitante_pct": 30.5, "disputa_pct": 8.5},
+    "estado": "LOCAL",
+    "poseedor": {"equipo": "LOCAL", "track_id": 7}
+  }
+}
+```
+
+`estado` es el de la última muestra: `LOCAL`, `VISITANTE`, `DISPUTA` o
+`SIN_BALON`. `poseedor` es `null` en disputa o sin balón. `track_id` es el de
+ByteTrack: para saber qué jugador es, se cruza con `GET /partido/{id}/tracks`.
+
+### `metricas_jugadores`, cada 60 s de partido
+
+```json
+{
+  "tipo": "metricas_jugadores",
+  "datos": {
+    "partido_id": 42,
+    "t": 1860.0,
+    "local": [<MetricaJugador>, …],
+    "visitante": [<MetricaJugador>, …]
+  }
+}
+```
+
+Es lo mismo que `GET /analisis/partidos/{id}/metricas/jugadores`, separado por
+equipo y ordenado por distancia. Solo aparecen los tracks asignados a un
+jugador.
+
+### `intervalo`, al cerrarse cada intervalo
+
+`datos` es un `Intervalo`, igual que cada elemento de
+`GET /analisis/partidos/{id}/metricas/intervalos`. Un intervalo se cierra al
+llegar la primera muestra del siguiente. Al finalizar el partido, el último se
+cierra como parcial: su `minuto_hasta` es el de su última muestra. Si un sprint
+que empezó en un intervalo ya cerrado se confirma después, ese intervalo se
+reenvía corregido: el cliente reemplaza el que tenga el mismo `minuto_desde`.
 
 ---
 

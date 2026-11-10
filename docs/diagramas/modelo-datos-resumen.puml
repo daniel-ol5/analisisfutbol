@@ -59,7 +59,7 @@ package "P4 · partido" {
 
 package "P5 · analisis" {
   entity "metrica_intervalo" as m_intervalo
-  entity "metrica_jugador_intervalo" as m_jugador
+  entity "metrica_track_intervalo" as m_track
   entity "evento_derivado" as ev_derivado
 }
 
@@ -96,8 +96,7 @@ jugador     "0..1" ||--o{ "0..*" ev_manual     : protagoniza
 
 ' ============ P5 ============
 partido     "1"    ||--o{ "0..*" m_intervalo   : acumula
-partido     "1"    ||--o{ "0..*" m_jugador     : mide
-jugador     "1"    ||--o{ "0..*" m_jugador     : rinde en
+partido     "1"    ||--o{ "0..*" m_track       : mide
 partido     "1"    ||--o{ "0..*" ev_derivado   : produce
 jugador     "0..1" ||--o{ "0..*" ev_derivado   : origina
 jugador     "0..1" ||--o{ "0..*" ev_derivado   : recibe

@@ -600,6 +600,7 @@ async def finalizar_partido(
     await db.refresh(partido)
     if reloj is not None:
         await db.refresh(reloj)
+    await cerrar_partido(partido.id)  # T-076 (Alejandra): cierra el último intervalo como parcial
     return _construir_estado_en_vivo(partido, reloj, instante)
 
 
@@ -1017,13 +1018,50 @@ MODELO_POSICION: type[Any] = Posicion
 
 
 def filas_de(mensaje: MensajeWorker) -> list[dict[str, Any]]:
-    """Una fila por punto detectado: los jugadores y, si se ve, el balón."""
-    puntos = [*mensaje.jugadores, *([mensaje.balon] if mensaje.balon else [])]
+    """Una fila por punto detectado: los jugadores y, si se ve, el balón.
+
+    T-074: `es_balon` distingue la fila del balón, que de otro modo sería una
+    fila más (lo necesita el recálculo de posesión desde la tabla).
+    """
+    puntos = [(p, False) for p in mensaje.jugadores]
+    if mensaje.balon:
+        puntos.append((mensaje.balon, True))
     return [
         {"partido_id": mensaje.partido, "t": mensaje.t, "track_id": p.tid,
-         "x_m": p.x, "y_m": p.y, "confianza": p.conf}
-        for p in puntos
+         "x_m": p.x, "y_m": p.y, "confianza": p.conf, "es_balon": es_balon}
+        for p, es_balon in puntos
     ]
+
+
+class ObservadorPosiciones(Protocol):
+    """Recibe cada mensaje que entra al almacén (T-074…T-076: el motor de métricas).
+
+    `vaciar` guarda lo pendiente de ese partido; el observador lo usa antes de
+    leer la tabla `posicion`.
+    """
+
+    async def procesar(self, mensaje: MensajeWorker,
+                       vaciar: Callable[[], Any] | None = None) -> None: ...
+
+
+class AnalisisDelProceso:
+    """Delega en el análisis en vivo del proceso (`app/analisis/vivo.py`).
+
+    Se resuelve en cada llamada, así una prueba puede instalar otra instancia
+    después de creado el almacén. El import es tardío para no crear un ciclo
+    (`app.analisis` usa `normalizar_coordenadas` de este módulo).
+    """
+
+    async def procesar(self, mensaje: MensajeWorker,
+                       vaciar: Callable[[], Any] | None = None) -> None:
+        from app.analisis.vivo import obtener_analisis_en_vivo
+        await obtener_analisis_en_vivo().procesar(mensaje, vaciar)
+
+
+async def cerrar_partido(partido_id: int) -> None:
+    """T-076: al finalizar, cierra el último intervalo de métricas como parcial."""
+    from app.analisis.vivo import obtener_analisis_en_vivo
+    await obtener_analisis_en_vivo().cerrar_partido(partido_id)
 
 
 class AlmacenPosiciones(Protocol):
@@ -1050,6 +1088,10 @@ class PosicionesEnLote:
       - alguien llama a `vaciar()` (fin de la ingesta, fin de un lote de video),
       - pasan `inactividad_s` segundos sin datos nuevos de ese partido, o
       - la API se apaga (`lifespan` en `app/main.py`).
+
+    Si tiene un `analisis` (T-074…T-076), le pasa cada mensaje antes de
+    guardarlo en el buffer: así el motor de métricas ve TODAS las posiciones,
+    vengan de /ingesta, de /resultados o del respaldo local.
     """
 
     TAMANO_LOTE = 25       # mensajes: 5 s de partido, unas 575 filas
@@ -1058,8 +1100,10 @@ class PosicionesEnLote:
     def __init__(self, modelo: type[Any],
                  sesiones: async_sessionmaker[AsyncSession] = SessionLocal,
                  tamano_lote: int = TAMANO_LOTE,
-                 inactividad_s: float = INACTIVIDAD_S) -> None:
+                 inactividad_s: float = INACTIVIDAD_S,
+                 analisis: ObservadorPosiciones | None = None) -> None:
         self.modelo = modelo
+        self.analisis = analisis
         self.sesiones = sesiones
         self.tamano_lote = tamano_lote
         self.inactividad_s = inactividad_s
@@ -1074,6 +1118,8 @@ class PosicionesEnLote:
 
     async def agregar(self, mensaje: MensajeWorker) -> None:
         partido = mensaje.partido
+        if self.analisis is not None:
+            await self.analisis.procesar(mensaje, lambda: self._guardar(partido))
         self._filas.setdefault(partido, []).extend(filas_de(mensaje))
         self._mensajes[partido] = self._mensajes.get(partido, 0) + 1
         if self._mensajes[partido] >= self.tamano_lote:
@@ -1142,7 +1188,7 @@ def obtener_almacen_posiciones() -> AlmacenPosiciones:
     no pierde nada: todo cae en el buffer de su partido.
     """
     if "unico" not in _almacen:
-        _almacen["unico"] = PosicionesEnLote(MODELO_POSICION)
+        _almacen["unico"] = PosicionesEnLote(MODELO_POSICION, analisis=AnalisisDelProceso())
     return _almacen["unico"]
 
 
