@@ -43,6 +43,24 @@ class ServicioPartidoVivo extends ChangeNotifier {
   static const int _reintentoBaseSegundos = 2;
   static const int _reintentoMaxSegundos = 10;
 
+  // T-081 (Alejandra): mensajes de métricas calculados en el servidor.
+  // Se reenvían tal cual llegan; no alteran el cálculo de posesión local.
+  static const tiposAnalisis = {
+    'posesion',
+    'metricas_jugadores',
+    'intervalo',
+    'estado',
+  };
+  final StreamController<Map<String, dynamic>> _mensajesAnalisis =
+      StreamController<Map<String, dynamic>>.broadcast();
+  DateTime? _ultimoMensajeEn;
+
+  /// T-081: `posesion`, `metricas_jugadores`, `intervalo` y `estado` del canal /vivo.
+  Stream<Map<String, dynamic>> get mensajesAnalisis => _mensajesAnalisis.stream;
+
+  /// T-081: hora local en que llegó el último mensaje del servidor.
+  DateTime? get ultimoMensajeEn => _ultimoMensajeEn;
+
   EstadoConexion get estadoConexion => _estadoConexion;
   MensajeWorker? get ultimoMensaje => _ultimoMensaje;
   String? get error => _error;
@@ -158,6 +176,13 @@ class ServicioPartidoVivo extends ChangeNotifier {
       if (datos is! Map<String, dynamic>) return;
 
       final tipo = datos['tipo'] as String?;
+
+      // T-081: los mensajes de métricas se reenvían y no siguen al cálculo local.
+      _ultimoMensajeEn = DateTime.now();
+      if (tiposAnalisis.contains(tipo)) {
+        if (!_mensajesAnalisis.isClosed) _mensajesAnalisis.add(datos);
+        return;
+      }
 
       if (tipo == 'listo') {
         _reintentosConsecutivos = 0;
@@ -306,6 +331,7 @@ class ServicioPartidoVivo extends ChangeNotifier {
     _disposed = true;
     _activo = false;
     _limpiarConexion();
+    _mensajesAnalisis.close(); // T-081
     super.dispose();
   }
 }
