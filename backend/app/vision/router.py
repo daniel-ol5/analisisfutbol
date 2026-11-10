@@ -6,9 +6,20 @@ Responsables segun el Sprint Planning:
     CU-27 a CU-29  video y modelos           · S3 · Araceli
 """
 
-from typing import Annotated
+from typing import Annotated, Any
 
-from fastapi import APIRouter, Body, Depends, Header, Request, Response, status
+from fastapi import (
+    APIRouter,
+    Body,
+    Depends,
+    File,
+    Form,
+    Header,
+    Request,
+    Response,
+    UploadFile,
+    status,
+)
 from fastapi.responses import FileResponse
 
 from app.core.deps import Actual, Db, requiere_rol
@@ -23,6 +34,7 @@ from app.vision.schemas import (
     ErrorCalibracion,
     FinTrabajo,
     LanzarProceso,
+    MensajeWorker,
     Modelo,
     ModeloCrear,
     ResultadosLote,
@@ -85,6 +97,24 @@ async def validar_calibracion(partido_id: int, datos: CalibracionGuardar,
                               usuario: Actual) -> ErrorCalibracion:
     # Calculo puro: no consulta ni escribe la base, por eso no pide sesion ni rol.
     return service.validar_calibracion(datos)
+
+
+@router.post("/partidos/{partido_id}/calibracion/detectar-ia",
+             dependencies=[Depends(requiere_rol("ADMIN", "ANALISTA"))],
+             summary="Detectar puntos clave de la cancha automáticamente con IA (YOLO Pose)")
+async def detectar_calibracion_ia(
+    partido_id: int,
+    archivo: Annotated[UploadFile, File(...)],
+    usuario: Actual,
+    largo_m: Annotated[float, Form()] = 105.0,
+    ancho_m: Annotated[float, Form()] = 68.0,
+) -> dict[str, Any]:
+    contenido = await archivo.read()
+    return procesamiento.detectar_calibracion_con_ia(
+        contenido,
+        largo_m=largo_m,
+        ancho_m=ancho_m,
+    )
 
 
 @router.get("/sedes/{sede}/calibracion-previa", response_model=Calibracion,
@@ -204,6 +234,15 @@ async def estado_video(video_id: int, usuario: Actual, db: Db) -> Video:
     return Video.model_validate(await videos.ver_video(db, usuario, video_id))
 
 
+@router.delete("/videos/{video_id}", status_code=status.HTTP_204_NO_CONTENT,
+               dependencies=[PUEDEN_SUBIR],
+               responses=_RESPUESTA_404,
+               summary="CU-28 · Eliminar un video del partido")
+async def eliminar_video(video_id: int, usuario: Actual, db: Db,
+                         almacen: AlmacenDep) -> None:
+    await videos.eliminar_video(db, usuario, video_id, almacen)
+
+
 # ---------------- CU-27 · Procesamiento diferido (T-061) ----------------
 
 # CU-27 lo lanza el analista; el worker se autentica como ADMIN o ANALISTA.
@@ -273,11 +312,18 @@ async def descargar_video(video_id: int, usuario: Actual, db: Db,
              summary="CU-24, CU-40, CU-41 · Iniciar emisión sincronizada a 5 Hz con visor de video/cámara")
 async def iniciar_transmision_vivo(partido_id: int, usuario: Actual,
                                    t_inicio_s: float = 0.0,
-                                   duracion_s: float = 60.0) -> dict[str, object]:
+                                   duracion_s: float = 60.0,
+                                   video_id: int | None = None) -> dict[str, object]:
     procesamiento.programar_transmision_vivo_partido(
-        partido_id, usuario, duracion_s=duracion_s, t_inicio_s=t_inicio_s
+        partido_id, usuario, duracion_s=duracion_s, t_inicio_s=t_inicio_s, video_id=video_id
     )
-    return {"ok": True, "partido_id": partido_id, "t_inicio_s": t_inicio_s, "duracion_s": duracion_s}
+    return {
+        "ok": True,
+        "partido_id": partido_id,
+        "video_id": video_id,
+        "t_inicio_s": t_inicio_s,
+        "duracion_s": duracion_s,
+    }
 
 
 @router.post("/partidos/{partido_id}/pausar-vivo", status_code=status.HTTP_200_OK,
@@ -285,6 +331,36 @@ async def iniciar_transmision_vivo(partido_id: int, usuario: Actual,
 async def pausar_transmision_vivo(partido_id: int, usuario: Actual) -> dict[str, object]:
     await procesamiento.pausar_transmision_vivo_partido(partido_id, usuario.club_id)
     return {"ok": True, "partido_id": partido_id, "estado": "pausado"}
+
+
+@router.post("/vivo/analizar-cuadro", response_model=MensajeWorker,
+             summary="CU-24, CU-40 · Inferencia YOLO + Color en tiempo real desde cámara web o video local")
+async def analizar_cuadro_en_vivo(
+    archivo: Annotated[UploadFile, File(...)],
+    usuario: Actual,
+    color_local: Annotated[str, Form()] = "#6CABDD",
+    color_rival: Annotated[str, Form()] = "#FFFFFF",
+    partido_id: Annotated[int, Form()] = 1,
+    t_actual: Annotated[float, Form()] = 0.0,
+) -> MensajeWorker:
+    contenido = await archivo.read()
+    return procesamiento.analizar_fotograma_en_vivo(
+        contenido,
+        partido_id=partido_id,
+        color_local=color_local,
+        color_rival=color_rival,
+        t_actual=t_actual,
+    )
+
+
+@router.get("/videos/{video_id}/muestras", response_model=list[MensajeWorker],
+            summary="CU-24, CU-40, CU-41 · Descargar telemetría persistida del video para sincronización directa")
+async def obtener_muestras_video(video_id: int, usuario: Actual, db: Db) -> list[MensajeWorker]:
+    vid = await videos.ver_video(db, usuario, video_id)
+    muestras = procesamiento.cargar_muestras_video(video_id)
+    if not muestras and vid.partido_id:
+        muestras = procesamiento.cargar_muestras_partido(vid.partido_id)
+    return muestras
 
 
 @router.post("/videos/{video_id}/resultados", response_model=Video,

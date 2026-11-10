@@ -7,7 +7,6 @@ lanza excepciones de dominio. Así se prueba sin levantar el servidor.
 import math
 from typing import Literal
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.analisis.schemas import CeldaCalor, MapaCalor
@@ -18,7 +17,7 @@ from app.deportivo.models import Jugador, Partido
 LARGO_CANCHA_M = 105.0
 ANCHO_CANCHA_M = 68.0
 
-# Grilla de 21 columnas (5 m cada una) × 14 filas (~4.86 m cada una)
+# Grilla de 21 columnas (5 m cada una) x 14 filas (~4.86 m cada una)
 COLUMNAS_X = 21
 FILAS_Y = 14
 PASO_X = LARGO_CANCHA_M / COLUMNAS_X

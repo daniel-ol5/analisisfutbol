@@ -7,13 +7,14 @@
  * Diseñado con alto contraste adaptado para uso en banco de suplentes.
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { listarEquipos, listarPartidos } from "@/features/deportivo/api";
 import type { Equipo, Partido } from "@/features/deportivo/types";
+import type { Video } from "@/features/vision/types";
 
 import { usePartidoEnVivo } from "../hooks/usePartidoEnVivo";
-import type { ConfiguracionPlano2D } from "../types";
+import type { ConfiguracionPlano2D, MensajeWorker } from "../types";
 import { Plano2DCancha } from "./Plano2DCancha";
 import {
   type ModoDisposicionVivo,
@@ -112,8 +113,37 @@ export function PanelPartidoVivo({ partidoIdInicial }: Props) {
       : nombreEquipoPropio
     : "Visitante";
 
-  const colorLocal = partidoActual?.es_local ? equipoPropio?.color_local : undefined;
-  const colorVisitante = !partidoActual?.es_local ? equipoPropio?.color_visitante : undefined;
+  // Colores de camisetas configurables para el partido / análisis
+  const [colorPropioManual, setColorPropioManual] = useState<string>("#6CABDD");
+  const [colorRivalManual, setColorRivalManual] = useState<string>("#FFFFFF");
+
+  // Sincronizar colores por defecto desde el club si están registrados
+  useEffect(() => {
+    if (equipoPropio) {
+      setColorPropioManual(
+        partidoActual?.es_local ? equipoPropio.color_local : equipoPropio.color_visitante
+      );
+    }
+  }, [equipoPropio, partidoActual?.es_local]);
+
+  const manejarVideoSeleccionado = useCallback((vid: Video) => {
+    if (vid.color_propio) {
+      setColorPropioManual(vid.color_propio);
+    }
+    if (vid.color_rival) {
+      setColorRivalManual(vid.color_rival);
+    }
+  }, []);
+
+  // Muestra sincronizada directamente desde el video preprocesado (0 ms de desfase)
+  const [muestraVideoSincronizada, setMuestraVideoSincronizada] = useState<MensajeWorker | null>(null);
+
+  const jugadoresActivos = muestraVideoSincronizada?.jugadores ?? datos?.jugadores ?? [];
+  const balonActivo = muestraVideoSincronizada !== null ? muestraVideoSincronizada.balon : (datos?.balon ?? null);
+  const calidadActiva = muestraVideoSincronizada?.calidad ?? datos?.calidad;
+
+  const colorLocal = partidoActual?.es_local ? colorPropioManual : colorRivalManual;
+  const colorVisitante = partidoActual?.es_local ? colorRivalManual : colorPropioManual;
 
   const golesLocal = partidoActual
     ? partidoActual.es_local
@@ -311,15 +341,17 @@ export function PanelPartidoVivo({ partidoIdInicial }: Props) {
       >
         <VisorVideoSincronizado
           partidoId={partidoSeleccionadoId}
-          jugadores={datos?.jugadores ?? []}
-          balon={datos?.balon}
+          jugadores={jugadoresActivos}
+          balon={balonActivo}
           colorLocal={colorLocal}
           colorVisitante={colorVisitante}
           nombreLocal={nombreLocal}
           nombreVisitante={nombreVisitante}
-          workerTransmitiendo={Boolean(calidad?.worker_conectado)}
+          workerTransmitiendo={Boolean(calidadActiva?.worker_conectado)}
           modoDisposicion={modoDisposicion}
           onCambiarModoDisposicion={setModoDisposicion}
+          onVideoSeleccionado={manejarVideoSeleccionado}
+          onMuestraSincronizada={setMuestraVideoSincronizada}
         />
 
         <div className="panel-vivo-radar-columna">
@@ -384,14 +416,91 @@ export function PanelPartidoVivo({ partidoIdInicial }: Props) {
             >
               {configPlano.altoContraste ? "Alto Contraste: ON" : "Alto Contraste: OFF"}
             </button>
+
+            {/* Selector de indumentarias de los dos equipos */}
+            <div className="panel-controles-grupo panel-colores-grupo">
+              <label className="panel-control-etiqueta">
+                {nombreLocal} (Local):
+              </label>
+              <label className="panel-color-pill" title={`Camiseta de ${nombreLocal}`}>
+                <span className="panel-color-swatch" style={{ backgroundColor: colorLocal }} />
+                <input
+                  type="color"
+                  value={colorLocal}
+                  onChange={(e) => {
+                    if (partidoActual?.es_local) {
+                      setColorPropioManual(e.target.value);
+                    } else {
+                      setColorRivalManual(e.target.value);
+                    }
+                  }}
+                />
+                <span>{colorLocal.toUpperCase()}</span>
+              </label>
+
+              <label className="panel-control-etiqueta">
+                {nombreVisitante} (Visitante):
+              </label>
+              <label className="panel-color-pill" title={`Camiseta de ${nombreVisitante}`}>
+                <span className="panel-color-swatch" style={{ backgroundColor: colorVisitante }} />
+                <input
+                  type="color"
+                  value={colorVisitante}
+                  onChange={(e) => {
+                    if (partidoActual?.es_local) {
+                      setColorRivalManual(e.target.value);
+                    } else {
+                      setColorPropioManual(e.target.value);
+                    }
+                  }}
+                />
+                <span>{colorVisitante.toUpperCase()}</span>
+              </label>
+
+              <div className="panel-colores-presets">
+                <button
+                  type="button"
+                  className="panel-preset-btn"
+                  onClick={() => {
+                    setColorPropioManual("#6CABDD");
+                    setColorRivalManual("#FFFFFF");
+                  }}
+                  title="Celeste vs Blanco (Man City vs Tottenham)"
+                >
+                  MCI / TOT
+                </button>
+                <button
+                  type="button"
+                  className="panel-preset-btn"
+                  onClick={() => {
+                    setColorPropioManual("#008855");
+                    setColorRivalManual("#FFFFFF");
+                  }}
+                  title="Verde vs Blanco (Betis)"
+                >
+                  BETIS
+                </button>
+                <button
+                  type="button"
+                  className="panel-preset-btn"
+                  onClick={() => {
+                    setColorPropioManual("#1E5AA8");
+                    setColorRivalManual("#EF4444");
+                  }}
+                  title="Azul vs Rojo"
+                >
+                  AZUL / ROJO
+                </button>
+              </div>
+            </div>
           </div>
 
           {/* Visualización del Plano 2D interactivo (CU-41 · T-078) */}
           <section className="panel-vivo-cancha-wrapper" aria-label="Plano 2D en vivo de la cancha">
             <div className="panel-cancha-relativa">
               <Plano2DCancha
-                jugadores={datos?.jugadores ?? []}
-                balon={datos?.balon}
+                jugadores={jugadoresActivos}
+                balon={balonActivo}
                 estelaBalon={estelaBalon}
                 configuracion={configPlano}
                 nombreLocal={nombreLocal}
@@ -401,7 +510,7 @@ export function PanelPartidoVivo({ partidoIdInicial }: Props) {
               />
 
               {/* Banner informativo mientras se esperan datos */}
-              {!datos && estadoConexion === "conectado" && (
+              {jugadoresActivos.length === 0 && !datos && estadoConexion === "conectado" && (
                 <div className="plano-esperando-overlay">
                   <div className="plano-esperando-card">
                     <span className="plano-esperando-pulso" aria-hidden="true" />
@@ -423,7 +532,7 @@ export function PanelPartidoVivo({ partidoIdInicial }: Props) {
         <div className="panel-telemetria-card">
           <span className="panel-telemetria-label">Frecuencia de datos</span>
           <span className="panel-telemetria-valor">
-            {calidad ? `${calidad.fps.toFixed(1)} Hz` : "0.0 Hz"}
+            {calidadActiva ? `${calidadActiva.fps.toFixed(1)} Hz` : "0.0 Hz"}
           </span>
           <span className="panel-telemetria-meta">Meta: ~5.0 Hz</span>
         </div>
@@ -432,14 +541,14 @@ export function PanelPartidoVivo({ partidoIdInicial }: Props) {
           <span className="panel-telemetria-label">Latencia de captura</span>
           <span
             className={`panel-telemetria-valor ${
-              (calidad?.retraso_s ?? 0) < 1.0
+              (calidadActiva?.retraso_s ?? 0) < 1.0
                 ? "texto-verde"
-                : (calidad?.retraso_s ?? 0) < 2.0
+                : (calidadActiva?.retraso_s ?? 0) < 2.0
                   ? "texto-amarillo"
                   : "texto-rojo"
             }`}
           >
-            {calidad ? `${calidad.retraso_s.toFixed(2)} s` : "—"}
+            {calidadActiva ? `${calidadActiva.retraso_s.toFixed(2)} s` : "—"}
           </span>
           <span className="panel-telemetria-meta">&lt; 2.0 s requeridos</span>
         </div>
@@ -447,7 +556,7 @@ export function PanelPartidoVivo({ partidoIdInicial }: Props) {
         <div className="panel-telemetria-card">
           <span className="panel-telemetria-label">Jugadores en campo</span>
           <span className="panel-telemetria-valor">
-            {calidad ? `${calidad.jugadores_detectados} detectados` : "0"}
+            {calidadActiva ? `${calidadActiva.jugadores_detectados} detectados` : "0"}
           </span>
           <span className="panel-telemetria-meta">22 jugadores esperados</span>
         </div>
@@ -456,10 +565,10 @@ export function PanelPartidoVivo({ partidoIdInicial }: Props) {
           <span className="panel-telemetria-label">Visibilidad balón</span>
           <span
             className={`panel-telemetria-valor ${
-              calidad?.balon_visible ? "texto-verde" : "texto-amarillo"
+              calidadActiva?.balon_visible ? "texto-verde" : "texto-amarillo"
             }`}
           >
-            {calidad?.balon_visible ? "Visible" : "No detectado"}
+            {calidadActiva?.balon_visible ? "Visible" : "No detectado"}
           </span>
           <span className="panel-telemetria-meta">Cámara táctica</span>
         </div>
@@ -468,10 +577,10 @@ export function PanelPartidoVivo({ partidoIdInicial }: Props) {
           <span className="panel-telemetria-label">Estado del worker</span>
           <span
             className={`panel-telemetria-valor ${
-              calidad?.worker_conectado ? "texto-verde" : "texto-rojo"
+              calidadActiva?.worker_conectado ? "texto-verde" : "texto-rojo"
             }`}
           >
-            {calidad?.worker_conectado ? "Transmitiendo" : "Inactivo"}
+            {calidadActiva?.worker_conectado ? "Transmitiendo" : "Inactivo"}
           </span>
           <span className="panel-telemetria-meta">Ingesta WebSocket</span>
         </div>

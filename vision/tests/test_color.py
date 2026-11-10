@@ -188,3 +188,140 @@ def test_clasificar_equipos_con_pocos_jugadores_no_hace_kmeans_y_no_falla():
 
     assert len(clasificacion) == 1
     assert clasificacion[0].equipo == EquipoDetectado.LOCAL
+
+
+def test_diferenciacion_camisetas_blancas_y_arbitro_negro():
+    """Tottenham blanco vs Man City celeste vs Árbitro negro: deben discriminarse en CIELAB."""
+    from seguimiento.color import ColoresEquipo, clasificar_equipos, color_dominante
+
+    colores_premier = ColoresEquipo(color_local="#6CABDD", color_visitante="#FFFFFF")
+    # Blanco puro y celeste
+    recorte_blanco = _recorte_sintetico((245, 245, 245))
+    recorte_celeste = _recorte_sintetico((220, 170, 100))
+    recorte_arbitro = _recorte_sintetico((25, 25, 25))
+
+    col_blanco = color_dominante(recorte_blanco)
+    col_celeste = color_dominante(recorte_celeste)
+    col_arbitro = color_dominante(recorte_arbitro)
+
+    clasif = clasificar_equipos([col_blanco, col_celeste, col_arbitro], colores_premier)
+    assert clasif[0].equipo == EquipoDetectado.VISITANTE  # Blanco
+    assert clasif[1].equipo == EquipoDetectado.LOCAL      # Celeste
+    assert clasif[2].equipo == EquipoDetectado.ARBITRO    # Negro
+
+
+def test_clasificador_temporal_filtra_parpadeo():
+    from seguimiento.color import ClasificadorTemporalEquipos
+
+    clasificador = ClasificadorTemporalEquipos(ventana=5)
+    # Simular 4 cuadros como LOCAL
+    for _ in range(4):
+        eq, _ = clasificador.registrar_y_suavizar(10, EquipoDetectado.LOCAL, 0.9)
+        clasificador.avanzar_cuadro()
+    assert eq == EquipoDetectado.LOCAL
+
+    # Un cuadro con ruido de sombra clasificado erróneamente como VISITANTE
+    eq, conf = clasificador.registrar_y_suavizar(10, EquipoDetectado.VISITANTE, 0.5)
+    # Debe seguir siendo LOCAL por mayoría histórica
+    assert eq == EquipoDetectado.LOCAL
+    assert conf >= 0.8
+
+
+# ---------------- CalibradorEquiposPartido (Fase F4) ----------------
+
+def test_es_color_cesped():
+    from seguimiento.color import es_color_cesped
+
+    cesped = np.array([0.62, -0.18, 0.30])
+    blanco = np.array([0.98, -0.02, 0.05])
+    assert es_color_cesped(cesped) is True
+    assert es_color_cesped(blanco) is False
+
+
+def test_calibrador_equipos_partido_acumulacion_y_clustering():
+    from seguimiento.color import CalibradorEquiposPartido, ColoresEquipo
+
+    colores = ColoresEquipo(color_local="#C82828", color_visitante="#1478C8")
+    calibrador = CalibradorEquiposPartido(colores_equipo=colores, min_muestras_calibracion=20)
+
+    assert calibrador.calibrado is False
+    # Acumular muestras sintéticas con ruido
+    # Local: rojo BGR (40, 40, 200)
+    # Visitante: celeste BGR (200, 120, 20)
+    for _ in range(15):
+        calibrador.acumular_muestra(color_dominante(_recorte_sintetico((40, 40, 200))))
+        calibrador.acumular_muestra(color_dominante(_recorte_sintetico((200, 120, 20))))
+
+    assert calibrador.calibrado is True
+    assert calibrador.centroide_local is not None
+    assert calibrador.centroide_visitante is not None
+
+
+def test_calibrador_ignora_portero_y_arbitro_en_clustering():
+    from seguimiento.color import CalibradorEquiposPartido, ColoresEquipo
+
+    colores = ColoresEquipo(color_local="#C82828", color_visitante="#1478C8")
+    calibrador = CalibradorEquiposPartido(colores_equipo=colores, min_muestras_calibracion=10)
+
+    # Intentar acumular muestras marcadas como árbitro o portero
+    for _ in range(10):
+        calibrador.acumular_muestra(np.array([0.2, 0.0, 0.0]), es_arbitro=True)
+        calibrador.acumular_muestra(np.array([0.8, 0.2, 0.2]), es_portero=True)
+
+    assert calibrador.total_muestras == 0
+    assert calibrador.calibrado is False
+
+
+def test_calibrador_clasifica_portero_por_mitad_de_campo():
+    from seguimiento.color import CalibradorEquiposPartido, ColoresEquipo
+
+    colores = ColoresEquipo(color_local="#FFFFFF", color_visitante="#6CABDD")
+    calibrador = CalibradorEquiposPartido(colores_equipo=colores)
+
+    # Portero en x = 8.0m (mitad izquierda / arco local)
+    res_izq = calibrador.clasificar_jugador(
+        color=np.array([0.7, 0.1, 0.2]),  # color amarillo de portero
+        posicion_m=(8.0, 34.0),
+        es_portero=True,
+        centroides_equipo_x=(30.0, 70.0),  # local en izquierda, visitante en derecha
+    )
+    assert res_izq.equipo == EquipoDetectado.LOCAL
+    assert res_izq.confianza >= 0.90
+
+    # Portero en x = 98.0m (mitad derecha / arco visitante)
+    res_der = calibrador.clasificar_jugador(
+        color=np.array([0.7, 0.1, 0.2]),
+        posicion_m=(98.0, 34.0),
+        es_portero=True,
+        centroides_equipo_x=(30.0, 70.0),
+    )
+    assert res_der.equipo == EquipoDetectado.VISITANTE
+
+
+def test_calibrador_clasifica_con_precision_superior_a_95_por_ciento():
+    from seguimiento.color import CalibradorEquiposPartido, ColoresEquipo
+
+    colores = ColoresEquipo(color_local="#FFFFFF", color_visitante="#6CABDD")
+    calibrador = CalibradorEquiposPartido(colores_equipo=colores, min_muestras_calibracion=20)
+
+    # Simular condiciones de iluminación real de partido (Tottenham blanco vs Man City celeste)
+    muestras_blancas = [np.array([0.98 + float(_RNG.normal(0, 0.01)), -0.03, 0.06]) for _ in range(40)]
+    muestras_celestes = [np.array([0.90 + float(_RNG.normal(0, 0.01)), -0.05, -0.02]) for _ in range(40)]
+
+    for mb, mc in zip(muestras_blancas[:15], muestras_celestes[:15], strict=True):
+        calibrador.acumular_muestra(mb)
+        calibrador.acumular_muestra(mc)
+
+    assert calibrador.calibrado is True
+
+    aciertos = 0
+    total = len(muestras_blancas[15:]) + len(muestras_celestes[15:])
+    for mb in muestras_blancas[15:]:
+        if calibrador.clasificar_jugador(mb).equipo == EquipoDetectado.LOCAL:
+            aciertos += 1
+    for mc in muestras_celestes[15:]:
+        if calibrador.clasificar_jugador(mc).equipo == EquipoDetectado.VISITANTE:
+            aciertos += 1
+
+    assert aciertos / total >= 0.95
+
