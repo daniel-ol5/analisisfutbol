@@ -1,12 +1,16 @@
 # Entorno de desarrollo completo  —  Pb-05
 #
+#   cp .env.example .env     # y completar las claves (el .env NO va al repo)
 #   docker compose up
 #
 # Levanta cuatro servicios:
-#   db     PostgreSQL 17        localhost:5432
+#   db     PostgreSQL 16        localhost:5432
 #   redis  Redis 7              localhost:6379
 #   api    FastAPI con recarga  http://localhost:8000/api/docs
 #   mock   Prism                http://localhost:4010
+#
+# Para las pruebas del backend hay una base aparte, exclusiva y desechable:
+#   docker compose --profile test up -d db_test      localhost:55432
 #
 # El mock sirve el contrato congelado de docs/api/openapi.json. Web y Movil
 # apuntan ahi mientras el backend no tenga implementado su caso de uso, y
@@ -14,15 +18,18 @@
 #
 # El worker de vision NO esta aca: corre fuera de Docker, en la maquina con
 # GPU, por los controladores de NVIDIA. Ver vision/README.md
+#
+# Las claves ya no estan escritas aca: salen del .env. Compose se niega a
+# arrancar si falta alguna (la sintaxis ${VARIABLE:?mensaje}).
 
 name: areatecnica
 
 services:
   db:
-    image: postgres:17-alpine
+    image: postgres:16-alpine
     environment:
       POSTGRES_USER: areatecnica
-      POSTGRES_PASSWORD: areatecnica
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Define POSTGRES_PASSWORD en .env}
       POSTGRES_DB: areatecnica
     ports:
       - "5432:5432"
@@ -30,6 +37,25 @@ services:
       - datos_db:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U areatecnica"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Solo para pruebas (perfil "test"). Sin volumen: los datos viven en memoria y
+  # se pierden al apagarla. Las pruebas la vacian y recrean antes de cada caso.
+  db_test:
+    profiles: ["test"]
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${TEST_DB_PASSWORD:?Define TEST_DB_PASSWORD en .env}
+      POSTGRES_DB: areatecnica_test
+    ports:
+      - "55432:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -53,13 +79,13 @@ services:
         condition: service_healthy
     environment:
       APP_ENV: development
-      DATABASE_URL: postgresql+asyncpg://areatecnica:areatecnica@db:5432/areatecnica
+      DATABASE_URL: postgresql+asyncpg://areatecnica:${POSTGRES_PASSWORD}@db:5432/areatecnica
       REDIS_URL: redis://redis:6379/0
-      SECRET_KEY: clave-solo-para-desarrollo-no-usar-en-produccion
+      SECRET_KEY: ${SECRET_KEY:?Define SECRET_KEY en .env (python -c "import secrets; print(secrets.token_urlsafe(48))")}
       CORS_ORIGINS: http://localhost:5173,http://localhost:4010
       SEED_DEMO_DATA: "true"
       DEMO_ADMIN_EMAIL: admin@club-demo.example.com
-      DEMO_ADMIN_PASSWORD: ${DEMO_ADMIN_PASSWORD:-Demo-Area-Tecnica-2026}
+      DEMO_ADMIN_PASSWORD: ${DEMO_ADMIN_PASSWORD:?Define DEMO_ADMIN_PASSWORD en .env}
     ports:
       - "8000:8000"
     volumes:

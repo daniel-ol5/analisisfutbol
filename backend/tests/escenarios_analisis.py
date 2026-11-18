@@ -70,7 +70,8 @@ def partido_sintetico(partido: int, desde_s: float, hasta_s: float,
             x += rnd.gauss(0, 0.05)
             y += rnd.gauss(0, 0.05)
             posiciones[tid] = (x, y)
-            jugadores.append(punto(tid, equipo, round(x, 3), round(y, 3)))
+            # 2 decimales = lo que guarda `posicion` (NUMERIC(6,2)): en vivo y recalculado coinciden.
+            jugadores.append(punto(tid, equipo, round(x, 2), round(y, 2)))
 
         ciclo, fase = divmod(t, 4.0)
         dueño = dueños[int(ciclo) % len(dueños)]
@@ -87,5 +88,5 @@ def partido_sintetico(partido: int, desde_s: float, hasta_s: float,
         if n % 40 == 17:
             balon = None
         mensajes.append(mensaje(partido, t, jugadores,
-                                (round(balon[0], 3), round(balon[1], 3)) if balon else None))
+                                (round(balon[0], 2), round(balon[1], 2)) if balon else None))
     return mensajes

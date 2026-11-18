@@ -91,6 +91,7 @@ async def test_patron_de_un_almacen_nuevo_por_llamada_no_pierde_nada(inserts):
 
 
 async def test_cada_partido_junta_su_propio_lote(inserts):
+    await sembrar_partidos()
     lote = PosicionesEnLote.TAMANO_LOTE
     almacen = obtener_almacen_posiciones()
     for i in range(lote - 1):
@@ -107,6 +108,7 @@ async def test_cada_partido_junta_su_propio_lote(inserts):
 
 
 async def test_tras_un_tiempo_sin_datos_se_guarda_solo():
+    await sembrar_partidos()
     almacen = obtener_almacen_posiciones()
     almacen.inactividad_s = 0.1
     await almacen.agregar(_mensaje(PARTIDO_A, 0.0))
@@ -147,6 +149,7 @@ async def test_cada_mensaje_nuevo_reinicia_la_espera():
 
 
 async def test_al_apagar_la_api_se_guarda_lo_pendiente():
+    await sembrar_partidos()
     async with lifespan(app):
         await obtener_almacen_posiciones().agregar(_mensaje(PARTIDO_A, 0.0))
         assert await contar_posiciones() == 0

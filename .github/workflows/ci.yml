@@ -14,9 +14,42 @@ permissions:
   contents: read
 
 jobs:
-  backend:
-    name: Backend · lint y pruebas
+  secretos:
+    name: Escaneo de secretos
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # gitleaks revisa todo el historial, no solo el ultimo commit
+
+      - name: gitleaks
+        run: |
+          curl -sSL -o gitleaks.tar.gz \
+            https://github.com/gitleaks/gitleaks/releases/download/v8.24.2/gitleaks_8.24.2_linux_x64.tar.gz
+          tar -xzf gitleaks.tar.gz gitleaks
+          ./gitleaks detect --source . --redact --no-banner --exit-code 1
+
+  backend:
+    name: Backend · lint y pruebas (PostgreSQL 16)
+    runs-on: ubuntu-latest
+    # Base exclusiva y efimera de esta corrida: no es una credencial real.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci${{ github.run_id }}x${{ github.run_attempt }}
+          POSTGRES_DB: areatecnica_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql+asyncpg://postgres:ci${{ github.run_id }}x${{ github.run_attempt }}@localhost:5432/areatecnica_test
+      DATABASE_URL: postgresql+asyncpg://postgres:ci${{ github.run_id }}x${{ github.run_attempt }}@localhost:5432/areatecnica_test
     steps:
       - uses: actions/checkout@v4
 

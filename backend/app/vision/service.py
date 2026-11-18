@@ -116,6 +116,9 @@ async def guardar_calibracion(
     verla y corregirla. Al editar se recalcula todo: la matriz anterior ya no
     corresponde a los puntos nuevos.
     """
+    # T-105: el partido tiene que existir y ser de este club (404 si no). Antes, con un
+    # partido inexistente se creaba igual una calibración huérfana con ese id.
+    verificar_pertenencia(await db.get(Partido, partido_id), usuario)
     if datos.referencia and datos.referencia.video_id:
         video = await db.get(Video, datos.referencia.video_id)
         verificar_pertenencia(video, usuario)

@@ -25,6 +25,44 @@ class Fase(StrEnum):
     SIN_BALON = "SIN_BALON"
 
 
+# ---------- CU-45 Metricas tacticas colectivas ----------
+
+class BloqueFase(BaseModel):
+    """Altura de linea, amplitud y compacidad promediadas sobre una fase (T-102)."""
+    altura_linea_m: float | None = Field(default=None,
+        description="Distancia al arco propio, en metros: x media de los 4 jugadores de campo "
+                    "mas retrasados; el arquero queda excluido")
+    amplitud_m: float | None = Field(default=None,
+        description="Ancho del equipo, en metros: distancia entre los dos jugadores mas abiertos")
+    compacidad_m2: float | None = Field(default=None,
+        description="Area, en m2, del poligono envolvente de los jugadores de campo; "
+                    "menos area = equipo mas junto")
+    muestras: int = Field(default=0, ge=0,
+        description="Segundos de partido sobre los que se promedio; 0 = sin datos en la fase")
+
+
+class MetricaTactica(BaseModel):
+    equipo: Lado
+    total: BloqueFase = Field(description="Las dos fases juntas, incluida la disputa")
+    con_balon: BloqueFase = Field(description="El equipo posee el balon")
+    sin_balon: BloqueFase = Field(description="Posee el rival. Disputa o balon no visible: ninguna fase")
+
+
+class IntervaloTactico(BaseModel):
+    minuto_desde: int
+    minuto_hasta: int
+    local: MetricaTactica
+    visitante: MetricaTactica
+
+
+class MetricasTacticas(BaseModel):
+    partido_id: int
+    local: MetricaTactica
+    visitante: MetricaTactica
+    intervalos: list[IntervaloTactico] = Field(
+        default_factory=list, description="Solo intervalos cerrados, como CU-46")
+
+
 # ---------- CU-42, CU-46 Metricas de equipo ----------
 
 class MetricaEquipo(BaseModel):
@@ -39,7 +77,10 @@ class MetricaEquipo(BaseModel):
     altura_linea_m: float | None = Field(default=None,
         description="CU-45. Posicion media de los 4 defensores mas retrasados, sin el arquero")
     amplitud_m: float | None = None
-    compacidad_m: float | None = None
+    compacidad_m2: float | None = Field(default=None,
+        description="CU-45. Area del poligono envolvente de los jugadores de campo, en m2")
+    con_balon: BloqueFase | None = Field(default=None, description="T-102. Bloque con balon")
+    sin_balon: BloqueFase | None = Field(default=None, description="T-102. Bloque sin balon")
     degradada: bool = Field(default=False,
         description="True si se calculo sobre datos con calidad degradada")
 
@@ -124,9 +165,19 @@ class LineaTiempo(BaseModel):
 class NodoPase(BaseModel):
     jugador_id: int
     nombre: str
-    x_medio: float
+    dorsal: int | None = None
+    equipo: Lado | None = None
+    x_medio: float = Field(description="Posicion media del jugador en el rango pedido, "
+                                       "normalizada por direccion de ataque")
     y_medio: float
-    pases: int
+    pases: int = Field(description="Pases completados que envio")
+    pases_recibidos: int = Field(default=0, description="Pases completados que recibio")
+    mayor_recepcion: bool = Field(default=False,
+        description="Esta entre los que mas pases reciben de su equipo (los 3 primeros, con al "
+                    "menos un pase recibido)")
+    aislado: bool = Field(default=False,
+        description="Desconectado del circuito: sus pases enviados + recibidos son menos de "
+                    "la cuarta parte del promedio de su equipo (o ninguno)")
 
 
 class AristaPase(BaseModel):
@@ -159,7 +210,8 @@ class EventoDerivado(BaseModel):
     x_d: float | None = None
     y_d: float | None = None
     resultado: str | None = None
-    confianza: float = Field(ge=0, le=1)
+    confianza: float | None = Field(default=None, ge=0, le=1,
+        description="Null: los eventos salen de reglas deterministas, no de un modelo")
     origen: str = "CAMARA"
 
 

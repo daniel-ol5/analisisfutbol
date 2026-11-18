@@ -13,6 +13,7 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import update
 
 from app.core.database import SessionLocal
+from app.core.security import decodificar
 from app.main import app
 from app.vision.models import Calibracion
 from app.vision.service import ADVERTENCIA_CAMARA_MOVIDA, normalizar_sede
@@ -209,7 +210,21 @@ async def test_no_usa_la_sede_de_un_partido_ajeno(cliente):
     propio = await _club(cliente, "a")
     ajeno = await _club(cliente, "b")
     partido_ajeno = await _partido(cliente, ajeno, "Sede Secreta")
-    await _calibrar(cliente, propio, partido_ajeno)
+
+    # T-105: por la API ya no se puede calibrar el partido de otro club (404)...
+    r = await cliente.post(f"/api/vision/partidos/{partido_ajeno}/calibracion",
+                           headers=propio["auth"], json=cuerpo_valido())
+    assert r.status_code == 404
+
+    # ...pero la consulta por sede sigue teniendo su propia defensa: se inserta la fila
+    # a mano, como la dejaría un dato anterior a esa corrección.
+    club_propio = decodificar(propio["auth"]["Authorization"].split()[1])["club"]
+    cuerpo = cuerpo_valido()
+    async with SessionLocal() as db:
+        db.add(Calibracion(club_id=int(club_propio), partido_id=partido_ajeno, largo_m=105.0,
+                           ancho_m=68.0, puntos_imagen=cuerpo["puntos_imagen"],
+                           puntos_cancha=cuerpo["puntos_cancha"], valida=True))
+        await db.commit()
 
     assert (await _previa(cliente, propio, "Sede Secreta")).status_code == 404
 

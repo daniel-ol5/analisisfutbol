@@ -269,6 +269,8 @@ package "P5 · analisis" {
     * partido_id : integer <<FK>>
     jugador_origen_id : integer <<FK>>
     jugador_destino_id : integer <<FK>>
+    track_origen_id : integer
+    track_destino_id : integer
     * tipo : enum(PASE|PERDIDA|RECUPERACION|TIRO|FUERA)
     * t : numeric(8,2)
     minuto : integer

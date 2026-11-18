@@ -18,8 +18,9 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.analisis import persistencia
+from app.analisis import eventos, persistencia
 from app.analisis.motor.motor import (
+    AcumEquipo,
     AcumIntervalo,
     MotorPartido,
     minutos_de,
@@ -28,11 +29,15 @@ from app.analisis.motor.motor import (
 )
 from app.analisis.parametros import PARAMETROS
 from app.analisis.schemas import (
+    BloqueFase,
     Intervalo,
+    IntervaloTactico,
     MetricaEquipo,
     MetricaJugador,
     MetricasJugadorPorIntervalo,
     MetricasPartido,
+    MetricasTacticas,
+    MetricaTactica,
 )
 from app.core.deps import UsuarioActual
 from app.core.tenancy import del_club, verificar_pertenencia
@@ -71,6 +76,22 @@ def _r(valor: float | None, decimales: int = 2) -> float | None:
     return round(valor, decimales) if valor is not None else None
 
 
+def _bloque_fase(e: AcumEquipo, fase: str) -> BloqueFase:
+    altura, amplitud, compacidad, muestras = e.bloque(fase)
+    return BloqueFase(altura_linea_m=_r(altura), amplitud_m=_r(amplitud),
+                      compacidad_m2=_r(compacidad), muestras=muestras)
+
+
+def metrica_tactica(acum: AcumIntervalo, lado: Lado) -> MetricaTactica:
+    """CU-45 (T-102): el bloque del equipo en total, con balón y sin balón."""
+    e = acum.equipos[lado.value]
+    total = BloqueFase(
+        altura_linea_m=_r(e.altura_linea_m), amplitud_m=_r(e.amplitud_m),
+        compacidad_m2=_r(e.compacidad_m2), muestras=max(e.n_altura, e.n_forma))
+    return MetricaTactica(equipo=lado, total=total, con_balon=_bloque_fase(e, "cb"),
+                          sin_balon=_bloque_fase(e, "sb"))
+
+
 def metrica_equipo(acum: AcumIntervalo, lado: Lado) -> MetricaEquipo:
     local, visitante, _ = porcentajes(acum)
     e = acum.equipos[lado.value]
@@ -84,7 +105,9 @@ def metrica_equipo(acum: AcumIntervalo, lado: Lado) -> MetricaEquipo:
         entradas_ultimo_tercio=0,    # fuera de alcance en S3
         altura_linea_m=_r(e.altura_linea_m),
         amplitud_m=_r(e.amplitud_m),
-        compacidad_m=_r(e.compacidad_m),
+        compacidad_m2=_r(e.compacidad_m2),
+        con_balon=_bloque_fase(e, "cb"),
+        sin_balon=_bloque_fase(e, "sb"),
     )
 
 
@@ -127,6 +150,50 @@ async def listar_intervalos(db: AsyncSession, usuario: UsuarioActual,
     partido = await partido_del_club(db, usuario, partido_id)
     guardados = await persistencia.intervalos_guardados(db, partido.id)
     return [intervalo_de(i) for i in guardados]
+
+
+async def metricas_tacticas(db: AsyncSession, usuario: UsuarioActual,
+                            partido_id: int) -> MetricasTacticas:
+    """CU-45: altura de línea, amplitud y compacidad por fase, acumuladas y por intervalo."""
+    partido = await partido_del_club(db, usuario, partido_id)
+    motor = motor_en_vivo(partido.id)
+    total = sumar_intervalos(await _intervalos(db, partido.id, con_tracks=False, motor=motor))
+    cerrados = await persistencia.intervalos_guardados(db, partido.id)
+    return MetricasTacticas(
+        partido_id=partido.id,
+        local=metrica_tactica(total, Lado.LOCAL),
+        visitante=metrica_tactica(total, Lado.VISITANTE),
+        intervalos=[
+            IntervaloTactico(
+                minuto_desde=minutos_de(i, PARAMETROS)[0],
+                minuto_hasta=minutos_de(i, PARAMETROS)[1],
+                local=metrica_tactica(i, Lado.LOCAL),
+                visitante=metrica_tactica(i, Lado.VISITANTE),
+            ) for i in cerrados
+        ],
+    )
+
+
+async def metricas_minuto(db: AsyncSession, usuario: UsuarioActual, partido_id: int,
+                          minuto: int) -> Intervalo:
+    """CU-47 (T-103): las métricas del minuto exacto, para filtrarlas al elegir un evento.
+
+    Pasa por un motor nuevo solo las posiciones de ese minuto: es el mismo código que en
+    vivo y en el recálculo, así que bloque, posesión y pases se miden igual, pero acotados.
+    """
+    partido = await partido_del_club(db, usuario, partido_id)
+    contexto = await persistencia.contexto_de(db, partido)
+    tramos = await persistencia.tramos_de(db, partido)
+    motor = MotorPartido(contexto, PARAMETROS, await persistencia.arqueros_de(db, partido))
+    await persistencia.alimentar(db, motor, partido.id, persistencia.equipos_de(tramos),
+                                 t_desde=minuto * 60.0, t_hasta=(minuto + 1) * 60.0)
+    acum = sumar_intervalos(motor.intervalos.values())
+    return Intervalo(
+        minuto_desde=minuto, minuto_hasta=minuto + 1,
+        local=metrica_equipo(acum, Lado.LOCAL),
+        visitante=metrica_equipo(acum, Lado.VISITANTE),
+        posesion_disputa_pct=porcentajes(acum)[2],
+    )
 
 
 # ---------------- Jugadores (CU-43) ----------------
@@ -288,6 +355,7 @@ async def recalcular(db: AsyncSession, usuario: UsuarioActual, partido_id: int) 
     motor.cerrar()
     await persistencia.borrar_metricas(db, partido.id)
     await persistencia.guardar_intervalos(db, partido.id, motor.intervalos.values())
+    await eventos.reemplazar(db, partido, motor.pases)   # CU-47: evento_derivado
     await db.commit()
     return await metricas_partido(db, usuario, partido_id)
 

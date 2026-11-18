@@ -6,8 +6,9 @@ Responsables segun el Sprint Planning:
     CU-45, CU-47, CU-48  avanzadas      · S4 · Alex
 """
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Path, Query
 
+from app.analisis import avanzadas as svc_avanzadas
 from app.analisis import metricas as svc_metricas
 from app.analisis.schemas import (
     Comparativa,
@@ -18,6 +19,7 @@ from app.analisis.schemas import (
     MetricaJugador,
     MetricasJugadorPorIntervalo,
     MetricasPartido,
+    MetricasTacticas,
     RedPases,
 )
 from app.analisis.service import calcular_mapa_calor
@@ -70,6 +72,43 @@ async def intervalos(partido_id: int, usuario: Actual, db: Db) -> list[Intervalo
              ))
 async def recalcular_metricas(partido_id: int, usuario: Actual, db: Db) -> MetricasPartido:
     return await svc_metricas.recalcular(db, usuario, partido_id)
+
+
+# ---------------- CU-45 · Metricas tacticas colectivas ----------------
+
+@router.get("/partidos/{partido_id}/metricas/tacticas", response_model=MetricasTacticas,
+            responses=_RESPUESTA_404,
+            summary="CU-45 · Altura de linea, amplitud y compacidad con y sin balon",
+            description=(
+                "T-102. Una muestra por segundo, con coordenadas normalizadas por direccion "
+                "de ataque. Altura de linea: distancia al arco propio, en metros, de la x "
+                "media de los 4 jugadores de campo mas retrasados; el arquero (asignado como "
+                "ARQ o, si no hay, el mas retrasado dentro de su area) queda fuera del "
+                "calculo. Amplitud: distancia entre los dos jugadores mas abiertos. "
+                "Compacidad: area en m2 del poligono envolvente de los jugadores de campo. "
+                "Suavizado: un jugador que la camara pierde sigue contando en su ultima "
+                "posicion hasta 3 s, asi la linea no salta. Fase CON_BALON: posee el "
+                "equipo; SIN_BALON: posee el rival; en disputa o con el balon no visible la "
+                "muestra solo entra en `total`. `muestras` dice cuantos segundos respaldan "
+                "cada promedio."
+            ))
+async def metricas_tacticas(partido_id: int, usuario: Actual, db: Db) -> MetricasTacticas:
+    return await svc_metricas.metricas_tacticas(db, usuario, partido_id)
+
+
+@router.get("/partidos/{partido_id}/metricas/minuto/{minuto}", response_model=Intervalo,
+            responses=_RESPUESTA_404,
+            summary="CU-47 · Metricas de un minuto exacto del partido",
+            description=(
+                "T-103. Calculadas con las posiciones de ese minuto (`minuto` .. `minuto` + 1, "
+                "en minutos de partido) con el mismo motor que CU-42 y CU-45: posesion, pases, "
+                "distancia, altura de linea, amplitud y compacidad. La linea de tiempo lo usa "
+                "al elegir un evento para filtrar las metricas al minuto de la jugada. Un "
+                "minuto sin posiciones devuelve ceros y valores nulos."
+            ))
+async def metricas_minuto(partido_id: int, usuario: Actual, db: Db,
+                          minuto: int = Path(ge=0, le=200)) -> Intervalo:
+    return await svc_metricas.metricas_minuto(db, usuario, partido_id, minuto)
 
 
 # ---------------- CU-43 · Metricas fisicas ----------------
@@ -128,17 +167,38 @@ async def mapa_calor(partido_id: int, usuario: Actual, db: Db,
 # ---------------- CU-47, CU-48 · Linea de tiempo y red de pases ----------------
 
 @router.get("/partidos/{partido_id}/linea-tiempo", response_model=LineaTiempo,
-            summary="CU-47 · Cronologia de eventos de camara y manuales")
+            responses=_RESPUESTA_404,
+            summary="CU-47 · Cronologia de eventos de camara y manuales",
+            description=(
+                "T-103. Ordenada por `t` (segundos de partido). `origen` distingue lo inferido "
+                "por la camara (PASE, PERDIDA, RECUPERACION) de lo cargado a mano (GOL, "
+                "AMARILLA, ROJA, SUSTITUCION; sin los anulados, ubicados en `minuto * 60`). "
+                "Filtros `tipo` y `equipo` (LOCAL o VISITANTE); un valor invalido da 422. "
+                "Con el filtro, `t` permite que el plano 2D salte a ese instante."
+            ))
 async def linea_tiempo(partido_id: int, usuario: Actual, db: Db,
-                       tipo: str | None = None, equipo: str | None = None) -> LineaTiempo:
-    pendiente("CU-47", "Sprint 4", "Alex")
+                       tipo: str | None = Query(None, description="PASE, PERDIDA, GOL, ..."),
+                       equipo: str | None = _EQUIPO) -> LineaTiempo:
+    return await svc_avanzadas.linea_tiempo(db, usuario, partido_id, tipo, equipo)
 
 
 @router.get("/partidos/{partido_id}/red-pases", response_model=RedPases,
-            summary="CU-48 · Grafo de circulacion del balon")
+            responses=_RESPUESTA_404,
+            summary="CU-48 · Grafo de circulacion del balon",
+            description=(
+                "T-103. Solo pases COMPLETADOS entre jugadores con track asignado. Nodo: "
+                "jugador con su posicion media en el rango (normalizada por direccion de "
+                "ataque), pases enviados y recibidos. `mayor_recepcion` marca a los 3 que mas "
+                "pases reciben de su equipo; `aislado`, a quienes jugaron pero casi no entran "
+                "al circuito (incluye a los que no tienen ningun pase). Arista: pases de "
+                "`origen_id` a `destino_id`. Minutos inclusive; `desde_minuto` > "
+                "`hasta_minuto` da 422."
+            ))
 async def red_pases(partido_id: int, usuario: Actual, db: Db,
-                    desde_minuto: int = 0, hasta_minuto: int = 90) -> RedPases:
-    pendiente("CU-48", "Sprint 4", "Alex")
+                    desde_minuto: int = Query(0, ge=0), hasta_minuto: int = Query(90, ge=0),
+                    equipo: str | None = _EQUIPO) -> RedPases:
+    return await svc_avanzadas.red_pases(db, usuario, partido_id, desde_minuto, hasta_minuto,
+                                         equipo)
 
 
 # ---------------- Eventos derivados ----------------
