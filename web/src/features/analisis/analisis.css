@@ -1750,3 +1750,57 @@
 }
 
 
+
+/* CU-47 · Línea de tiempo (T-103) */
+.analisis-linea { padding: 14px 16px; border: 1px solid var(--line); border-radius: 10px; display: grid; gap: 10px; min-width: 0; }
+.analisis-linea-filtros { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; justify-content: space-between; }
+.analisis-linea-filtros [role="group"] { display: flex; flex-wrap: wrap; gap: 6px; }
+.analisis-linea-filtros button { border: 1px solid var(--line); background: transparent; color: var(--text-2); border-radius: 999px; padding: 3px 10px; font-size: 12.5px; cursor: pointer; }
+.analisis-linea-filtros button.activo { background: var(--pitch); border-color: var(--pitch); color: #fff; }
+.analisis-linea-lista { list-style: none; margin: 0; padding: 0; max-height: 320px; overflow-y: auto; display: grid; }
+.analisis-linea-lista button { display: grid; grid-template-columns: 56px 110px 1fr auto; gap: 10px; align-items: baseline; width: 100%; text-align: left; border: 0; border-bottom: 1px solid var(--line); background: transparent; color: inherit; padding: 7px 6px; cursor: pointer; font-size: 13px; }
+.analisis-linea-lista button:hover, .analisis-linea-lista button:focus-visible { background: color-mix(in srgb, var(--pitch) 10%, transparent); }
+.analisis-linea-lista button.actual { box-shadow: inset 3px 0 0 var(--pitch); }
+.analisis-linea-lista button.elegido { background: color-mix(in srgb, var(--pitch) 18%, transparent); }
+.analisis-linea-lista time { font-variant-numeric: tabular-nums; color: var(--text-2); }
+.analisis-evento { font-weight: 600; }
+.analisis-evento--gol { color: #16a34a; } .analisis-evento--roja { color: #dc2626; } .analisis-evento--amarilla { color: #ca8a04; }
+.analisis-origen { color: var(--text-2); }
+.analisis-tabla { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+.analisis-tabla th, .analisis-tabla td { text-align: right; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+.analisis-tabla th:first-child, .analisis-tabla tbody th { text-align: left; font-weight: 500; }
+@media (max-width: 600px) { .analisis-linea-lista button { grid-template-columns: 50px 1fr; } .analisis-linea-lista button > :nth-child(n+3) { grid-column: 2; } }
+
+/* CU-47 · Cronología horizontal 0 – 90+ (T-103) */
+.cronologia { overflow-x: auto; padding: 4px 0 2px; }
+.cronologia-escala { position: relative; min-width: 560px; margin-inline: 14px; }
+.cronologia-carril { position: relative; border-radius: 8px; background: color-mix(in srgb, var(--text-2) 7%, transparent); }
+.cronologia-carril--manual { background: color-mix(in srgb, var(--pitch) 10%, transparent); }
+.cronologia-carril-titulo { position: absolute; left: 6px; top: 2px; font-size: 10.5px; letter-spacing: .04em; text-transform: uppercase; color: var(--text-2); opacity: .8; pointer-events: none; }
+.cronologia-eje { position: relative; height: 26px; border-top: 2px solid var(--line); border-bottom: 2px solid var(--line); margin: 6px 0; }
+.cronologia-tick { position: absolute; top: 3px; transform: translateX(-50%); font-size: 11px; color: var(--text-2); font-variant-numeric: tabular-nums; display: flex; flex-direction: column; align-items: center; }
+.cronologia-tick i { display: block; width: 1px; height: 5px; background: var(--text-2); margin-bottom: 1px; }
+.cronologia-descuento { position: absolute; top: 0; bottom: 0; right: 0; background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--pitch) 18%, transparent) 0 4px, transparent 4px 8px); }
+.cronologia-marca { position: absolute; transform: translateX(-50%); width: 24px; height: 24px; display: grid; place-items: center; padding: 0; font-size: 14px; line-height: 1; border-radius: 50%; border: 2px solid var(--line); background: var(--surface); color: var(--text-1, inherit); cursor: pointer; }
+.cronologia-marca[data-equipo="LOCAL"] { border-color: #c8102e; }
+.cronologia-marca[data-equipo="VISITANTE"] { border-color: #1e293b; }
+.cronologia-marca:hover, .cronologia-marca:focus-visible { z-index: 3; transform: translateX(-50%) scale(1.25); outline: 2px solid var(--pitch); outline-offset: 1px; }
+.cronologia-marca.elegido { z-index: 4; background: var(--pitch); color: #fff; box-shadow: 0 0 0 3px color-mix(in srgb, var(--pitch) 35%, transparent); }
+.cronologia-marca--pase, .cronologia-marca--perdida, .cronologia-marca--recuperacion { font-size: 12px; }
+.cronologia-minuto { position: absolute; top: 0; bottom: 0; min-width: 3px; background: color-mix(in srgb, var(--pitch) 22%, transparent); border-inline: 1px solid var(--pitch); pointer-events: none; z-index: 1; }
+.cronologia-cursor { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: #f59e0b; pointer-events: none; z-index: 2; }
+.analisis-linea-filtro { margin: 0; font-size: 13px; color: var(--text-2); }
+.analisis-linea-filtro button, .analisis-minuto-quitar { border: 1px solid var(--line); background: transparent; color: inherit; border-radius: 999px; padding: 2px 10px; font-size: 12.5px; cursor: pointer; }
+.analisis-minuto { padding: 14px 16px; border: 1px solid var(--pitch); border-radius: 10px; display: grid; gap: 8px; min-width: 0; }
+.analisis-minuto .analisis-radar-cabecera { padding: 0; }
+
+/* CU-48 · Red de pases: destacados y aislados (T-103) */
+.red-resumen { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; padding: 0 12px 4px; }
+.red-resumen section { min-width: 0; }
+.red-resumen h4 { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; font-size: 13px; }
+.red-resumen ol, .red-resumen ul { margin: 0; padding-left: 20px; font-size: 13px; line-height: 1.6; }
+.red-resumen small { color: var(--text-2); }
+.red-leyenda { display: inline-block; width: 14px; height: 14px; border-radius: 50%; box-sizing: border-box; }
+.red-leyenda--recepcion { background: #c8102e; box-shadow: 0 0 0 2px #facc15; }
+.red-leyenda--aislado { background: #64748b; border: 2px dashed #fff; outline: 1px solid #64748b; }
+@media (max-width: 600px) { .red-resumen { grid-template-columns: 1fr; } }

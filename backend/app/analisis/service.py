@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.analisis.schemas import CeldaCalor, MapaCalor
 from app.core.deps import UsuarioActual
-from app.core.tenancy import verificar_pertenencia
+from app.core.tenancy import del_club, verificar_pertenencia
 from app.deportivo.models import Jugador, Partido
 
 LARGO_CANCHA_M = 105.0
@@ -84,9 +84,13 @@ async def calcular_mapa_calor(
             centro_base_x = 76.0
             dispersion_x = 15.0
     elif alcance == "jugador" and referencia_id:
-        jugador = await db.get(Jugador, referencia_id)
+        # Inexistente y de otro club responden igual (404): no se revela que el id existe.
+        jugador = verificar_pertenencia(
+            (await db.execute(del_club(Jugador, usuario).where(Jugador.id == referencia_id)))
+            .scalar_one_or_none(),
+            usuario,
+        )
         if jugador:
-            verificar_pertenencia(jugador, usuario)
             pos = jugador.posicion
             if pos == "ARQ":
                 centro_base_x, centro_base_y = 12.0, 34.0

@@ -3,7 +3,12 @@
 import pytest
 from escenarios_analisis import partido_sintetico
 
-from app.analisis.motor.bloque import bloque_equipo, direccion_de
+from app.analisis.motor.bloque import (
+    area_envolvente,
+    bloque_equipo,
+    direccion_de,
+    retener_ausentes,
+)
 from app.analisis.motor.motor import (
     ContextoPartido,
     MotorPartido,
@@ -48,10 +53,68 @@ def test_el_arquero_asignado_se_excluye_aunque_este_fuera_del_area():
     assert b.altura_linea_m == pytest.approx(20.0)
 
 
-def test_compacidad_es_la_distancia_media_al_centroide():
+def test_area_envolvente_de_figuras_conocidas():
+    assert area_envolvente([(0, 0), (10, 0), (0, 10)]) == pytest.approx(50.0)       # triángulo
+    cuadrado = [(0, 0), (10, 0), (10, 10), (0, 10)]
+    assert area_envolvente(cuadrado) == pytest.approx(100.0)
+    assert area_envolvente([*cuadrado, (5, 5), (2, 7)]) == pytest.approx(100.0)     # interiores no suman
+    assert area_envolvente([(0, 0), (4, 0), (4, 6), (0, 6), (2, 3)]) == pytest.approx(24.0)
+
+
+def test_area_envolvente_degenerada_es_cero():
+    assert area_envolvente([]) == 0.0
+    assert area_envolvente([(1, 1), (1, 1), (1, 1)]) == 0.0      # puntos repetidos
+    assert area_envolvente([(0, 0), (5, 5)]) == 0.0              # dos puntos
+    assert area_envolvente([(0, 0), (5, 5), (10, 10)]) == 0.0    # alineados
+
+
+def test_compacidad_es_el_area_del_poligono_envolvente_de_los_jugadores_de_campo():
+    # Campo: rectángulo de 20 m de largo por 48 m de ancho (x 20..40, y 10..58).
+    campo = [(2, 20.0, 10.0), (3, 20.0, 58.0), (4, 40.0, 10.0), (5, 40.0, 58.0)]
+    b = _bloque([(1, 3.0, 34.0), *campo])        # el arquero queda fuera del polígono
+    assert b.compacidad_m2 == pytest.approx(20.0 * 48.0)
+    assert b.amplitud_m == pytest.approx(48.0)
+    # Un jugador dentro del rectángulo no cambia el área; uno fuera de él, sí.
+    assert _bloque([(1, 3.0, 34.0), *campo, (6, 30.0, 30.0)]).compacidad_m2 == pytest.approx(960.0)
+    assert _bloque([(1, 3.0, 34.0), *campo, (6, 50.0, 34.0)]).compacidad_m2 > 960.0
+
+
+def test_un_equipo_mas_junto_tiene_menos_compacidad():
+    abierto = [(2, 20.0, 5.0), (3, 20.0, 63.0), (4, 45.0, 5.0), (5, 45.0, 63.0)]
+    junto = [(2, 20.0, 25.0), (3, 20.0, 43.0), (4, 35.0, 25.0), (5, 35.0, 43.0)]
+    assert _bloque(junto).compacidad_m2 < _bloque(abierto).compacidad_m2
+
+
+def test_con_menos_de_cuatro_de_campo_no_hay_altura_pero_si_forma():
     b = _bloque([(1, 3.0, 34.0), (2, 20.0, 30.0), (3, 20.0, 38.0)])
-    assert b.compacidad_m == pytest.approx(4.0)
     assert b.altura_linea_m is None   # menos de 4 de campo
+    assert b.amplitud_m == pytest.approx(8.0)
+    assert b.compacidad_m2 == 0.0     # dos jugadores no forman polígono
+
+
+# ---------------- Suavizado: retención de ausentes (CU-45) ----------------
+
+ULTIMAS = {2: (10.0, 20.0, 10.0), 3: (9.0, 20.0, 25.0), 9: (10.0, 70.0, 30.0), 50: (2.0, 1.0, 1.0)}
+EQUIPOS = {2: "LOCAL", 3: "LOCAL", 9: "VISITANTE", 50: "LOCAL"}
+
+
+def test_retener_ausentes_agrega_a_los_del_equipo_vistos_hace_poco():
+    visibles = [(3, 20.0, 26.0)]
+    # El 2 se vio hace 1 s y el 50 hace 9 s: solo el primero sigue contando.
+    salida = retener_ausentes(visibles, ULTIMAS, EQUIPOS, "LOCAL", 11.0, 3.0)
+    assert salida == [(3, 20.0, 26.0), (2, 20.0, 10.0)]
+
+
+def test_retener_ausentes_no_duplica_a_los_visibles_ni_mezcla_equipos():
+    salida = retener_ausentes([(2, 21.0, 11.0)], ULTIMAS, EQUIPOS, "LOCAL", 10.5, 3.0)
+    assert (2, 20.0, 10.0) not in salida and (2, 21.0, 11.0) in salida   # manda la posición actual
+    assert all(tid != 9 for tid, _, _ in salida)                       # el 9 es del visitante
+
+
+def test_retener_ausentes_vence_exactamente_al_pasar_la_retencion():
+    assert (2, 20.0, 10.0) in retener_ausentes([], ULTIMAS, EQUIPOS, "LOCAL", 13.0, 3.0)
+    assert (2, 20.0, 10.0) not in retener_ausentes([], ULTIMAS, EQUIPOS, "LOCAL", 13.1, 3.0)
+    assert retener_ausentes([], ULTIMAS, EQUIPOS, "LOCAL", 11.0, 0.0) == []   # sin retención
 
 
 def test_el_rival_y_el_segundo_tiempo_se_normalizan():

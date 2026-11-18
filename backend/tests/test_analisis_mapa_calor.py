@@ -125,6 +125,30 @@ async def test_mapa_calor_equipo_completo(datos_prueba):
 
 
 @pytest.mark.asyncio
+async def test_jugador_inexistente_y_de_otro_club_responden_igual_404(datos_prueba):
+    """T-105: no se revela si un jugador existe en otro club."""
+    partido_id = datos_prueba["partido_id"]
+    club1 = {"Authorization": f"Bearer {datos_prueba['token1']}"}
+    club2 = {"Authorization": f"Bearer {datos_prueba['token2']}"}
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        equipo = await c.post("/api/deportivo/equipos", headers=club2, json={
+            "nombre": "Equipo Dos", "categoria": "Primera", "temporada": "2026"})
+        ajeno = await c.post("/api/deportivo/jugadores", headers=club2, json={
+            "equipo_id": equipo.json()["id"], "nombre": "Otro", "apellido": "Club",
+            "dorsal": 7, "posicion": "DEL", "altura_cm": 180})
+        assert ajeno.status_code == 201, ajeno.text
+
+        def url(jugador_id: int) -> str:
+            return (f"/api/analisis/partidos/{partido_id}/mapa-calor"
+                    f"?alcance=jugador&referencia_id={jugador_id}")
+
+        inexistente = await c.get(url(999999), headers=club1)
+        de_otro_club = await c.get(url(ajeno.json()["id"]), headers=club1)
+    assert inexistente.status_code == de_otro_club.status_code == 404
+    assert inexistente.json() == de_otro_club.json()
+
+
+@pytest.mark.asyncio
 async def test_mapa_calor_linea_y_jugador(datos_prueba):
     """CU-44: Genera mapa de calor filtrado por línea o jugador individual."""
     transport = ASGITransport(app=app)

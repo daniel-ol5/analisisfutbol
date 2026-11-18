@@ -18,6 +18,10 @@ Ciclo de vida de un partido en este proceso:
 3. `finalizar_partido` (CU-30) llama a `cerrar_partido`: el último intervalo
    se cierra como parcial y el motor se descarta.
 
+Cada vez que se guardan intervalos también se reemplazan los eventos de cámara del
+partido en `evento_derivado` (T-103, CU-47): al cerrarse un intervalo, al reconstruir
+tras un reinicio y al finalizar.
+
 Ningún error de aquí corta la ingesta: se registra y la difusión de posiciones
 sigue igual.
 """
@@ -32,7 +36,7 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
-from app.analisis import persistencia
+from app.analisis import eventos, persistencia
 from app.analisis.metricas import intervalo_de, jugadores_de_partido, motor_desde_tabla
 from app.analisis.motor.motor import MotorPartido, Salida, minutos_de, porcentajes
 from app.analisis.motor.muestras import muestra_de_mensaje
@@ -154,6 +158,7 @@ class AnalisisEnVivo:
                 cerrados = [i for i in motor.intervalos.values() if i.cerrado]
                 if cerrados:
                     await persistencia.guardar_intervalos(db, partido_id, cerrados)
+                    await eventos.reemplazar(db, partido, motor.pases)
                     await db.commit()
                 vivo = _Vivo(motor, partido.club_id)
             if motor.t is not None:
@@ -173,6 +178,9 @@ class AnalisisEnVivo:
             intervalos = [motor.intervalos[k] for k in indices]
             async with self.sesiones() as db:
                 await persistencia.guardar_intervalos(db, partido_id, intervalos)
+                partido = await db.get(Partido, partido_id)
+                if partido is not None:
+                    await eventos.reemplazar(db, partido, motor.pases)   # CU-47
                 await db.commit()
             for intervalo in intervalos:
                 await self.hub.difundir(canal, {
@@ -226,7 +234,11 @@ class AnalisisEnVivo:
                     else:
                         reconstruido = False
                     indice = vivo.motor.cerrar()
+                    # Quedan guardados TODOS los eventos del partido, aunque el último
+                    # intervalo ya estuviera cerrado (CU-47).
+                    await eventos.reemplazar(db, partido, vivo.motor.pases)
                     if indice is None:
+                        await db.commit()
                         return
                     guardar = ([i for i in vivo.motor.intervalos.values() if i.cerrado]
                                if reconstruido else [vivo.motor.intervalos[indice]])

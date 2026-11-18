@@ -83,12 +83,20 @@ async def arqueros_de(db: AsyncSession, partido: Partido) -> list[TramoArquero]:
             for tid, d, h in (await db.execute(stmt)).all()]
 
 
-async def muestras_de(db: AsyncSession, partido_id: int,
-                      equipos: dict[int, str]) -> AsyncIterator[Muestra]:
-    """Las filas de `posicion` del partido, ordenadas por `t`, como muestras del motor."""
+async def muestras_de(db: AsyncSession, partido_id: int, equipos: dict[int, str], *,
+                      t_desde: float | None = None,
+                      t_hasta: float | None = None) -> AsyncIterator[Muestra]:
+    """Las filas de `posicion` del partido, ordenadas por `t`, como muestras del motor.
+
+    `t_desde` (inclusive) y `t_hasta` (exclusivo) acotan el tramo; sin ellos, todo el partido.
+    """
     stmt = (select(Posicion.t, Posicion.track_id, Posicion.x_m, Posicion.y_m, Posicion.es_balon)
-            .where(Posicion.partido_id == partido_id)
-            .order_by(Posicion.t, Posicion.id))
+            .where(Posicion.partido_id == partido_id))
+    if t_desde is not None:
+        stmt = stmt.where(Posicion.t >= t_desde)
+    if t_hasta is not None:
+        stmt = stmt.where(Posicion.t < t_hasta)
+    stmt = stmt.order_by(Posicion.t, Posicion.id)
     resultado = await db.stream(stmt.execution_options(yield_per=LOTE_LECTURA))
 
     async def filas() -> AsyncIterator[FilaPosicion]:
@@ -108,9 +116,10 @@ async def muestras_de(db: AsyncSession, partido_id: int,
 
 
 async def alimentar(db: AsyncSession, motor: MotorPartido, partido_id: int,
-                    equipos: dict[int, str]) -> None:
-    """Pasa por el motor todas las posiciones guardadas del partido."""
-    async for muestra in muestras_de(db, partido_id, equipos):
+                    equipos: dict[int, str], *, t_desde: float | None = None,
+                    t_hasta: float | None = None) -> None:
+    """Pasa por el motor las posiciones guardadas del partido (todas, o las de un tramo)."""
+    async for muestra in muestras_de(db, partido_id, equipos, t_desde=t_desde, t_hasta=t_hasta):
         motor.procesar(muestra)
 
 

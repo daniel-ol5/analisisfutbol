@@ -1,17 +1,23 @@
-"""Métricas de bloque por equipo  —  T-076 (CU-46).
+"""Métricas de bloque por equipo  —  T-076 (CU-46), T-102 (CU-45).
 
 Una muestra por segundo, sobre coordenadas normalizadas con
 `normalizar_coordenadas` (CU-31, Jhon): cada equipo ataca hacia +x, así que
-«más retrasado» es «menor x» en los dos tiempos.
+«más retrasado» es «menor x» en los dos tiempos, y x es la distancia al arco
+propio en metros.
 
 - Arquero: el jugador asignado como ARQ; si no hay, el más retrasado dentro de
   su propia área. Si nadie está en el área, no se excluye a nadie.
 - Altura de línea: x media de los 4 jugadores de campo más retrasados, sin el arquero.
-- Amplitud: y máxima - y mínima de los jugadores de campo.
-- Compacidad: distancia media de los jugadores de campo a su centroide.
+- Amplitud (ancho): y máxima - y mínima de los jugadores de campo, es decir, la
+  distancia entre los dos jugadores más abiertos.
+- Compacidad: área, en m², del polígono envolvente (casco convexo) de los
+  jugadores de campo. Menos área = equipo más junto.
+
+Suavizado (CU-45, criterio 3): `retener_ausentes` completa lo que la cámara ve
+con la última posición conocida de los jugadores que desaparecieron hace poco,
+para que la pérdida transitoria de un defensor no haga saltar la línea.
 """
 
-import math
 from dataclasses import dataclass
 
 from app.analisis.parametros import Parametros
@@ -23,7 +29,58 @@ from app.partido.service import normalizar_coordenadas
 class MuestraBloque:
     altura_linea_m: float | None
     amplitud_m: float | None
-    compacidad_m: float | None
+    compacidad_m2: float | None
+
+
+def area_envolvente(puntos: list[tuple[float, float]]) -> float:
+    """Área (m²) del casco convexo de `puntos` (cadena monótona de Andrew + fórmula del área).
+
+    Con menos de 3 puntos distintos, o todos alineados, el polígono no tiene área: 0.
+    """
+    unicos = sorted(set(puntos))
+    if len(unicos) < 3:
+        return 0.0
+
+    def giro(o: tuple[float, float], a: tuple[float, float], b: tuple[float, float]) -> float:
+        return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
+
+    inferior: list[tuple[float, float]] = []
+    for p in unicos:
+        while len(inferior) >= 2 and giro(inferior[-2], inferior[-1], p) <= 0:
+            inferior.pop()
+        inferior.append(p)
+    superior: list[tuple[float, float]] = []
+    for p in reversed(unicos):
+        while len(superior) >= 2 and giro(superior[-2], superior[-1], p) <= 0:
+            superior.pop()
+        superior.append(p)
+    casco = inferior[:-1] + superior[:-1]
+    doble_area = sum(casco[i][0] * casco[(i + 1) % len(casco)][1]
+                     - casco[(i + 1) % len(casco)][0] * casco[i][1]
+                     for i in range(len(casco)))
+    return abs(doble_area) / 2
+
+
+def retener_ausentes(
+    visibles: list[tuple[int, float, float]],
+    ultimas: dict[int, tuple[float, float, float]],
+    equipo_de_track: dict[int, str],
+    equipo: str,
+    t: float,
+    retencion_s: float,
+) -> list[tuple[int, float, float]]:
+    """`visibles` más los jugadores del equipo vistos hace `retencion_s` o menos y ausentes ahora.
+
+    `ultimas` guarda (t, x, y) crudos de la última vez que se vio cada track. Pasado
+    `retencion_s` el jugador deja de contar: ahí la ausencia ya no es transitoria.
+    """
+    presentes = {tid for tid, _, _ in visibles}
+    retenidos = [
+        (tid, x, y) for tid, (visto_t, x, y) in ultimas.items()
+        if tid not in presentes and equipo_de_track.get(tid) == equipo
+        and 0 <= t - visto_t <= retencion_s
+    ]
+    return visibles + sorted(retenidos)
 
 
 def direccion_de(equipo: str, lado_propio: str, ataca_hacia: str | None) -> str:
@@ -70,7 +127,5 @@ def bloque_equipo(
     if len(campo) >= 2:
         ys = [n[2] for n in campo]
         amplitud = max(ys) - min(ys)
-        cx = sum(n[1] for n in campo) / len(campo)
-        cy = sum(ys) / len(campo)
-        compacidad = sum(math.hypot(n[1] - cx, n[2] - cy) for n in campo) / len(campo)
+        compacidad = area_envolvente([(n[1], n[2]) for n in campo])
     return MuestraBloque(altura, amplitud, compacidad)

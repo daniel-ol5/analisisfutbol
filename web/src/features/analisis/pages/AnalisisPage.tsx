@@ -8,10 +8,10 @@
 
 import { useState } from "react";
 
-import { Pendiente } from "@/shared/ui/Pendiente";
-
 import { MapaCalorCancha } from "../components/MapaCalorCancha";
+import { MetricasTacticasPanel } from "../components/MetricasTacticasPanel";
 import { PanelPartidoVivo } from "../components/PanelPartidoVivo";
+import { RedPasesCancha } from "../components/RedPasesCancha";
 import "../analisis.css";
 
 type SeccionAnalisis = "vivo" | "calor" | "metricas" | "pases";
@@ -51,13 +51,13 @@ export function AnalisisPage() {
           },
           {
             id: "metricas" as const,
-            label: "Métricas",
-            cu: "CU-42, CU-43 · Sprint 4",
+            label: "Métricas tácticas",
+            cu: "CU-45 · Sprint 4",
           },
           {
             id: "pases" as const,
-            label: "Pases y evolución",
-            cu: "CU-45 … CU-48 · Sprint 4",
+            label: "Red de pases",
+            cu: "CU-48 · Sprint 4",
           },
         ].map((tab) => {
           const activa = seccionActiva === tab.id;
@@ -79,29 +79,9 @@ export function AnalisisPage() {
 
       {seccionActiva === "calor" && <MapaCalorCancha />}
 
-      {seccionActiva === "metricas" && (
-        <Pendiente
-          paquete="P5"
-          titulo="Métricas Tácticas y Físicas"
-          casos={[
-            "CU-42 Posesión y circulación",
-            "CU-43 Métricas físicas por jugador",
-            "CU-45 Métricas tácticas colectivas",
-          ]}
-        />
-      )}
+      {seccionActiva === "metricas" && <MetricasTacticasPanel />}
 
-      {seccionActiva === "pases" && (
-        <Pendiente
-          paquete="P5"
-          titulo="Línea de Tiempo y Red de Pases"
-          casos={[
-            "CU-46 Evolución por intervalos",
-            "CU-47 Línea de tiempo",
-            "CU-48 Red de pases",
-          ]}
-        />
-      )}
+      {seccionActiva === "pases" && <RedPasesCancha />}
     </div>
   );
 }

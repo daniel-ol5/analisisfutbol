@@ -39,9 +39,9 @@ class Calibracion(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     club_id: Mapped[int] = mapped_column(ForeignKey("club.id"), index=True)
-    # TODO: agregar ForeignKey("partido.id") cuando la tabla Partido llegue a main.
-    # Mientras tanto no se valida que el partido exista: solo que sea del club.
-    partido_id: Mapped[int] = mapped_column(Integer, index=True)
+    # T-105: con FK no puede existir una calibración huérfana de un partido inexistente.
+    partido_id: Mapped[int] = mapped_column(
+        ForeignKey("partido.id", ondelete="CASCADE"), index=True)
 
     largo_m: Mapped[float] = mapped_column(Float)
     ancho_m: Mapped[float] = mapped_column(Float)

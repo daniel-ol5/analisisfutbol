@@ -1,8 +1,8 @@
 """Entorno de Alembic.
 
 La URL de la base y los metadatos salen de la aplicacion, no de alembic.ini:
-asi una sola configuracion sirve para desarrollo (SQLite), Docker y produccion
-(PostgreSQL), sin duplicar la cadena de conexion en dos lugares.
+asi una sola configuracion (PostgreSQL 16) sirve para desarrollo, Docker y produccion,
+sin duplicar la cadena de conexion en dos lugares.
 """
 
 import asyncio
@@ -54,9 +54,6 @@ def do_run_migrations(connection: Connection) -> None:
         connection=connection,
         target_metadata=target_metadata,
         compare_type=True,
-        # SQLite no soporta ALTER TABLE completo: sin esto, cambiar una columna
-        # falla en desarrollo aunque funcione en PostgreSQL.
-        render_as_batch=connection.dialect.name == "sqlite",
     )
     with context.begin_transaction():
         context.run_migrations()

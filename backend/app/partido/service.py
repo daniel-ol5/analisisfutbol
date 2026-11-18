@@ -284,12 +284,12 @@ async def registrar_evento_manual(
     # Un cliente no puede adelantar el reloj del partido con una fecha futura.
     instante_juego = min(capturado_en, instante)
     reloj = await _reloj_del_partido(db, usuario, partido.id)
-    minuto_reloj = (
-        int(segundos_transcurridos(reloj, instante_juego)) // 60
-        if reloj is not None
-        else partido.minuto_actual
-    )
+    segundo_reloj = int(segundos_transcurridos(reloj, instante_juego)) if reloj is not None else None
+    minuto_reloj = segundo_reloj // 60 if segundo_reloj is not None else partido.minuto_actual
     minuto = minuto_reloj if datos.minuto is None else datos.minuto
+    # El segundo exacto solo existe si el minuto salió del cronómetro: con un minuto
+    # puesto a mano no se sabe en qué segundo fue.
+    segundo = segundo_reloj if datos.minuto is None else None
     convertida_en_roja = False
     if datos.tipo == TipoEventoManual.AMARILLA and datos.jugador_id is not None:
         amarillas = await db.scalar(
@@ -314,6 +314,7 @@ async def registrar_evento_manual(
         jugador_id=datos.jugador_id,
         jugador_entra_id=datos.jugador_entra_id,
         minuto=minuto,
+        segundo=segundo,
         origen="MANUAL",
         convertida_en_roja=convertida_en_roja,
         capturado_en=capturado_en,
@@ -346,6 +347,9 @@ async def sincronizar_eventos_manuales(
     después de una confirmación, el móvil puede reenviar toda la cola: el UUID
     hace que los ya procesados devuelvan el mismo evento sin duplicarlo.
     """
+    # T-105: con la cola vacía no se llega a `registrar_evento_manual`, que es quien
+    # valida el club: sin esto un partido ajeno (o inexistente) respondería 200.
+    await _partido_del_club(db, usuario, partido_id)
     ordenados = sorted(
         enumerate(eventos),
         key=lambda par: (

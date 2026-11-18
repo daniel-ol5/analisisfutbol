@@ -4534,6 +4534,139 @@
         }
       }
     },
+    "/api/analisis/partidos/{partido_id}/metricas/tacticas": {
+      "get": {
+        "tags": [
+          "P5 · Análisis Táctico"
+        ],
+        "summary": "CU-45 · Altura de linea, amplitud y compacidad con y sin balon",
+        "description": "T-102. Una muestra por segundo, con coordenadas normalizadas por direccion de ataque. Altura de linea: distancia al arco propio, en metros, de la x media de los 4 jugadores de campo mas retrasados; el arquero (asignado como ARQ o, si no hay, el mas retrasado dentro de su area) queda fuera del calculo. Amplitud: distancia entre los dos jugadores mas abiertos. Compacidad: area en m2 del poligono envolvente de los jugadores de campo. Suavizado: un jugador que la camara pierde sigue contando en su ultima posicion hasta 3 s, asi la linea no salta. Fase CON_BALON: posee el equipo; SIN_BALON: posee el rival; en disputa o con el balon no visible la muestra solo entra en `total`. `muestras` dice cuantos segundos respaldan cada promedio.",
+        "operationId": "metricas_tacticas_api_analisis_partidos__partido_id__metricas_tacticas_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "partido_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Partido Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetricasTacticas"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "Declarado en el contrato, pendiente de implementacion",
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Partido inexistente o de otro club"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/analisis/partidos/{partido_id}/metricas/minuto/{minuto}": {
+      "get": {
+        "tags": [
+          "P5 · Análisis Táctico"
+        ],
+        "summary": "CU-47 · Metricas de un minuto exacto del partido",
+        "description": "T-103. Calculadas con las posiciones de ese minuto (`minuto` .. `minuto` + 1, en minutos de partido) con el mismo motor que CU-42 y CU-45: posesion, pases, distancia, altura de linea, amplitud y compacidad. La linea de tiempo lo usa al elegir un evento para filtrar las metricas al minuto de la jugada. Un minuto sin posiciones devuelve ceros y valores nulos.",
+        "operationId": "metricas_minuto_api_analisis_partidos__partido_id__metricas_minuto__minuto__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "partido_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Partido Id"
+            }
+          },
+          {
+            "name": "minuto",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 0,
+              "title": "Minuto"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Intervalo"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "Declarado en el contrato, pendiente de implementacion",
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Partido inexistente o de otro club"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/analisis/partidos/{partido_id}/metricas/jugadores": {
       "get": {
         "tags": [
@@ -4810,6 +4943,7 @@
           "P5 · Análisis Táctico"
         ],
         "summary": "CU-47 · Cronologia de eventos de camara y manuales",
+        "description": "T-103. Ordenada por `t` (segundos de partido). `origen` distingue lo inferido por la camara (PASE, PERDIDA, RECUPERACION) de lo cargado a mano (GOL, AMARILLA, ROJA, SUSTITUCION; sin los anulados, ubicados en `minuto * 60`). Filtros `tipo` y `equipo` (LOCAL o VISITANTE); un valor invalido da 422. Con el filtro, `t` permite que el plano 2D salte a ese instante.",
         "operationId": "linea_tiempo_api_analisis_partidos__partido_id__linea_tiempo_get",
         "security": [
           {
@@ -4839,8 +4973,10 @@
                   "type": "null"
                 }
               ],
+              "description": "PASE, PERDIDA, GOL, ...",
               "title": "Tipo"
-            }
+            },
+            "description": "PASE, PERDIDA, GOL, ..."
           },
           {
             "name": "equipo",
@@ -4855,8 +4991,10 @@
                   "type": "null"
                 }
               ],
+              "description": "LOCAL o VISITANTE; sin filtro, los dos. Otro valor: 422",
               "title": "Equipo"
-            }
+            },
+            "description": "LOCAL o VISITANTE; sin filtro, los dos. Otro valor: 422"
           }
         ],
         "responses": {
@@ -4880,6 +5018,9 @@
               }
             }
           },
+          "404": {
+            "description": "Partido inexistente o de otro club"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -4899,6 +5040,7 @@
           "P5 · Análisis Táctico"
         ],
         "summary": "CU-48 · Grafo de circulacion del balon",
+        "description": "T-103. Solo pases COMPLETADOS entre jugadores con track asignado. Nodo: jugador con su posicion media en el rango (normalizada por direccion de ataque), pases enviados y recibidos. `mayor_recepcion` marca a los 3 que mas pases reciben de su equipo; `aislado`, a quienes jugaron pero casi no entran al circuito (incluye a los que no tienen ningun pase). Arista: pases de `origen_id` a `destino_id`. Minutos inclusive; `desde_minuto` > `hasta_minuto` da 422.",
         "operationId": "red_pases_api_analisis_partidos__partido_id__red_pases_get",
         "security": [
           {
@@ -4921,6 +5063,7 @@
             "required": false,
             "schema": {
               "type": "integer",
+              "minimum": 0,
               "default": 0,
               "title": "Desde Minuto"
             }
@@ -4931,9 +5074,28 @@
             "required": false,
             "schema": {
               "type": "integer",
+              "minimum": 0,
               "default": 90,
               "title": "Hasta Minuto"
             }
+          },
+          {
+            "name": "equipo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "LOCAL o VISITANTE; sin filtro, los dos. Otro valor: 422",
+              "title": "Equipo"
+            },
+            "description": "LOCAL o VISITANTE; sin filtro, los dos. Otro valor: 422"
           }
         ],
         "responses": {
@@ -4956,6 +5118,9 @@
                 }
               }
             }
+          },
+          "404": {
+            "description": "Partido inexistente o de otro club"
           },
           "422": {
             "description": "Validation Error",
@@ -5977,6 +6142,56 @@
         ],
         "title": "AvisoColores",
         "description": "CU-10: los colores de ambos equipos quedaron demasiado cerca en HSV."
+      },
+      "BloqueFase": {
+        "properties": {
+          "altura_linea_m": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Altura Linea M",
+            "description": "Distancia al arco propio, en metros: x media de los 4 jugadores de campo mas retrasados; el arquero queda excluido"
+          },
+          "amplitud_m": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amplitud M",
+            "description": "Ancho del equipo, en metros: distancia entre los dos jugadores mas abiertos"
+          },
+          "compacidad_m2": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Compacidad M2",
+            "description": "Area, en m2, del poligono envolvente de los jugadores de campo; menos area = equipo mas junto"
+          },
+          "muestras": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Muestras",
+            "description": "Segundos de partido sobre los que se promedio; 0 = sin datos en la fase",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "title": "BloqueFase",
+        "description": "Altura de linea, amplitud y compacidad promediadas sobre una fase (T-102)."
       },
       "Body_analizar_cuadro_en_vivo_api_vision_vivo_analizar_cuadro_post": {
         "properties": {
@@ -7165,10 +7380,18 @@
             "title": "Resultado"
           },
           "confianza": {
-            "type": "number",
-            "maximum": 1.0,
-            "minimum": 0.0,
-            "title": "Confianza"
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confianza",
+            "description": "Null: los eventos salen de reglas deterministas, no de un modelo"
           },
           "origen": {
             "type": "string",
@@ -7184,8 +7407,7 @@
           "minuto",
           "equipo",
           "x_o",
-          "y_o",
-          "confianza"
+          "y_o"
         ],
         "title": "EventoDerivado"
       },
@@ -7242,6 +7464,19 @@
           "partido_id": {
             "type": "integer",
             "title": "Partido Id"
+          },
+          "segundo": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Segundo",
+            "description": "Segundo exacto del partido; nulo si solo se indicó el minuto"
           },
           "origen": {
             "type": "string",
@@ -7717,6 +7952,32 @@
           "visitante"
         ],
         "title": "Intervalo"
+      },
+      "IntervaloTactico": {
+        "properties": {
+          "minuto_desde": {
+            "type": "integer",
+            "title": "Minuto Desde"
+          },
+          "minuto_hasta": {
+            "type": "integer",
+            "title": "Minuto Hasta"
+          },
+          "local": {
+            "$ref": "#/components/schemas/MetricaTactica"
+          },
+          "visitante": {
+            "$ref": "#/components/schemas/MetricaTactica"
+          }
+        },
+        "type": "object",
+        "required": [
+          "minuto_desde",
+          "minuto_hasta",
+          "local",
+          "visitante"
+        ],
+        "title": "IntervaloTactico"
       },
       "ItemLineaTiempo": {
         "properties": {
@@ -8512,7 +8773,7 @@
             ],
             "title": "Amplitud M"
           },
-          "compacidad_m": {
+          "compacidad_m2": {
             "anyOf": [
               {
                 "type": "number"
@@ -8521,7 +8782,30 @@
                 "type": "null"
               }
             ],
-            "title": "Compacidad M"
+            "title": "Compacidad M2",
+            "description": "CU-45. Area del poligono envolvente de los jugadores de campo, en m2"
+          },
+          "con_balon": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BloqueFase"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "T-102. Bloque con balon"
+          },
+          "sin_balon": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BloqueFase"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "T-102. Bloque sin balon"
           },
           "degradada": {
             "type": "boolean",
@@ -8604,6 +8888,33 @@
         ],
         "title": "MetricaJugador"
       },
+      "MetricaTactica": {
+        "properties": {
+          "equipo": {
+            "$ref": "#/components/schemas/Lado"
+          },
+          "total": {
+            "$ref": "#/components/schemas/BloqueFase",
+            "description": "Las dos fases juntas, incluida la disputa"
+          },
+          "con_balon": {
+            "$ref": "#/components/schemas/BloqueFase",
+            "description": "El equipo posee el balon"
+          },
+          "sin_balon": {
+            "$ref": "#/components/schemas/BloqueFase",
+            "description": "Posee el rival. Disputa o balon no visible: ninguna fase"
+          }
+        },
+        "type": "object",
+        "required": [
+          "equipo",
+          "total",
+          "con_balon",
+          "sin_balon"
+        ],
+        "title": "MetricaTactica"
+      },
       "MetricasJugadorPorIntervalo": {
         "properties": {
           "jugador_id": {
@@ -8675,6 +8986,35 @@
           "acumulado_visitante"
         ],
         "title": "MetricasPartido"
+      },
+      "MetricasTacticas": {
+        "properties": {
+          "partido_id": {
+            "type": "integer",
+            "title": "Partido Id"
+          },
+          "local": {
+            "$ref": "#/components/schemas/MetricaTactica"
+          },
+          "visitante": {
+            "$ref": "#/components/schemas/MetricaTactica"
+          },
+          "intervalos": {
+            "items": {
+              "$ref": "#/components/schemas/IntervaloTactico"
+            },
+            "type": "array",
+            "title": "Intervalos",
+            "description": "Solo intervalos cerrados, como CU-46"
+          }
+        },
+        "type": "object",
+        "required": [
+          "partido_id",
+          "local",
+          "visitante"
+        ],
+        "title": "MetricasTacticas"
       },
       "Modelo": {
         "properties": {
@@ -8943,9 +9283,31 @@
             "type": "string",
             "title": "Nombre"
           },
+          "dorsal": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dorsal"
+          },
+          "equipo": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Lado"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "x_medio": {
             "type": "number",
-            "title": "X Medio"
+            "title": "X Medio",
+            "description": "Posicion media del jugador en el rango pedido, normalizada por direccion de ataque"
           },
           "y_medio": {
             "type": "number",
@@ -8953,7 +9315,26 @@
           },
           "pases": {
             "type": "integer",
-            "title": "Pases"
+            "title": "Pases",
+            "description": "Pases completados que envio"
+          },
+          "pases_recibidos": {
+            "type": "integer",
+            "title": "Pases Recibidos",
+            "description": "Pases completados que recibio",
+            "default": 0
+          },
+          "mayor_recepcion": {
+            "type": "boolean",
+            "title": "Mayor Recepcion",
+            "description": "Esta entre los que mas pases reciben de su equipo (los 3 primeros, con al menos un pase recibido)",
+            "default": false
+          },
+          "aislado": {
+            "type": "boolean",
+            "title": "Aislado",
+            "description": "Desconectado del circuito: sus pases enviados + recibidos son menos de la cuarta parte del promedio de su equipo (o ninguno)",
+            "default": false
           }
         },
         "type": "object",
@@ -10158,7 +10539,8 @@
           "GOL",
           "AMARILLA",
           "ROJA",
-          "SUSTITUCION"
+          "SUSTITUCION",
+          "TIRO"
         ],
         "title": "TipoEventoManual"
       },

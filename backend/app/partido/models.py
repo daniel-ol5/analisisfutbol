@@ -68,7 +68,6 @@ class AsignacionTrack(Base):
             "track_id",
             unique=True,
             postgresql_where=text("hasta_t IS NULL"),
-            sqlite_where=text("hasta_t IS NULL"),
         ),
     )
 
@@ -97,7 +96,7 @@ class EventoManual(Base):
     __table_args__ = (
         UniqueConstraint("club_id", "uuid", name="uq_evento_manual_club_uuid"),
         CheckConstraint(
-            "tipo IN ('GOL', 'AMARILLA', 'ROJA', 'SUSTITUCION')",
+            "tipo IN ('GOL', 'AMARILLA', 'ROJA', 'SUSTITUCION', 'TIRO')",
             name="ck_evento_manual_tipo",
         ),
         CheckConstraint(
@@ -122,6 +121,9 @@ class EventoManual(Base):
         ForeignKey("jugador.id"), nullable=True, index=True
     )
     minuto: Mapped[int]
+    # Segundo exacto del partido (T-103: el plano 2D salta a ese instante). Nulo si quien
+    # registró el evento indicó solo el minuto: ahí la línea de tiempo usa `minuto * 60`.
+    segundo: Mapped[int | None] = mapped_column(nullable=True)
     origen: Mapped[str] = mapped_column(String(15), default="MANUAL")
     convertida_en_roja: Mapped[bool] = mapped_column(default=False)
 

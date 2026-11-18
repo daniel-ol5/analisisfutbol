@@ -7,8 +7,7 @@ websockets>=13.0         # cliente del emisor simulado (scripts/emisor_simulado.
 # ===== Base de datos =====
 sqlalchemy[asyncio]>=2.0
 alembic>=1.14
-aiosqlite>=0.20          # desarrollo local, sin Docker
-asyncpg>=0.30            # PostgreSQL (producción)
+asyncpg>=0.30            # PostgreSQL 16 (único motor soportado)
 
 # ===== Configuración y seguridad =====
 pydantic-settings>=2.6

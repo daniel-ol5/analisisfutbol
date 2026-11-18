@@ -57,6 +57,21 @@ class Parametros:
     area_largo_m: float = 16.5
     area_ancho_m: float = 40.32
 
+    bloque_retencion_s: float = 3.0
+    """Suavizado del bloque (CU-45): un jugador que la cámara deja de ver se sigue contando en
+    su última posición hasta este tiempo, para que la línea defensiva no salte al perderlo."""
+
+    # ---- Red de pases (CU-48) ----
+    red_top_recepcion: int = 3
+    """Cuántos jugadores por equipo se destacan por mayor volumen de pases recibidos."""
+
+    red_aislado_frac: float = 0.25
+    """Un jugador está desconectado del circuito si su ritmo de pases (enviados + recibidos por
+    segundo en cancha) es menor que esta fracción del ritmo medio de su equipo."""
+
+    red_min_presencia_s: float = 60.0
+    """Con menos tiempo a la vista que esto no se juzga si un jugador está aislado."""
+
     # ---- Cancha por defecto (si el partido no tiene calibración) ----
     largo_cancha_m: float = 105.0
     ancho_cancha_m: float = 68.0

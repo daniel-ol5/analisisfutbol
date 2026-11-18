@@ -13,10 +13,12 @@ interface Props {
   onMuestraSincronizada: (m: MensajeWorker | null) => void;
   onCambiarFuente: (directo: boolean) => void;
   muestra?: MensajeWorker | null;
+  /** CU-47: pide llevar el video (y con él el plano 2D) a un instante; `n` distingue pedidos repetidos. */
+  saltarA?: { t: number; n: number } | null;
 }
 
 export function VisorVideoSincronizado({ partidoId, jugadores, balon, colorLocal, colorVisitante,
-  workerTransmitiendo, modoDisposicion, onCambiarModoDisposicion, onMuestraSincronizada, onCambiarFuente, muestra }: Props) {
+  workerTransmitiendo, modoDisposicion, onCambiarModoDisposicion, onMuestraSincronizada, onCambiarFuente, muestra, saltarA }: Props) {
   const [fuente, setFuente] = useState("servidor");
   const [videos, setVideos] = useState<Video[]>([]);
   const [videoId, setVideoId] = useState<number | null>(null);
@@ -61,6 +63,20 @@ export function VisorVideoSincronizado({ partidoId, jugadores, balon, colorLocal
   const sincronizar = useCallback(() => {
     if (fuente === "servidor") onMuestraSincronizada(muestraEnTiempo(muestras, video.current?.currentTime ?? 0));
   }, [fuente, muestras, onMuestraSincronizada]);
+  const ultimoSalto = useRef(0);
+  useEffect(() => {
+    if (!saltarA || saltarA.n === ultimoSalto.current) return;
+    const el = video.current;
+    if (fuente !== "servidor" || !el || !muestras.length) {
+      ultimoSalto.current = saltarA.n;
+      setError("Elige «Grabación» y un video procesado para saltar a ese instante.");
+      return;
+    }
+    ultimoSalto.current = saltarA.n;
+    setError(null);
+    el.currentTime = Math.min(Math.max(0, saltarA.t), Number.isFinite(el.duration) ? el.duration : saltarA.t);
+    sincronizar();
+  }, [saltarA, fuente, muestras, sincronizar]);
   useEffect(() => {
     if (!muestras.length || fuente !== "servidor") return;
     const timer = window.setInterval(() => { if (!video.current?.paused) sincronizar(); }, 100);

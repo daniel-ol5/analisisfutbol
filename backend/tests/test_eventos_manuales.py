@@ -133,6 +133,44 @@ async def test_registrar_evento_toma_minuto_del_reloj_persistente(cliente):
     assert respuesta.json()["minuto"] == 37
 
 
+async def _con_reloj(club: dict, segundos: int) -> None:
+    async with SessionLocal() as db:
+        db.add(RelojPartido(club_id=club["club_id"], partido_id=club["partido_id"], parte=1,
+                            en_curso=False, acumulado_s=segundos))
+        await db.commit()
+
+
+async def test_el_tiro_manual_guarda_el_segundo_exacto_y_la_linea_de_tiempo_lo_usa(cliente):
+    """T-103: el plano 2D salta al segundo de la jugada, no al inicio del minuto."""
+    club = await _club_con_partido(cliente, "tiro")
+    await _con_reloj(club, 37 * 60 + 12)
+
+    respuesta = await _registrar(cliente, club, "TIRO")
+
+    assert respuesta.status_code == 201, respuesta.text
+    assert respuesta.json()["tipo"] == "TIRO"
+    assert respuesta.json()["minuto"] == 37
+    assert respuesta.json()["segundo"] == 37 * 60 + 12
+    linea = await cliente.get(
+        f"/api/analisis/partidos/{club['partido_id']}/linea-tiempo?tipo=TIRO", headers=club["auth"])
+    assert linea.status_code == 200, linea.text
+    assert [(i["tipo"], i["origen"], i["t"]) for i in linea.json()["items"]] == [
+        ("TIRO", "MANUAL", float(37 * 60 + 12))]
+
+
+async def test_con_minuto_manual_no_hay_segundo_y_la_linea_usa_el_inicio_del_minuto(cliente):
+    club = await _club_con_partido(cliente, "minuto-manual")
+    await _con_reloj(club, 37 * 60 + 12)
+
+    respuesta = await _registrar(cliente, club, "GOL", minuto=10)
+
+    assert respuesta.status_code == 201, respuesta.text
+    assert respuesta.json()["segundo"] is None
+    linea = await cliente.get(
+        f"/api/analisis/partidos/{club['partido_id']}/linea-tiempo?tipo=GOL", headers=club["auth"])
+    assert [i["t"] for i in linea.json()["items"]] == [600.0]
+
+
 async def test_tarjetas_primera_amarilla_segunda_roja_y_roja_directa(cliente):
     club = await _club_con_partido(cliente, "tarjetas")
 

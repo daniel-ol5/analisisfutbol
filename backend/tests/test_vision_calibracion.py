@@ -6,13 +6,17 @@ VÁLIDA (una homografía conocida sobre puntos repartidos): ver datos_calibracio
 El cálculo en sí y el endpoint /validar se prueban en test_vision_calibracion_homografia.py.
 """
 
+from datetime import UTC, datetime
+
 import pytest
 from datos_calibracion import a_json, a_pixeles, cuerpo_valido, marcas_cancha
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
 
 from app.core.database import SessionLocal
+from app.deportivo.models import Equipo, Partido
 from app.main import app
+from app.seguridad.models import Club
 from app.vision.models import Calibracion
 
 BASE = "http://test"
@@ -38,6 +42,17 @@ async def _registrar(cliente, sufijo: str) -> str:
         "password": "password123",
     })
     assert r.status_code == 201, r.text
+    # T-105: calibrar exige un partido real del club. Cada club recibe el suyo:
+    # "a" → PARTIDO, "b" → PARTIDO + 1, ...
+    async with SessionLocal() as db:
+        club = (await db.execute(select(Club).where(Club.nombre == f"Club {sufijo}"))).scalar_one()
+        equipo = Equipo(club_id=club.id, nombre=f"Equipo {sufijo}")
+        db.add(equipo)
+        await db.flush()
+        db.add(Partido(id=PARTIDO + ord(sufijo) - ord("a"), club_id=club.id,
+                       equipo_id=equipo.id, rival="Rival", fecha_hora=datetime.now(UTC),
+                       sede="Cancha", estado="PROGRAMADO"))
+        await db.commit()
     return r.json()["access_token"]
 
 
@@ -178,17 +193,30 @@ async def test_un_club_no_ve_la_calibracion_de_otro(cliente):
     assert r.status_code == 404, "FILTRACIÓN: el club B ve la calibración del club A"
 
 
-async def test_cada_club_tiene_su_propia_calibracion_del_mismo_partido(cliente):
+async def test_cada_club_calibra_su_propio_partido_y_no_el_ajeno(cliente):
+    """Un partido es de un solo club: cada uno calibra el suyo; el ajeno responde 404."""
     token_a = await _registrar(cliente, "a")
     token_b = await _registrar(cliente, "b")
+    suyo_b = PARTIDO + 1
     a = await cliente.post(_url(), headers=_auth(token_a), json=_cuerpo(largo_m=100))
-    b = await cliente.post(_url(), headers=_auth(token_b), json=_cuerpo(largo_m=110))
+    b = await cliente.post(_url(suyo_b), headers=_auth(token_b), json=_cuerpo(largo_m=110))
     assert a.status_code == 201
-    assert b.status_code == 201, "el club B no puede quedar bloqueado por el club A"
+    assert b.status_code == 201
     assert a.json()["id"] != b.json()["id"]
 
     assert (await cliente.get(_url(), headers=_auth(token_a))).json()["largo_m"] == 100.0
-    assert (await cliente.get(_url(), headers=_auth(token_b))).json()["largo_m"] == 110.0
+    assert (await cliente.get(_url(suyo_b), headers=_auth(token_b))).json()["largo_m"] == 110.0
+    # T-105: ni crear ni leer sobre el partido del otro club.
+    assert (await cliente.post(_url(), headers=_auth(token_b), json=_cuerpo())).status_code == 404
+    assert (await cliente.get(_url(suyo_b), headers=_auth(token_a))).status_code == 404
+
+
+async def test_calibrar_un_partido_inexistente_es_404_y_no_guarda_nada(cliente):
+    token = await _registrar(cliente, "a")
+    r = await cliente.post(_url(9999), headers=_auth(token), json=_cuerpo())
+    assert r.status_code == 404
+    async with SessionLocal() as db:
+        assert (await db.execute(select(Calibracion))).scalars().all() == []
 
 
 # ---------- validación ----------

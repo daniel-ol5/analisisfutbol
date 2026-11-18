@@ -58,6 +58,8 @@ class Pase:
     origen_track: int
     destino_track: int
     completado: bool     # destino del mismo equipo
+    origen_xy: tuple[float, float] = (0.0, 0.0)    # el balón cuando A lo tuvo por última vez
+    destino_xy: tuple[float, float] = (0.0, 0.0)   # el balón cuando B lo recibió (T-103)
 
 
 @dataclass(slots=True)
@@ -121,4 +123,5 @@ class DetectorPases:
         if hueco > self.p.pase_max_hueco_s + 1e-9 or recorrido < self.p.pase_min_recorrido_m:
             return None
         return Pase(t=t, equipo=anterior.equipo, origen_track=anterior.track_id,
-                    destino_track=tid, completado=anterior.equipo == equipo)
+                    destino_track=tid, completado=anterior.equipo == equipo,
+                    origen_xy=anterior.balon, destino_xy=primera_de_b.balon)

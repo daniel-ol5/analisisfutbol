@@ -21,17 +21,19 @@ from collections import deque
 from collections.abc import Iterable
 from dataclasses import dataclass, field, fields
 
-from app.analisis.motor.bloque import bloque_equipo, direccion_de
+from app.analisis.motor.bloque import bloque_equipo, direccion_de, retener_ausentes
 from app.analisis.motor.fisicas import EstadoFisico
 from app.analisis.motor.muestras import Muestra
 from app.analisis.motor.posesion import (
     EQUIPOS_CAMPO,
     DetectorPases,
     EstadoPosesion,
+    Pase,
     Poseedor,
     poseedor_de,
 )
 from app.analisis.parametros import PARAMETROS, Parametros
+from app.partido.service import normalizar_coordenadas
 
 # ---------------- Acumuladores ----------------
 
@@ -50,6 +52,19 @@ class AcumEquipo:
     # Acumuladores en memoria para comparar ritmo observado por jugador.
     tiempo_ritmo_s: float = 0.0
     distancia_ritmo_m: float = 0.0
+    # T-102 (CU-45): las mismas sumas, separadas por fase. Con balón = el equipo
+    # posee; sin balón = posee el rival. En disputa o sin balón visible la muestra
+    # solo entra en los totales de arriba.
+    suma_altura_cb_m: float = 0.0
+    n_altura_cb: int = 0
+    suma_amplitud_cb_m: float = 0.0
+    suma_compacidad_cb_m: float = 0.0
+    n_forma_cb: int = 0
+    suma_altura_sb_m: float = 0.0
+    n_altura_sb: int = 0
+    suma_amplitud_sb_m: float = 0.0
+    suma_compacidad_sb_m: float = 0.0
+    n_forma_sb: int = 0
 
     def sumar(self, otro: "AcumEquipo") -> None:
         for f in fields(self):
@@ -64,8 +79,20 @@ class AcumEquipo:
         return self.suma_amplitud_m / self.n_forma if self.n_forma else None
 
     @property
-    def compacidad_m(self) -> float | None:
+    def compacidad_m2(self) -> float | None:
+        """Área media del polígono envolvente, en m² (se guarda en `suma_compacidad_*`)."""
         return self.suma_compacidad_m / self.n_forma if self.n_forma else None
+
+    def bloque(self, fase: str) -> tuple[float | None, float | None, float | None, int]:
+        """(altura, amplitud, compacidad, muestras) de la fase: `cb` o `sb`."""
+        n_altura = getattr(self, f"n_altura_{fase}")
+        n_forma = getattr(self, f"n_forma_{fase}")
+        return (
+            getattr(self, f"suma_altura_{fase}_m") / n_altura if n_altura else None,
+            getattr(self, f"suma_amplitud_{fase}_m") / n_forma if n_forma else None,
+            getattr(self, f"suma_compacidad_{fase}_m") / n_forma if n_forma else None,
+            max(n_altura, n_forma),
+        )
 
 
 @dataclass(slots=True)
@@ -173,6 +200,12 @@ class MotorPartido:
         self._equipos: dict[int, str] = {}
         self._fisicos: dict[int, EstadoFisico] = {}
         self._pases = DetectorPases(p)
+        self.pases: list[Pase] = []   # todos los pases detectados, en orden (T-103)
+        # Última vez que se vio cada track: (t, x, y) crudos. Suaviza el bloque (CU-45).
+        self._ultimas: dict[int, tuple[float, float, float]] = {}
+        # (track, minuto de partido) → [suma x, suma y, segundos], ya normalizados por dirección
+        # de ataque. Da la posición media de cada jugador para la red de pases (CU-48).
+        self.posiciones: dict[tuple[int, int], list[float]] = {}
         self._poseedor: Poseedor | None = None
         self._t: float | None = None
         self._segundo: int | None = None
@@ -251,25 +284,47 @@ class MotorPartido:
         ctx = self.contexto
         parte = 1 if m.t < self.p.segundos_primer_tiempo else 2
         arqueros = self._arqueros_en(m.t)
+        estado = self._poseedor.estado.value if self._poseedor is not None else None
+        minuto = int(m.t // 60)
         for equipo in EQUIPOS_CAMPO:
-            puntos = [(j.track_id, j.x, j.y) for j in m.jugadores
-                      if self._equipos.get(j.track_id) == equipo]
+            # Fase de este equipo en la muestra (T-102): None en disputa o sin balón.
+            if estado == equipo:
+                fase = "cb"
+            elif estado in EQUIPOS_CAMPO:
+                fase = "sb"
+            else:
+                fase = None
+            direccion = direccion_de(equipo, ctx.lado_propio, ctx.ataca_hacia)
+            visibles = [(j.track_id, j.x, j.y) for j in m.jugadores
+                        if self._equipos.get(j.track_id) == equipo]
+            for tid, x, y in visibles:
+                nx, ny = normalizar_coordenadas(x, y, ctx.largo_m, ctx.ancho_m, direccion, parte)
+                suma = self.posiciones.setdefault((tid, minuto), [0.0, 0.0, 0.0])
+                suma[0] += nx
+                suma[1] += ny
+                suma[2] += 1
+            # Suavizado (CU-45): los que la cámara perdió hace poco siguen en su última posición.
+            puntos = retener_ausentes(visibles, self._ultimas, self._equipos, equipo, m.t,
+                                      self.p.bloque_retencion_s)
             if not puntos:
                 continue
             b = bloque_equipo(
-                puntos, arqueros,
-                direccion=direccion_de(equipo, ctx.lado_propio, ctx.ataca_hacia),
+                puntos, arqueros, direccion=direccion,
                 parte=parte, largo_m=ctx.largo_m, ancho_m=ctx.ancho_m, p=self.p,
             )
             for destino in self._destinos(m.t, intervalo):
                 acum = destino.equipos[equipo]
-                if b.altura_linea_m is not None:
-                    acum.suma_altura_m += b.altura_linea_m
-                    acum.n_altura += 1
-                if b.amplitud_m is not None and b.compacidad_m is not None:
-                    acum.suma_amplitud_m += b.amplitud_m
-                    acum.suma_compacidad_m += b.compacidad_m
-                    acum.n_forma += 1
+                for sufijo in ("", f"_{fase}") if fase else ("",):
+                    if b.altura_linea_m is not None:
+                        setattr(acum, f"suma_altura{sufijo}_m",
+                                getattr(acum, f"suma_altura{sufijo}_m") + b.altura_linea_m)
+                        setattr(acum, f"n_altura{sufijo}", getattr(acum, f"n_altura{sufijo}") + 1)
+                    if b.amplitud_m is not None and b.compacidad_m2 is not None:
+                        setattr(acum, f"suma_amplitud{sufijo}_m",
+                                getattr(acum, f"suma_amplitud{sufijo}_m") + b.amplitud_m)
+                        setattr(acum, f"suma_compacidad{sufijo}_m",
+                                getattr(acum, f"suma_compacidad{sufijo}_m") + b.compacidad_m2)
+                        setattr(acum, f"n_forma{sufijo}", getattr(acum, f"n_forma{sufijo}") + 1)
 
     # ---- entrada ----
 
@@ -300,6 +355,7 @@ class MotorPartido:
         for punto in m.jugadores:
             tid = punto.track_id
             equipo = self._equipos.setdefault(tid, punto.equipo)
+            self._ultimas[tid] = (m.t, punto.x, punto.y)
             fisico = self._fisicos.get(tid)
             if fisico is None:
                 fisico = self._fisicos[tid] = EstadoFisico(self.p)
@@ -338,6 +394,7 @@ class MotorPartido:
         equipo_poseedor = poseedor.estado.value if poseedor.track_id is not None else None
         pase = self._pases.procesar(m.t, poseedor, m.balon, equipo_poseedor)
         if pase is not None:
+            self.pases.append(pase)
             for destino in self._destinos(m.t, intervalo):
                 destino.equipos[pase.equipo].pases_intentados += 1
                 destino.equipos[pase.equipo].pases_completados += int(pase.completado)
