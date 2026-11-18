@@ -30,6 +30,13 @@ from app.vision.models import Calibracion
 
 LOTE_LECTURA = 5000
 
+# Los acumuladores de ritmo se consultan en una ventana en vivo y se descartan
+# cuando se pierde calidad. No forman parte de los intervalos persistidos.
+CAMPOS_EQUIPO_PERSISTIDOS = (
+    "posesion_s", "pases_intentados", "pases_completados", "distancia_m",
+    "suma_altura_m", "n_altura", "suma_amplitud_m", "suma_compacidad_m", "n_forma",
+)
+
 
 async def contexto_de(db: AsyncSession, partido: Partido,
                       p: Parametros = PARAMETROS) -> ContextoPartido:
@@ -119,7 +126,7 @@ def _filas_intervalo(partido_id: int, intervalo: AcumIntervalo,
         {"partido_id": partido_id, "intervalo": intervalo.indice, "equipo": equipo,
          "minuto_desde": desde, "minuto_hasta": hasta, "t_desde": t_desde, "t_hasta": t_hasta,
          "parcial": intervalo.parcial, "disputa_s": intervalo.disputa_s,
-         **{campo: getattr(acum, campo) for campo in AcumEquipo.__slots__}}
+         **{campo: getattr(acum, campo) for campo in CAMPOS_EQUIPO_PERSISTIDOS}}
         for equipo, acum in intervalo.equipos.items()
     ]
     tracks = [
@@ -178,7 +185,7 @@ async def intervalos_guardados(db: AsyncSession, partido_id: int, *,
                 disputa_s=f.disputa_s, cerrado=True, parcial=f.parcial)
         if f.equipo in EQUIPOS_CAMPO:
             acum.equipos[f.equipo] = AcumEquipo(
-                **{campo: getattr(f, campo) for campo in AcumEquipo.__slots__})
+                **{campo: getattr(f, campo) for campo in CAMPOS_EQUIPO_PERSISTIDOS})
 
     if con_tracks:
         tracks = (await db.execute(

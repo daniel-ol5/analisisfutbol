@@ -1061,6 +1061,11 @@ class AnalisisDelProceso:
         await obtener_analisis_en_vivo().procesar(mensaje, vaciar)
 
 
+async def evaluar_reglas_ingesta(club_id: int, mensaje: MensajeWorker) -> None:
+    from app.analisis.vivo import obtener_analisis_en_vivo
+    await obtener_analisis_en_vivo().evaluar_reglas(club_id, mensaje)
+
+
 async def cerrar_partido(partido_id: int) -> None:
     """T-076: al finalizar, cierra el último intervalo de métricas como parcial."""
     from app.analisis.vivo import obtener_analisis_en_vivo

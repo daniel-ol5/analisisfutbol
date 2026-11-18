@@ -37,15 +37,15 @@ class ReglaBase(BaseModel):
     condicion: dict = Field(
         description="Expresion evaluable sobre el estado del partido",
         examples=[{"y": [{"<": ["altura_linea_m", 25]},
-                         {">": ["posesion_rival_5min", 60]},
+                         {">": ["posesion_rival_pct", 60]},
                          {">=": ["minuto", 20]}]}])
     plantilla_mensaje: str = Field(
-        examples=["Adelantar la linea: estamos replegados a {altura} m"])
+        examples=["Pide a la defensa ganar metros cuando el balón salga de nuestra zona."])
     plantilla_justificacion: str = Field(default="",
-        examples=["La linea bajo de {altura_inicial} a {altura} m y el rival acumula {posesion}% de posesion."])
+        examples=["La línea está a {altura_linea_m:.1f} m de nuestro arco y el rival tuvo el {posesion_rival_pct:.0f} % de posesión observada."])
     prioridad: Prioridad = Prioridad.MEDIA
     cooldown_s: int = Field(default=300, ge=30, le=3600,
-        description="El motor evalua 5 veces por segundo: sin esto una regla dispara cientos de veces")
+        description="Tiempo de partido entre dos recomendaciones de la misma regla")
     activa: bool = True
 
 

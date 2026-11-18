@@ -5178,16 +5178,6 @@
               }
             }
           },
-          "501": {
-            "description": "Declarado en el contrato, pendiente de implementacion",
-            "content": {
-              "application/json": {
-                "example": {
-                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
-                }
-              }
-            }
-          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -5439,15 +5429,8 @@
               }
             }
           },
-          "501": {
-            "description": "Declarado en el contrato, pendiente de implementacion",
-            "content": {
-              "application/json": {
-                "example": {
-                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
-                }
-              }
-            }
+          "404": {
+            "description": "Partido inexistente o de otro club"
           },
           "422": {
             "description": "Validation Error",
@@ -9771,7 +9754,7 @@
                   },
                   {
                     ">": [
-                      "posesion_rival_5min",
+                      "posesion_rival_pct",
                       60
                     ]
                   },
@@ -9789,7 +9772,7 @@
             "type": "string",
             "title": "Plantilla Mensaje",
             "examples": [
-              "Adelantar la linea: estamos replegados a {altura} m"
+              "Pide a la defensa ganar metros cuando el balón salga de nuestra zona."
             ]
           },
           "plantilla_justificacion": {
@@ -9797,7 +9780,7 @@
             "title": "Plantilla Justificacion",
             "default": "",
             "examples": [
-              "La linea bajo de {altura_inicial} a {altura} m y el rival acumula {posesion}% de posesion."
+              "La línea está a {altura_linea_m:.1f} m de nuestro arco y el rival tuvo el {posesion_rival_pct:.0f} % de posesión observada."
             ]
           },
           "prioridad": {
@@ -9809,7 +9792,7 @@
             "maximum": 3600.0,
             "minimum": 30.0,
             "title": "Cooldown S",
-            "description": "El motor evalua 5 veces por segundo: sin esto una regla dispara cientos de veces",
+            "description": "Tiempo de partido entre dos recomendaciones de la misma regla",
             "default": 300
           },
           "activa": {
@@ -9869,7 +9852,7 @@
                   },
                   {
                     ">": [
-                      "posesion_rival_5min",
+                      "posesion_rival_pct",
                       60
                     ]
                   },
@@ -9887,7 +9870,7 @@
             "type": "string",
             "title": "Plantilla Mensaje",
             "examples": [
-              "Adelantar la linea: estamos replegados a {altura} m"
+              "Pide a la defensa ganar metros cuando el balón salga de nuestra zona."
             ]
           },
           "plantilla_justificacion": {
@@ -9895,7 +9878,7 @@
             "title": "Plantilla Justificacion",
             "default": "",
             "examples": [
-              "La linea bajo de {altura_inicial} a {altura} m y el rival acumula {posesion}% de posesion."
+              "La línea está a {altura_linea_m:.1f} m de nuestro arco y el rival tuvo el {posesion_rival_pct:.0f} % de posesión observada."
             ]
           },
           "prioridad": {
@@ -9907,7 +9890,7 @@
             "maximum": 3600.0,
             "minimum": 30.0,
             "title": "Cooldown S",
-            "description": "El motor evalua 5 veces por segundo: sin esto una regla dispara cientos de veces",
+            "description": "Tiempo de partido entre dos recomendaciones de la misma regla",
             "default": 300
           },
           "activa": {

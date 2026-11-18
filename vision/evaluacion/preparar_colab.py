@@ -9,7 +9,7 @@ from pathlib import Path
 
 def preparar(salida: Path) -> dict[str, str]:
     vision = Path(__file__).resolve().parents[1]
-    paquetes = ("calibracion", "deteccion", "evaluacion", "procesamiento", "seguimiento")
+    paquetes = ("calibracion", "deteccion", "entrenamiento", "evaluacion", "procesamiento", "seguimiento")
     rutas = [r for paquete in paquetes for r in (vision / paquete).rglob("*")
              if r.is_file() and r.suffix in {".py", ".yaml"} and "__pycache__" not in r.parts]
     rutas.extend(vision / nombre for nombre in ("requirements.txt", "requirements-pruebas.txt", "README.md"))

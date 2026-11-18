@@ -7,9 +7,12 @@ los `.png` y `.svg` son salida generada y se regeneran cuando cambia el fuente.
 |---|---|
 | `modelo-datos.puml` | Modelo completo: 19 tablas con todos sus atributos, tipos y notas de diseño |
 | `modelo-datos-resumen.puml` | Solo entidades y relaciones. Para presentaciones y para entender la forma general |
+| `paquetes-por-capas.puml` | Diagrama UML de las cuatro capas: Presentación, Negocio, Datos e Infraestructura |
 
-En ambos, el color verde marca lo que ya está implementado. Hoy son `club` y
+En los modelos de datos, el color verde marca lo que ya está implementado. Hoy son `club` y
 `usuario`; los otros 17 modelos están diseñados pero pendientes.
+
+La capa de Presentación incluye la web, la app móvil y las rutas de FastAPI. Negocio agrupa los seis módulos funcionales del backend. Datos reúne los modelos y adaptadores de almacenamiento. Infraestructura incluye PostgreSQL, el almacén de archivos, los servicios técnicos compartidos y el worker de visión. El worker se ejecuta en un proceso separado y usa la API central para intercambiar trabajos y resultados.
 
 ## Cómo regenerarlos
 
