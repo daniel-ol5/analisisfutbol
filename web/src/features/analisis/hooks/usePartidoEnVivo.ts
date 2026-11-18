@@ -21,7 +21,6 @@ import type {
 
 const NO_REINTENTAR = new Set([1000, 4400, 4401, 4404]);
 const MAX_ESTELA_BALON = 25;
-const VENTANA_POSESION_FRAMES = 300; // ~60 segundos a 5 Hz
 
 interface OpcionesUsoPartidoEnVivo {
   partidoId: number | null;
@@ -31,8 +30,8 @@ interface OpcionesUsoPartidoEnVivo {
 interface ResultadoPartidoEnVivo {
   estadoConexion: EstadoConexion;
   datos: MensajeWorker | null;
-  posesionLocalPct: number;
-  posesionVisitantePct: number;
+  posesionLocalPct: number | null;
+  posesionVisitantePct: number | null;
   estelaBalon: PuntoTrayectoria[];
   error: string | null;
   reconectar: () => void;
@@ -45,8 +44,8 @@ export function usePartidoEnVivo({
 }: OpcionesUsoPartidoEnVivo): ResultadoPartidoEnVivo {
   const [estadoConexion, setEstadoConexion] = useState<EstadoConexion>("desconectado");
   const [datos, setDatos] = useState<MensajeWorker | null>(null);
-  const [posesionLocalPct, setPosesionLocalPct] = useState<number>(50);
-  const [posesionVisitantePct, setPosesionVisitantePct] = useState<number>(50);
+  const [posesionLocalPct, setPosesionLocalPct] = useState<number | null>(null);
+  const [posesionVisitantePct, setPosesionVisitantePct] = useState<number | null>(null);
   const [estelaBalon, setEstelaBalon] = useState<PuntoTrayectoria[]>([]);
   const [error, setError] = useState<string | null>(null);
 
@@ -55,10 +54,8 @@ export function usePartidoEnVivo({
   const reintentoRef = useRef<number>(0);
   const timerReintentoRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const timerLatidoRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const timerDatosRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const ejecutarConexionRef = useRef<() => void>(() => {});
-
-  // Buffer circular para cálculo de posesión en tiempo real
-  const bufferPosesionRef = useRef<Array<"LOCAL" | "VISITANTE">>([]);
 
   const limpiarTemporizadores = useCallback(() => {
     if (timerReintentoRef.current) {
@@ -68,6 +65,10 @@ export function usePartidoEnVivo({
     if (timerLatidoRef.current) {
       clearInterval(timerLatidoRef.current);
       timerLatidoRef.current = null;
+    }
+    if (timerDatosRef.current) {
+      clearTimeout(timerDatosRef.current);
+      timerDatosRef.current = null;
     }
   }, []);
 
@@ -83,6 +84,10 @@ export function usePartidoEnVivo({
       wsRef.current = null;
     }
     setEstadoConexion("desconectado");
+    setDatos(null);
+    setEstelaBalon([]);
+    setPosesionLocalPct(null);
+    setPosesionVisitantePct(null);
   }, [limpiarTemporizadores]);
 
   const conectar = useCallback(() => {
@@ -94,9 +99,8 @@ export function usePartidoEnVivo({
     // Reiniciar estado previo al cambiar de partido o reconectar
     setDatos(null);
     setEstelaBalon([]);
-    bufferPosesionRef.current = [];
-    setPosesionLocalPct(50);
-    setPosesionVisitantePct(50);
+    setPosesionLocalPct(null);
+    setPosesionVisitantePct(null);
 
     limpiarTemporizadores();
     cerradoManualRef.current = false;
@@ -124,6 +128,7 @@ export function usePartidoEnVivo({
       };
 
       ws.onmessage = (evento: MessageEvent<string>) => {
+        if (wsRef.current !== ws) return;
         try {
           const mensaje = JSON.parse(evento.data) as MensajeWebSocketVivo;
 
@@ -149,6 +154,15 @@ export function usePartidoEnVivo({
           if (mensaje.tipo === "posiciones") {
             const workerData = mensaje.datos;
             setDatos(workerData);
+            setError(null);
+            if (timerDatosRef.current) clearTimeout(timerDatosRef.current);
+            timerDatosRef.current = setTimeout(() => {
+              setDatos(null);
+              setEstelaBalon([]);
+              setPosesionLocalPct(null);
+              setPosesionVisitantePct(null);
+              setError("Sin posiciones recientes del worker.");
+            }, 2000);
 
             // Actualizar trayectoria reciente del balón si está visible
             if (workerData.balon) {
@@ -163,38 +177,14 @@ export function usePartidoEnVivo({
                   ? siguiente.slice(siguiente.length - MAX_ESTELA_BALON)
                   : siguiente;
               });
-
-              // Estimar posesión según cercanía al balón (< 3 metros)
-              let equipoCercano: "LOCAL" | "VISITANTE" | null = null;
-              let distMinima = 3.0; // radio de control en metros
-
-              for (const j of workerData.jugadores) {
-                if (j.equipo !== "LOCAL" && j.equipo !== "VISITANTE") continue;
-                const dx = j.x - workerData.balon.x;
-                const dy = j.y - workerData.balon.y;
-                const dist = Math.sqrt(dx * dx + dy * dy);
-                if (dist < distMinima) {
-                  distMinima = dist;
-                  equipoCercano = j.equipo;
-                }
-              }
-
-              if (equipoCercano) {
-                const buf = bufferPosesionRef.current;
-                buf.push(equipoCercano);
-                if (buf.length > VENTANA_POSESION_FRAMES) {
-                  buf.shift();
-                }
-
-                const localTicks = buf.filter((eq) => eq === "LOCAL").length;
-                const totalTicks = buf.length;
-                if (totalTicks > 0) {
-                  const pctLocal = Math.round((localTicks / totalTicks) * 100);
-                  setPosesionLocalPct(pctLocal);
-                  setPosesionVisitantePct(100 - pctLocal);
-                }
-              }
             }
+          }
+
+          if (mensaje.tipo === "posesion") {
+            const p = mensaje.datos.acumulado;
+            const observado = p.local_pct + p.visitante_pct + p.disputa_pct > 0;
+            setPosesionLocalPct(observado ? p.local_pct : null);
+            setPosesionVisitantePct(observado ? p.visitante_pct : null);
           }
 
           if (mensaje.tipo === "error") {
@@ -206,7 +196,12 @@ export function usePartidoEnVivo({
       };
 
       ws.onclose = (evento: CloseEvent) => {
+        if (wsRef.current !== ws) return;
         limpiarTemporizadores();
+        setDatos(null);
+        setEstelaBalon([]);
+        setPosesionLocalPct(null);
+        setPosesionVisitantePct(null);
 
         if (cerradoManualRef.current || NO_REINTENTAR.has(evento.code)) {
           if (evento.code === 4401) {

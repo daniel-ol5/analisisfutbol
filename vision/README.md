@@ -1,5 +1,14 @@
 # Worker de visión
 
+**Guía operativa vigente:** [CPU, grabación y GPU remota](../GUIA_PRUEBAS_LAPTOP_GPU.md).
+El worker puede correr en cancha o en una instancia GPU. El segundo modo exige
+transferir el video y medir la conexión; no conserva la restricción original de
+procesar todo en cancha. El directo tiene su entrada en `procesamiento/directo.py`.
+Los pesos especializados no están incluidos y su precisión sigue pendiente de medir.
+La primera prueba GPU elegida es [el cuaderno de Colab](notebooks/Primera_prueba_Colab.ipynb),
+que ejecuta una grabación y un archivo a velocidad real sin conectar la API local.
+`python -m evaluacion.preparar_colab` genera el ZIP de código para subirlo.
+
 Ejecuta el pipeline de visión por computadora **en la máquina con GPU que va a
 la cancha**. No es parte del backend: es un proceso independiente.
 
@@ -10,10 +19,9 @@ Cámara ──► YOLO ──► ByteTrack ──► color de equipo ──► h
                                                       Backend
 ```
 
-La decisión arquitectónica central del proyecto: **el video nunca sale de la
-cancha**. Solo viajan coordenadas — unas 23 posiciones cinco veces por segundo,
-entre 5 y 10 KB/s. Transmitir el video al servidor sería inviable por 4G y
-agregaría segundos de latencia.
+En el modo local, el video permanece en cancha y se transmiten coordenadas.
+En el modo remoto se envía video comprimido a la GPU y se reciben posiciones;
+su viabilidad en directo depende del ancho de banda y del retraso medidos.
 
 ## Módulos
 

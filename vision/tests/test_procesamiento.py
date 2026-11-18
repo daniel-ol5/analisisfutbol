@@ -103,9 +103,11 @@ def test_mensaje_con_el_contrato_del_worker_en_vivo():
     m = armar_mensaje(_ctx(), 12.3456, cuadro, detecciones)
 
     # Mismas claves que backend/app/partido/schemas.py::MensajeWorker.
-    assert set(m) == {"partido", "t", "jugadores", "balon", "calidad"}
+    assert set(m) == {"partido", "t", "jugadores", "balon", "calidad", "detecciones"}
     assert set(m["calidad"]) == {"worker_conectado", "fps", "jugadores_detectados",
-                                 "balon_visible", "retraso_s", "degradado", "motivo"}
+                                 "balon_visible", "retraso_s", "degradado", "motivo",
+                                 "calibracion_valida", "campo_visible", "largo_m", "ancho_m",
+                                 "estado_calibracion", "ultimo_anclaje_t", "error_lineas_px", "lineas_imagen"}
     assert m["partido"] == 7
     assert m["t"] == 12.346
     assert [j["tid"] for j in m["jugadores"]] == [1, 2, 3, 4]

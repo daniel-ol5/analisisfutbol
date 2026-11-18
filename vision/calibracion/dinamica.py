@@ -14,16 +14,19 @@ donde H_t se actualiza y suaviza temporalmente con cada movimiento de la cámara
 
 from __future__ import annotations
 
+import hashlib
 import logging
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Sequence
 
 import cv2
 import numpy as np
+from seguimiento.gmc import CompensadorMovimientoCamara
 
-from calibracion.homografia import HomografiaInvalida, cargar_homografia
-from seguimiento.gmc import CompensadorMovimientoCamara, TransformacionCamara
+from calibracion.homografia import cargar_homografia
+from calibracion.referencias import BancoReferencias
+from calibracion.terreno import refinar_con_lineas
 
 log = logging.getLogger("calibracion.dinamica")
 
@@ -46,7 +49,7 @@ def generar_keypoints_campo(
     # Distancia vertical del semicírculo del área grande a la intersección con la frontal (16.5m)
     arc_dy = float(np.sqrt(max(0.0, 9.15**2 - 5.5**2)))
 
-    return {
+    puntos = {
         0: (0.0, 0.0),                      # Córner superior izquierdo
         1: (0.0, mid_y - 20.16),            # Área grande superior en línea de fondo izq
         2: (0.0, mid_y - 9.16),             # Área chica superior en línea de fondo izq
@@ -80,6 +83,8 @@ def generar_keypoints_campo(
         30: (mid_x - r_circ, mid_y),        # Extremo izquierdo círculo central
         31: (mid_x + r_circ, mid_y),        # Extremo derecho círculo central
     }
+    # El modelo numera desde la banda lejana; la aplicación usa Y=0 en la cercana.
+    return {i: (x, ancho - y) for i, (x, y) in puntos.items()}
 
 
 @dataclass
@@ -93,6 +98,7 @@ class ResultadoEstimacion:
     es_valida: bool
     puntos_imagen: list[tuple[float, float]] = field(default_factory=list)
     puntos_cancha: list[tuple[float, float]] = field(default_factory=list)
+    error_lineas_px: float | None = None
 
 
 class EstimadorHomografiaPitch:
@@ -111,6 +117,7 @@ class EstimadorHomografiaPitch:
         self.ancho_m = ancho_m
         self.keypoints_metricos = generar_keypoints_campo(largo_m, ancho_m)
         self._modelo = None
+        self.error_lineas_px: float | None = None
 
     @property
     def modelo_cargado(self) -> bool:
@@ -125,7 +132,16 @@ class EstimadorHomografiaPitch:
         try:
             from ultralytics import YOLO
 
+            from calibracion.instalar_modelo import SHA256
+
+            if self.ruta_pesos == _PESOS_KEYPOINTS_DEFECTO:
+                with self.ruta_pesos.open("rb") as archivo:
+                    if hashlib.file_digest(archivo, "sha256").hexdigest() != SHA256:
+                        raise ValueError("El checkpoint de cancha no coincide con el modelo evaluado")
             self._modelo = YOLO(str(self.ruta_pesos))
+            if self._modelo.task != "pose" or list(self._modelo.names.values()) != ["pitch"]:
+                self._modelo = None
+                raise ValueError("Se requiere el modelo de cancha Roboflow de 32 marcas, no pose humana")
             return True
         except Exception:
             log.exception("Error al inicializar YOLO para puntos de cancha")
@@ -134,9 +150,9 @@ class EstimadorHomografiaPitch:
     def estimar(
         self,
         cuadro: np.ndarray,
-        conf_minima: float = 0.40,
-        min_puntos: int = 4,
-        umbral_ransac_px: float = 8.0,
+        conf_minima: float = 0.50,
+        min_puntos: int = 6,
+        umbral_ransac_m: float = 1.0,
         max_error_admisible_m: float = 3.0,
     ) -> ResultadoEstimacion:
         """Calcula la homografía absoluta (píxeles -> metros) si detecta la cancha."""
@@ -147,7 +163,7 @@ class EstimadorHomografiaPitch:
             return ResultadoEstimacion(None, 0, 0, float("inf"), False)
 
         try:
-            res = self._modelo(cuadro, verbose=False, device=self.dispositivo)[0]
+            res = self._modelo(cuadro, verbose=False, device=self.dispositivo, imgsz=640)[0]
         except Exception:
             log.exception("Error en inferencia de puntos de cancha")
             return ResultadoEstimacion(None, 0, 0, float("inf"), False)
@@ -161,12 +177,20 @@ class EstimadorHomografiaPitch:
             if res.keypoints.conf is not None
             else np.ones(len(kpts), dtype=np.float32)
         )
+        if kpts.shape != (len(self.keypoints_metricos), 2) or confs.shape != (len(kpts),):
+            raise ValueError(
+                "Checkpoint de cancha incompatible: se requieren 32 marcas con el orden documentado"
+            )
 
         src_pts: list[list[float]] = []
         dst_pts: list[tuple[float, float]] = []
 
         for i, ((u, v), conf) in enumerate(zip(kpts, confs, strict=False)):
-            if conf >= conf_minima and (u > 0.0 or v > 0.0) and i in self.keypoints_metricos:
+            # Los extremos de una elipse en imagen no son referencias métricas fijas.
+            if i in (30, 31):
+                continue
+            if (np.isfinite([u, v, conf]).all() and conf >= conf_minima
+                    and (u > 0.0 or v > 0.0) and i in self.keypoints_metricos):
                 src_pts.append([float(u), float(v)])
                 dst_pts.append(self.keypoints_metricos[i])
 
@@ -176,9 +200,13 @@ class EstimadorHomografiaPitch:
 
         src_arr = np.array(src_pts, dtype=np.float32)
         dst_arr = np.array(dst_pts, dtype=np.float32)
+        valores = np.linalg.svd(dst_arr - dst_arr.mean(axis=0), compute_uv=False)
+        if valores[1] < .05 * valores[0]:
+            return ResultadoEstimacion(None, n_detectados, 0, float("inf"), False)
 
         try:
-            H, mascara = cv2.findHomography(src_arr, dst_arr, cv2.RANSAC, umbral_ransac_px)
+            # El error se mide en el plano de destino: aquí son METROS, no píxeles.
+            H, mascara = cv2.findHomography(src_arr, dst_arr, cv2.RANSAC, umbral_ransac_m)
         except cv2.error:
             return ResultadoEstimacion(None, n_detectados, 0, float("inf"), False)
 
@@ -204,7 +232,11 @@ class EstimadorHomografiaPitch:
         if abs(H[2, 2]) > 1e-9:
             H = H / H[2, 2]
 
-        valida = error_medio <= max_error_admisible_m
+        valida = error_medio <= max_error_admisible_m and n_inliers / n_detectados >= .6
+        error_lineas = None
+        if valida:
+            H, error_lineas, valida = refinar_con_lineas(cuadro, H, self.largo_m, self.ancho_m)
+            self.error_lineas_px = error_lineas
         pts_img = [tuple(p) for p in src_arr[inliers].tolist()]
         pts_cnc = [tuple(p) for p in dst_arr[inliers].tolist()]
         return ResultadoEstimacion(
@@ -215,6 +247,7 @@ class EstimadorHomografiaPitch:
             es_valida=valida,
             puntos_imagen=pts_img,
             puntos_cancha=pts_cnc,
+            error_lineas_px=error_lineas,
         )
 
 
@@ -233,12 +266,26 @@ class RastreadorHomografiaDinamica:
     _homografia_anclada: np.ndarray | None = None
     _homografia_actual: np.ndarray | None = None
     _contador_cuadros: int = 0
+    valida: bool = False
+    estado: str = "SIN_REFERENCIA"
+    ultimo_anclaje_t: float | None = None
+    error_lineas_px: float | None = None
+    max_sin_anclaje_s: float = 5.0
+    _anterior_t: float | None = None
+    _ultimo_intento_t: float = -100.0
+    banco: BancoReferencias = field(default_factory=BancoReferencias)
+    metodo: str | None = None
 
     def reiniciar(self, homografia_inicial: np.ndarray | None = None) -> None:
         self._homografia_anclada = homografia_inicial.copy() if homografia_inicial is not None else None
         self._homografia_actual = homografia_inicial.copy() if homografia_inicial is not None else None
         self._contador_cuadros = 0
+        self.valida = homografia_inicial is not None
+        self.estado = "VERIFICADA" if self.valida else "SIN_REFERENCIA"
+        self.ultimo_anclaje_t = None
+        self._anterior_t = None
         self.gmc.reiniciar()
+        self.banco = BancoReferencias()
 
     def actualizar(
         self,
@@ -246,17 +293,40 @@ class RastreadorHomografiaDinamica:
         homografia_referencia: np.ndarray | None = None,
         cajas_excluidas: Sequence[Sequence[float]] | None = None,
         forzar_recalibracion: bool = False,
+        t_s: float | None = None,
+        permitir_referencia: bool = True,
     ) -> np.ndarray:
         """Actualiza la homografía para el cuadro actual y la devuelve normalizada."""
         self._contador_cuadros += 1
+        t = float(t_s if t_s is not None else (self._contador_cuadros - 1) / 5)
+        dt = t - self._anterior_t if self._anterior_t is not None else None
+        if dt is not None and (dt <= 0 or dt > 1):
+            self.valida = False
+            self.estado = "PERDIDA"
+            self.gmc.reiniciar()
+        self._anterior_t = t
 
         # 1. Base inicial si no había homografía previa
-        if self._homografia_anclada is None and homografia_referencia is not None:
+        if permitir_referencia and self._homografia_anclada is None and homografia_referencia is not None:
             self._homografia_anclada = homografia_referencia.copy()
             self._homografia_actual = homografia_referencia.copy()
+            self.valida = True
+            self.estado = "VERIFICADA"
+            self.ultimo_anclaje_t = t
+            self.gmc.reiniciar()
+            self.banco.agregar(cuadro, homografia_referencia, cajas_excluidas or ())
+            self.metodo = "MANUAL"
 
         # 2. Movimiento relativo de cámara por GMC
-        _ = self.gmc.estimar(cuadro, cajas_excluidas=cajas_excluidas or ())
+        movimiento = self.gmc.estimar(cuadro, cajas_excluidas=cajas_excluidas or (), dt_s=dt)
+        if not movimiento.es_valida:
+            self.valida = False
+            self.estado = "PERDIDA"
+        elif self.valida:
+            self.estado = "SIGUIENDO"
+        if self.ultimo_anclaje_t is not None and t - self.ultimo_anclaje_t > self.max_sin_anclaje_s:
+            self.valida = False
+            self.estado = "PERDIDA"
         H_pred = (
             self.gmc.homografia_compensada(self._homografia_anclada)
             if self._homografia_anclada is not None
@@ -264,30 +334,63 @@ class RastreadorHomografiaDinamica:
         )
 
         # 3. Recalibración periódica o forzada con puntos clave del campo
-        toca_recalibrar = forzar_recalibracion or (
+        toca_recalibrar = forzar_recalibracion or (t - self._ultimo_intento_t >= 1.0 and (
             self.estimador_pitch is not None
             and (
-                self._homografia_anclada is None
+                self._homografia_anclada is None or not self.valida
                 or (self.recalibrar_cada_n_cuadros > 0 and self._contador_cuadros % self.recalibrar_cada_n_cuadros == 0)
             )
-        )
+        ))
+
+        if t - self._ultimo_intento_t >= 1.0 and self.banco.referencias:
+            self._ultimo_intento_t = t
+            recuperada = self.banco.recuperar(cuadro, cajas_excluidas or ())
+            if recuperada is not None:
+                self._homografia_anclada = cargar_homografia(recuperada[0])
+                self._homografia_actual = self._homografia_anclada.copy()
+                self.gmc.reanclar()
+                self.valida = True
+                self.estado = "VERIFICADA"
+                self.metodo = "REFERENCIA_VISUAL"
+                self.ultimo_anclaje_t = t
+                self.error_lineas_px = None
+                return self._homografia_actual.copy()
 
         if toca_recalibrar and self.estimador_pitch is not None:
+            self._ultimo_intento_t = t
             res = self.estimador_pitch.estimar(cuadro)
             if res.es_valida and res.homografia is not None:
                 H_kpt = res.homografia
-                if H_pred is not None:
-                    # Suavizado exponencial para evitar sacudidas bruscas entre cuadros
-                    H_suave = (1.0 - self.alpha_suavizado) * H_pred + self.alpha_suavizado * H_kpt
-                    if abs(H_suave[2, 2]) > 1e-9:
-                        H_suave = H_suave / H_suave[2, 2]
-                    self._homografia_anclada = H_suave
+                if H_pred is not None and self.valida:
+                    alto, ancho = cuadro.shape[:2]
+                    controles = np.float64([[ancho * x, alto * y] for x in (.25, .5, .75) for y in (.35, .55, .75)])
+                    anterior = cv2.perspectiveTransform(controles.reshape(-1, 1, 2), H_pred)
+                    nueva = cv2.perspectiveTransform(controles.reshape(-1, 1, 2), H_kpt)
+                    if np.median(np.linalg.norm(anterior - nueva, axis=2)) > 2.0:
+                        return H_pred.copy()
+                if H_pred is not None and self.valida:
+                    # Suavizar posiciones proyectadas; las matrices tienen escala arbitraria.
+                    alto, ancho = cuadro.shape[:2]
+                    rejilla = np.array([[0, 0], [ancho, 0], [ancho, alto], [0, alto]], dtype=np.float64)
+                    a = cv2.perspectiveTransform(rejilla.reshape(-1, 1, 2), H_pred)
+                    b = cv2.perspectiveTransform(rejilla.reshape(-1, 1, 2), H_kpt)
+                    destino = (1 - self.alpha_suavizado) * a + self.alpha_suavizado * b
+                    suave = None
+                    if np.isfinite(destino).all():
+                        suave, _ = cv2.findHomography(rejilla, destino.reshape(-1, 2))
+                    self._homografia_anclada = cargar_homografia(suave if suave is not None else H_kpt)
                 else:
                     self._homografia_anclada = H_kpt
 
                 # Reanclar GMC para acumular traslación a partir de esta nueva referencia
                 self.gmc.reanclar()
+                self.valida = True
+                self.estado = "VERIFICADA"
+                self.ultimo_anclaje_t = t
+                self.error_lineas_px = res.error_lineas_px
+                self.metodo = "MARCAS_CANCHA"
                 self._homografia_actual = self._homografia_anclada.copy()
+                self.banco.agregar(cuadro, self._homografia_actual, cajas_excluidas or ())
                 return self._homografia_actual.copy()
 
         if H_pred is not None:

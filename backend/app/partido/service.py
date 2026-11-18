@@ -432,6 +432,9 @@ async def _exigir_calibracion_valida(
             status.HTTP_409_CONFLICT,
             "No se puede iniciar el partido: no hay calibración para este partido",
         )
+    if calibracion.modo == "AUTOMATICA":
+        # Inicia la operación; el worker solo publicará metros tras verificar la cancha.
+        return
     if not calibracion.valida:
         detalle_error = (
             f"{calibracion.error_medio_m:.2f} m"

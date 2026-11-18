@@ -17,6 +17,55 @@
   min-width: 0;
 }
 
+/* Espacio de trabajo: el video y el plano tienen prioridad visual. */
+.analisis-sesion { display: grid; gap: 18px; min-width: 0; }
+.analisis-sesion-barra, .analisis-video-barra, .analisis-video-selector, .analisis-video-pie,
+.analisis-radar-cabecera { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.analisis-sesion-barra > label { display: flex; gap: 10px; align-items: center; flex: 1; }
+.analisis-sesion select { max-width: 100%; min-width: 0; border: 1px solid var(--line); border-radius: 7px; padding: 8px 10px; background: var(--surface); color: var(--text); }
+.analisis-sesion button { border: 1px solid var(--line); background: var(--surface); color: var(--text-2); padding: 8px 12px; border-radius: 7px; cursor: pointer; }
+.analisis-sesion button.activo { background: var(--pitch); color: white; border-color: var(--pitch); }
+.analisis-estado { color: var(--text-2); font-size: 13px; }
+.analisis-config { position: relative; font-size: 13px; }
+.analisis-config summary, .analisis-resumen summary { cursor: pointer; }
+.analisis-config-contenido { position: absolute; right: 0; top: 30px; width: 270px; padding: 18px; display: grid; gap: 14px; border: 1px solid var(--line); background: var(--surface); border-radius: 10px; z-index: 20; box-shadow: 0 10px 35px #0003; }
+.analisis-config-contenido label { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.analisis-marcador { display: flex; justify-content: center; align-items: center; gap: 20px; flex-wrap: wrap; border-block: 1px solid var(--line); padding: 14px; }
+.analisis-marcador strong { font-size: 24px; font-variant-numeric: tabular-nums; }
+.analisis-marcador time { color: var(--text-2); font-variant-numeric: tabular-nums; }
+.analisis-espacio { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+.analisis-espacio--apilado, .analisis-espacio--solo-radar { grid-template-columns: minmax(0, 1fr); }
+.analisis-video, .analisis-radar { min-width: 0; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--surface); }
+.analisis-video-barra, .analisis-video-selector, .analisis-video-pie, .analisis-radar-cabecera { padding: 12px; }
+.analisis-video-barra > div { display: flex; gap: 4px; }
+.analisis-video-selector select { flex: 1; }
+.analisis-video-selector a { font-size: 13px; white-space: nowrap; }
+.analisis-video-lienzo { position: relative; background: #080e15; }
+.analisis-video-lienzo video { width: 100%; height: 100%; display: block; object-fit: contain; }
+.analisis-video-vacio { position: absolute; inset: 35% 10%; text-align: center; color: #a7b5c6; }
+.analisis-video-pie, .analisis-nota { font-size: 12px; color: var(--text-2); line-height: 1.6; }
+.analisis-video-pie p { margin: 0; }
+.analisis-nota { margin: 10px 14px 14px; }
+.analisis-radar-cabecera h3 { margin: 0; font-size: 15px; }
+.analisis-radar-cabecera span { color: var(--text-2); font-size: 12px; }
+.analisis-caja { position: absolute; border: 1px solid; pointer-events: none; }
+.analisis-caja span { position: absolute; bottom: 100%; background: #06111ddd; color: white; font-size: 10px; padding: 1px 3px; }
+.analisis-resumen { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.analisis-resumen > section { padding: 16px 18px; border: 1px solid var(--line); border-radius: 10px; }
+.analisis-resumen h3 { font-size: 13px; color: var(--text-2); font-weight: 500; margin: 0 0 10px; }
+.analisis-resumen p { font-size: 14px; line-height: 1.6; margin: 8px 0; }
+.analisis-resumen small { color: var(--text-2); }
+.analisis-resumen .analisis-dato { font-size: 25px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.analisis-dato span { color: var(--text-2); font-size: 18px; padding-inline: 8px; }
+@media (max-width: 1000px) { .analisis-espacio { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 600px) {
+  .analisis-pagina { padding: 10px 0 60px; }
+  .analisis-resumen { grid-template-columns: 1fr; }
+  .analisis-sesion-barra > label { flex-basis: 100%; }
+  .analisis-marcador { gap: 10px; }
+  .analisis-config-contenido { right: 0; width: min(270px, 78vw); }
+}
+
 /* Pestañas superiores del módulo */
 .analisis-tabs {
   display: flex;

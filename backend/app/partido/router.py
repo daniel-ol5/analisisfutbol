@@ -15,6 +15,7 @@ import json
 from datetime import UTC, datetime
 from typing import Annotated
 
+from anyio import CancelScope
 from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect, status
 from pydantic import ValidationError
 
@@ -97,7 +98,9 @@ async def descuento(partido_id: int, datos: Descuento, usuario: Actual, db: Db,
              dependencies=[Depends(requiere_rol("ADMIN", "ANALISTA"))],
              summary="CU-30 · Finalizar el partido")
 async def finalizar(partido_id: int, usuario: Actual, db: Db,
-                    hub: HubDep, reloj: RelojDep) -> EstadoEnVivo:
+                    hub: HubDep, reloj: RelojDep,
+                    almacen: Annotated[AlmacenPosiciones, Depends(obtener_almacen_posiciones)]) -> EstadoEnVivo:
+    await almacen.vaciar()
     actual = await service.finalizar_partido(db, usuario, partido_id, ahora=reloj)
     await _difundir_estado(hub, usuario.club_id, partido_id, actual)
     return actual
@@ -328,11 +331,12 @@ async def ingesta(ws: WebSocket, partido_id: int, hub: HubDep, partidos: Partido
                 continue
 
             invalidos = 0
+            await service.registrar_tracks_ingesta(worker.club_id, mensaje)
+            await almacen.agregar(mensaje)
             await hub.difundir(canal, {"tipo": "posiciones",
                                        "datos": mensaje.model_dump(mode="json")})
-            await almacen.agregar(mensaje)
-            await service.registrar_tracks_ingesta(worker.club_id, mensaje)
     except (WebSocketDisconnect, RuntimeError):
         pass
     finally:
-        await almacen.vaciar()
+        with CancelScope(shield=True):
+            await almacen.vaciar()

@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import cv2
@@ -58,8 +58,10 @@ class RastreadorBalon:
         self._confianza: float = 0.0
         self._cuadros_sin_deteccion: int = 0
         self._estela: list[tuple[float, float]] = []
+        self.observado = False
 
     def reiniciar(self) -> None:
+        self.observado = False
         self._posicion = None
         self._velocidad = (0.0, 0.0)
         self._confianza = 0.0
@@ -93,14 +95,19 @@ class RastreadorBalon:
         Returns:
             Deteccion con clase BALON y coordenadas estimadas, o None si está perdido.
         """
+        self.observado = False
         # 1. Compensar movimiento de cámara sobre el estado previo
         if self._posicion is not None and transformacion_camara is not None and transformacion_camara.es_valida:
             x, y = self._posicion
-            # Aplicar matriz afín: x' = a*x + c*y + tx, y' = b*x + d*y + ty
-            m = transformacion_camara.matriz_afine
-            nx = float(m[0, 0] * x + m[0, 1] * y + m[0, 2])
-            ny = float(m[1, 0] * x + m[1, 1] * y + m[1, 2])
-            self._posicion = (nx, ny)
+            vx, vy = self._velocidad
+            puntos = np.float64([[[x, y]], [[x + vx, y + vy]]])
+            movidos = cv2.perspectiveTransform(puntos, transformacion_camara.matriz_3x3).reshape(-1, 2)
+            if np.isfinite(movidos).all():
+                self._posicion = tuple(float(v) for v in movidos[0])
+                self._velocidad = tuple(float(v) for v in movidos[1] - movidos[0])
+            else:
+                self._posicion = None
+                self._velocidad = (0., 0.)
 
         # 2. Predicción cinemática inercial
         pred_x, pred_y = self._posicion if self._posicion is not None else (None, None)
@@ -121,6 +128,7 @@ class RastreadorBalon:
         mejor = self._seleccionar_mejor_candidato(candidatos, pred_x, pred_y)
 
         if mejor is not None:
+            self.observado = True
             # Medición confirmada
             if self._posicion is not None:
                 # Estimación de velocidad con filtro de suavizado
@@ -218,7 +226,7 @@ class RastreadorBalon:
         candidatos_mask = (candidatos_mask.astype(np.uint8)) * 255
 
         # Componentes conectados
-        num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(
+        num_labels, _labels, stats, centroids = cv2.connectedComponentsWithStats(
             candidatos_mask, connectivity=8
         )
 

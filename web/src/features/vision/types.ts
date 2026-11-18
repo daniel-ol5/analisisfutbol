@@ -8,6 +8,8 @@ export interface Punto {
 
 /** Cuerpo de `POST /vision/partidos/{partido_id}/calibracion` (CU-19, CU-20). */
 export interface CalibracionGuardar {
+  modo?: "MANUAL" | "AUTOMATICA";
+  referencia?: ReferenciaCalibracion | null;
   puntos_imagen: Punto[];
   puntos_cancha: Punto[];
   largo_m?: number;
@@ -17,6 +19,8 @@ export interface CalibracionGuardar {
 
 /** Respuesta de `GET` y `POST /vision/partidos/{partido_id}/calibracion`. */
 export interface Calibracion {
+  modo?: "MANUAL" | "AUTOMATICA";
+  referencia?: ReferenciaCalibracion | null;
   id: number;
   partido_id: number;
   largo_m: number;
@@ -29,6 +33,16 @@ export interface Calibracion {
   valida: boolean;
   coef_distorsion: number[] | null;
   creada_en: string;
+}
+
+export interface ReferenciaCalibracion {
+  tipo: "VIDEO" | "DIRECTO";
+  video_id?: number | null;
+  fuente_id?: string | null;
+  tiempo_s: number;
+  cuadro_indice?: number | null;
+  ancho_px?: number | null;
+  alto_px?: number | null;
 }
 
 /**

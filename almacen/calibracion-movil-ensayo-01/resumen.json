@@ -1,0 +1,11 @@
+{
+  "video": "almacen\\BAYERN - PSG CAMARA TACTICA - YouTube - Google Chrome 2026-11-16 10-12-48.mp4",
+  "segundos_procesamiento": 39.155409700000746,
+  "muestras": 201,
+  "estados": {
+    "VERIFICADA": 11,
+    "SIGUIENDO": 190
+  },
+  "dispositivo": "cpu",
+  "precision_metrica_validada": false
+}

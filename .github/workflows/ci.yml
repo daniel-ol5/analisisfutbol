@@ -70,7 +70,7 @@ jobs:
 
       - name: Auditar dependencias
         working-directory: web
-        run: npm audit --audit-level=high
+        run: npm run audit:ci
 
       - name: Lint
         working-directory: web

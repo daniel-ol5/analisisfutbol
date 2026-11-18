@@ -19,10 +19,15 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
+import cv2
 import numpy as np
-
-from calibracion.dinamica import RastreadorHomografiaDinamica
+from calibracion.dinamica import (
+    _PESOS_KEYPOINTS_DEFECTO,
+    EstimadorHomografiaPitch,
+    RastreadorHomografiaDinamica,
+)
 from calibracion.homografia import proyectar_detecciones
+from calibracion.terreno import lineas_imagen
 from seguimiento.balon import RastreadorBalon
 from seguimiento.color import (
     CalibradorEquiposPartido,
@@ -46,11 +51,15 @@ class Contexto:
     """Lo que no cambia en todo el video (sale del `Trabajo` del backend)."""
 
     partido_id: int
-    homografia: np.ndarray
+    homografia: np.ndarray | None
     es_local: bool
     color_propio: str
     color_rival: str | None
     fps_muestreo: float
+    largo_m: float = 105.0
+    ancho_m: float = 68.0
+    modo_calibracion: str = "MANUAL"
+    referencia: dict | None = None
 
 
 @dataclass
@@ -62,16 +71,17 @@ class EstadoPipeline:
     clasificador_temporal: ClasificadorTemporalEquipos = field(default_factory=ClasificadorTemporalEquipos)
     calibrador_equipos: CalibradorEquiposPartido | None = None
     rastreador_homografia: RastreadorHomografiaDinamica | None = None
+    dispositivo: str = "cpu"
+    largo_m: float = 105.0
+    ancho_m: float = 68.0
+    habilitar_reconocimiento: bool = False
 
     def __post_init__(self) -> None:
         if self.rastreador_homografia is None:
             estimador = None
-            try:
-                from calibracion.dinamica import _PESOS_KEYPOINTS_DEFECTO, EstimadorHomografiaPitch
-                if _PESOS_KEYPOINTS_DEFECTO.exists():
-                    estimador = EstimadorHomografiaPitch(ruta_pesos=_PESOS_KEYPOINTS_DEFECTO)
-            except Exception:
-                pass
+            if self.habilitar_reconocimiento and _PESOS_KEYPOINTS_DEFECTO.exists():
+                estimador = EstimadorHomografiaPitch(ruta_pesos=_PESOS_KEYPOINTS_DEFECTO,
+                    dispositivo=self.dispositivo, largo_m=self.largo_m, ancho_m=self.ancho_m)
             self.rastreador_homografia = RastreadorHomografiaDinamica(
                 estimador_pitch=estimador,
                 gmc=self.gmc,
@@ -194,10 +204,9 @@ def _punto(
     ancho_px: int | None = None,
     alto_px: int | None = None,
 ) -> dict[str, Any]:
-    # Acotar las coordenadas métricas al terreno reglamentario (0.5 a 104.5m / 0.5 a 67.5m)
-    # asegurando que todo jugador o balón detectado se visualice nítidamente dentro del plano 2D
-    x_m = round(float(np.clip(xy[0], 0.5, 104.5)), 2)
-    y_m = round(float(np.clip(xy[1], 0.5, 67.5)), 2)
+    # Las posiciones fuera del terreno se descartan antes, nunca se pegan al borde.
+    x_m = round(float(xy[0]), 2)
+    y_m = round(float(xy[1]), 2)
     punto: dict[str, Any] = {
         "tid": d.tid,
         "equipo": equipo.value,
@@ -214,6 +223,24 @@ def _punto(
     return punto
 
 
+def _en_cancha(xy: tuple[float, float], ctx: Contexto) -> bool:
+    return bool(np.isfinite(xy).all() and 0 <= xy[0] <= ctx.largo_m and 0 <= xy[1] <= ctx.ancho_m)
+
+
+def campo_visible(h: np.ndarray, ancho: int, alto: int, ctx: Contexto) -> list[list[float]]:
+    """Intersección del encuadre con el terreno; no inventa posiciones fuera de vista."""
+    esquinas = np.array([[0, 0], [ancho, 0], [ancho, alto], [0, alto]], dtype=np.float32)
+    denominadores = np.c_[esquinas, np.ones(4)] @ h[2]
+    if not (np.all(denominadores > 1e-8) or np.all(denominadores < -1e-8)):
+        return []  # El horizonte cruza la imagen; el cuadrilátero no es acotado.
+    proy = cv2.perspectiveTransform(esquinas.reshape(-1, 1, 2), h)
+    if not np.isfinite(proy).all():
+        return []
+    terreno = np.array([[0, 0], [ctx.largo_m, 0], [ctx.largo_m, ctx.ancho_m], [0, ctx.ancho_m]], dtype=np.float32)
+    _, interseccion = cv2.intersectConvexConvex(cv2.convexHull(proy), terreno)
+    return np.round(interseccion.reshape(-1, 2), 2).tolist() if interseccion is not None else []
+
+
 def armar_mensaje(
     ctx: Contexto,
     t: float,
@@ -225,22 +252,46 @@ def armar_mensaje(
     alto, ancho = cuadro.shape[:2] if isinstance(cuadro, np.ndarray) and cuadro.ndim >= 2 else (None, None)
     personas = [d for d in detecciones if d.clase in (Clase.JUGADOR, Clase.PORTERO, Clase.ARBITRO)]
     balones = [d for d in detecciones if d.clase == Clase.BALON]
+    detecciones_imagen = []
+    if ancho and alto:
+        for d in detecciones:
+            x1, y1, x2, y2 = d.caja
+            if not np.isfinite([x1, y1, x2, y2, d.conf]).all():
+                continue
+            detecciones_imagen.append({"tid": d.tid, "clase": d.clase.value, "conf": float(d.conf),
+                "bbox": np.clip([100 * x1 / ancho, 100 * y1 / alto,
+                                  100 * x2 / ancho, 100 * y2 / alto], 0, 100).tolist()})
 
     # 1. Compensación de movimiento de cámara (GMC) y homografía dinámica
     t_cam: TransformacionCamara | None = None
     homografia_efectiva = ctx.homografia
+    calibracion_valida = True
     if estado is not None and isinstance(cuadro, np.ndarray) and cuadro.size > 0:
+        referencia = ctx.referencia or {}
+        if referencia.get("ancho_px") and (ancho, alto) != (referencia["ancho_px"], referencia["alto_px"]):
+            raise ValueError("La fuente cambió de resolución respecto a la calibración")
         cajas = [p.caja for p in personas]
         if estado.rastreador_homografia is not None:
             homografia_efectiva = estado.rastreador_homografia.actualizar(
                 cuadro,
                 homografia_referencia=ctx.homografia,
                 cajas_excluidas=cajas,
+                t_s=t,
+                permitir_referencia=(ctx.modo_calibracion == "MANUAL" and
+                    (not referencia or abs(t - referencia.get("tiempo_s", 0)) < .002)),
             )
             t_cam = estado.gmc.ultima_transformacion
+            calibracion_valida = estado.rastreador_homografia.valida
         else:
             t_cam = estado.gmc.estimar(cuadro, cajas_excluidas=cajas)
             homografia_efectiva = estado.gmc.homografia_compensada(ctx.homografia)
+
+    if homografia_efectiva is None:
+        calibracion_valida = False
+        homografia_efectiva = np.eye(3)
+    if not calibracion_valida:
+        # La identidad o la última matriz no son una nueva calibración válida.
+        personas, balones = [], []
 
     # 2. Proyección de jugadores a coordenadas de cancha en metros
     proy_personas = proyectar_detecciones(personas, homografia_efectiva)
@@ -274,6 +325,8 @@ def armar_mensaje(
     # 5. Estructuración de jugadores
     mapa_jugadores: dict[int, dict[str, Any]] = {}
     for (d, xy), equipo in zip(proy_personas, equipos, strict=True):
+        if not _en_cancha(xy, ctx):
+            continue
         pt = _punto(d, equipo, xy, ancho, alto)
         tid = pt["tid"]
         if tid not in mapa_jugadores or pt["conf"] > mapa_jugadores[tid]["conf"]:
@@ -282,38 +335,57 @@ def armar_mensaje(
 
     # 4. Seguimiento cinemático y oclusiones del balón
     balon = None
-    if estado is not None and isinstance(cuadro, np.ndarray) and cuadro.size > 0:
+    if calibracion_valida and estado is not None and isinstance(cuadro, np.ndarray) and cuadro.size > 0:
         balon_det = estado.balon.actualizar(
             cuadro,
-            detecciones,
+            detecciones if calibracion_valida else [],
             cajas_jugadores=[p.caja for p in personas],
             transformacion_camara=t_cam,
         )
-        if balon_det is not None:
+        # Las predicciones cortas ayudan a reencontrarlo, pero no son posesión observada.
+        if balon_det is not None and estado.balon.observado:
             proy = proyectar_detecciones([balon_det], homografia_efectiva)
             if proy:
                 (_, xy), = proy
-                balon = _punto(balon_det, EquipoDetectado.DESCONOCIDO, xy, ancho, alto)
+                if _en_cancha(xy, ctx):
+                    balon = _punto(balon_det, EquipoDetectado.DESCONOCIDO, xy, ancho, alto)
     elif balones:
         mejor = max(balones, key=lambda d: d.conf)
         proy = proyectar_detecciones([mejor], homografia_efectiva)
         if proy:
             (_, xy), = proy
-            balon = _punto(mejor, EquipoDetectado.DESCONOCIDO, xy, ancho, alto)
+            if _en_cancha(xy, ctx):
+                balon = _punto(mejor, EquipoDetectado.DESCONOCIDO, xy, ancho, alto)
 
-    degradado = len(personas) < MIN_JUGADORES_SANO
+    cantidad = sum(j["equipo"] in ("LOCAL", "VISITANTE") for j in jugadores)
+    motivos = []
+    if not calibracion_valida:
+        motivos.append("Calibración perdida: se necesita una nueva referencia de cancha")
+    if cantidad < MIN_JUGADORES_SANO:
+        motivos.append(f"Cobertura parcial: {cantidad} jugadores de equipo visibles")
+    if balon is None:
+        motivos.append("Balón no observado; no inferir posesión")
     return {
         "partido": ctx.partido_id,
         "t": round(t, 3),
         "jugadores": jugadores,
         "balon": balon,
+        "detecciones": detecciones_imagen,
         "calidad": {
             "worker_conectado": True,
-            "fps": ctx.fps_muestreo,
-            "jugadores_detectados": len(personas),
+            "fps": 0.0,  # El ejecutor mide rendimiento; no es una constante nominal.
+            "jugadores_detectados": cantidad,
             "balon_visible": balon is not None,
             "retraso_s": 0.0,
-            "degradado": degradado,
-            "motivo": f"Solo {len(personas)} jugadores detectados" if degradado else None,
+            "degradado": bool(motivos),
+            "motivo": "; ".join(motivos) or None,
+            "calibracion_valida": calibracion_valida,
+            "campo_visible": campo_visible(homografia_efectiva, ancho, alto, ctx) if calibracion_valida and ancho and alto else [],
+            "largo_m": ctx.largo_m,
+            "ancho_m": ctx.ancho_m,
+            "estado_calibracion": estado.rastreador_homografia.estado if estado and estado.rastreador_homografia else ("VERIFICADA" if calibracion_valida else "SIN_REFERENCIA"),
+            "ultimo_anclaje_t": estado.rastreador_homografia.ultimo_anclaje_t if estado and estado.rastreador_homografia else None,
+            "error_lineas_px": estado.rastreador_homografia.error_lineas_px if estado and estado.rastreador_homografia else None,
+            "lineas_imagen": lineas_imagen(homografia_efectiva, ctx.largo_m, ctx.ancho_m, ancho, alto) if calibracion_valida and ancho and alto else [],
         },
     }

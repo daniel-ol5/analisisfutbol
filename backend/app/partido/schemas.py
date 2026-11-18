@@ -6,6 +6,7 @@ que es la pieza que permite a Web y Movil construir en paralelo (Pb-26).
 
 from datetime import datetime
 from enum import StrEnum
+from typing import Annotated
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -60,13 +61,23 @@ class IndicadorCalidad(BaseModel):
     """CU-39. Degradacion explicita: una metrica silenciosamente equivocada es
     peor que una metrica ausente."""
     worker_conectado: bool
-    fps: float = 0
+    fps: float = Field(default=0, ge=0, allow_inf_nan=False)
     jugadores_detectados: int = 0
     balon_visible: bool = False
-    retraso_s: float = 0
+    retraso_s: float = Field(default=0, ge=0, allow_inf_nan=False)
     degradado: bool = Field(default=False,
         description="True con menos de 16 jugadores por mas de 10 s, o balon perdido por mas de 15 s")
     motivo: str | None = None
+    calibracion_valida: bool | None = Field(default=None,
+        description="False: el worker perdió la referencia métrica; no usar posiciones")
+    campo_visible: list[list[float]] | None = Field(default=None,
+        description="Polígono del encuadre visible en metros sobre la cancha")
+    largo_m: float = Field(default=105, gt=0)
+    ancho_m: float = Field(default=68, gt=0)
+    estado_calibracion: str | None = None
+    ultimo_anclaje_t: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    error_lineas_px: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    lineas_imagen: list[list[list[float]]] = Field(default_factory=list)
 
 
 # ---------- CU-36, CU-37, CU-38 Eventos manuales ----------
@@ -134,8 +145,8 @@ class AsignarTrack(BaseModel):
 class PosicionDetectada(BaseModel):
     tid: int = Field(description="Identificador de ByteTrack, no el dorsal")
     equipo: EquipoDetectado
-    x: float = Field(description="Metros sobre el largo de la cancha")
-    y: float = Field(description="Metros sobre el ancho de la cancha")
+    x: float = Field(allow_inf_nan=False, description="Metros sobre el largo de la cancha")
+    y: float = Field(allow_inf_nan=False, description="Metros sobre el ancho de la cancha")
     conf: float = Field(ge=0, le=1)
     bbox: list[float] | None = Field(
         default=None,
@@ -145,6 +156,13 @@ class PosicionDetectada(BaseModel):
         default=None,
         description="Número dorsal o slot canónico persistente del jugador (1..11)",
     )
+
+
+class DeteccionImagen(BaseModel):
+    tid: int
+    clase: str
+    conf: float = Field(ge=0, le=1, allow_inf_nan=False)
+    bbox: list[Annotated[float, Field(ge=0, le=100, allow_inf_nan=False)]] = Field(min_length=4, max_length=4)
 
 
 class MensajeWorker(BaseModel):
@@ -165,8 +183,9 @@ class MensajeWorker(BaseModel):
     }})
 
     partido: int
-    t: float = Field(description="Segundos desde el inicio del partido")
+    t: float = Field(ge=0, allow_inf_nan=False, description="Segundos desde el inicio del partido")
     jugadores: list[PosicionDetectada]
+    detecciones: list[DeteccionImagen] = Field(default_factory=list, max_length=300)
     balon: PosicionDetectada | None = None
     calidad: IndicadorCalidad
 

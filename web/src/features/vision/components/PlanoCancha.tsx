@@ -158,6 +158,14 @@ export function PlanoCancha({
             className="cal-cancha-linea"
           />
 
+          {[0, L - 5.5].map(x => <rect key={x} x={aSvgX(x)} y={aSvgY(W / 2 + 9.16)}
+            width={5.5} height={18.32} className="cal-cancha-linea" />)}
+          {[11, L - 11].map(x => <circle key={x} cx={aSvgX(x)} cy={aSvgY(W / 2)} r={.4} fill="currentColor" />)}
+          {[0, L].map((fondo, lado) => <polyline key={`arco-${lado}`} className="cal-cancha-linea"
+            points={Array.from({ length: 25 }, (_, i) => {
+              const angulo = (i / 12 - 1) * Math.acos(5.5 / 9.15);
+              return `${aSvgX(fondo + (lado === 0 ? 1 : -1) * (11 + 9.15 * Math.cos(angulo)))},${aSvgY(W / 2 + 9.15 * Math.sin(angulo))}`;
+            }).join(" ")} />)}
           {/* Cota de origen (0,0) en esquina inferior izquierda */}
           <text x={aSvgX(0)} y={aSvgY(0) + 5.2} textAnchor="start" className="cal-cancha-cota">
             (0, 0)

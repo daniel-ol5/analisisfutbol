@@ -5,9 +5,7 @@ se prueba que los otros caminos que escriben en él guardan bien, sin tocar su
 código:
 
 - El procesamiento de video grabado (`POST /vision/videos/{id}/resultados`).
-- El procesamiento local de respaldo (`procesar_video_local_en_background`),
-  que pide un almacén nuevo en cada llamada: antes de este cambio sus
-  posiciones se perdían, porque cada instancia acumulaba un solo mensaje.
+- La reproducción de resultados, que debe ser de solo lectura.
 """
 
 import asyncio
@@ -136,7 +134,10 @@ async def test_cada_mensaje_nuevo_reinicia_la_espera():
         anteriores.append(temporizador)
         await asyncio.sleep(0.01)
 
-    assert vencimientos == sorted(vencimientos) and len(set(vencimientos)) == 4
+    # Windows puede compartir un tick entre dos lecturas separadas por 10 ms.
+    # Se verifica un handle nuevo y cancelación del anterior, sin exigir precisión de reloj.
+    assert vencimientos == sorted(vencimientos)
+    assert len({id(t) for t in anteriores}) == 4
     assert all(t.cancelled() for t in anteriores[:-1])
     assert not anteriores[-1].cancelled()
     assert almacen.pendientes(PARTIDO_A) == 4 * 23
@@ -230,21 +231,36 @@ class _AsyncioSinEsperas:
         return resultado
 
 
-async def test_el_procesamiento_local_de_respaldo_guarda_todas_sus_posiciones(
-        cliente, mp4, monkeypatch):
-    """Caso real de Daniel: `procesar_video_local_en_background` pide un
-    almacén nuevo en cada muestra. Con un almacén por proceso no pierde nada."""
+async def test_reproducir_telemetria_no_reinserta_posiciones(cliente, mp4, monkeypatch):
+    """Replay no vuelve a alimentar la persistencia ni el motor del partido."""
     club = await _club(cliente, "a")
     video = await _video_subido(cliente, club, mp4)
     assert (await _lanzar(cliente, club, video)).status_code == 200
+    muestras = [_muestra(club["partido_id"], t) for t in (0, 0.2, 0.4)]
+    assert (await _lote(cliente, club, video, 40, muestras)).status_code == 200
     monkeypatch.setattr(procesamiento, "asyncio", _AsyncioSinEsperas())
-
+    monkeypatch.setattr(procesamiento, "cargar_muestras_partido",
+                        lambda *args, **kwargs: [MensajeWorker.model_validate(m) for m in muestras])
     async with SessionLocal() as db:
         club_id = (await db.get(Video, video["id"])).club_id
-    await procesamiento.procesar_video_local_en_background(video["id"], club_id, "ADMIN")
-
-    async with SessionLocal() as db:
-        assert (await db.get(Video, video["id"])).estado == "PROCESADO"
-    # 150 muestras de 22 jugadores + balón, ninguna perdida
-    assert await contar_posiciones(club["partido_id"]) == 150 * 23
+    for _ in range(2):
+        await procesamiento.transmitir_telemetria_partido_en_background(
+            club["partido_id"], club_id, video_id=video["id"])
+    assert await contar_posiciones(club["partido_id"]) == 9
     assert obtener_almacen_posiciones().pendientes(club["partido_id"]) == 0
+
+
+async def test_video_grabado_registra_equipos_y_calcula_metricas_al_terminar(cliente, mp4):
+    club = await _club(cliente, "metricas_video")
+    video = await _video_subido(cliente, club, mp4)
+    assert (await _lanzar(cliente, club, video)).status_code == 200
+    muestras = [_muestra(club["partido_id"], t) for t in (0, 0.2, 0.4)]
+    for muestra in muestras:
+        muestra["balon"]["x"] = muestra["jugadores"][0]["x"]
+        muestra["balon"]["y"] = muestra["jugadores"][0]["y"]
+    assert (await _lote(cliente, club, video, 99, muestras)).status_code == 200
+    r = await cliente.post(f"/api/vision/videos/{video['id']}/terminar", headers=club["auth"], json={"ok": True})
+    assert r.status_code == 200, r.text
+    r = await cliente.get(f"/api/analisis/partidos/{club['partido_id']}/metricas", headers=club["auth"])
+    assert r.status_code == 200
+    assert r.json()["acumulado_local"]["posesion_pct"] == 100

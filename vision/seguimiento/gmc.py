@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+
 import cv2
 import numpy as np
 
@@ -59,12 +60,16 @@ class CompensadorMovimientoCamara:
         distancia_minima_puntos: float = 20.0,
         umbral_ransac: float = 3.0,
         min_inliers: int = 10,
+        proyectivo: bool = True,
     ) -> None:
         self.max_puntos = max_puntos
         self.calidad_esquinas = calidad_esquinas
         self.distancia_minima_puntos = distancia_minima_puntos
         self.umbral_ransac = umbral_ransac
         self.min_inliers = min_inliers
+        self.proyectivo = proyectivo
+        self.error_px: float | None = None
+        self.correspondencias = 0
 
         self._cuadro_anterior_gris: np.ndarray | None = None
         self._puntos_anteriores: np.ndarray | None = None
@@ -78,6 +83,8 @@ class CompensadorMovimientoCamara:
         self._puntos_anteriores = None
         self._ultima_transformacion = None
         self._t_acumulada_3x3 = _matriz_identidad_3x3()
+        self.error_px = None
+        self.correspondencias = 0
 
     def reanclar(self) -> None:
         """Reinicia la matriz acumulada a la identidad manteniendo el cuadro previo."""
@@ -97,6 +104,7 @@ class CompensadorMovimientoCamara:
         self,
         cuadro_bgr: np.ndarray,
         cajas_excluidas: Sequence[tuple[float, float, float, float]] = (),
+        dt_s: float | None = None,
     ) -> TransformacionCamara:
         """Estima la transformación entre el cuadro anterior y el cuadro actual.
 
@@ -112,7 +120,11 @@ class CompensadorMovimientoCamara:
         # En primeros planos de TV, túnel o repeticiones gráficas, el césped cae (< 28%).
         # Al no ser el plano general del estadio, reiniciamos la acumulación para evitar deriva.
         alto, ancho = cuadro_bgr.shape[:2]
+        self.error_px = None
+        self.correspondencias = 0
         if alto >= 400 and ancho >= 600:
+            from calibracion.terreno import mascara_terreno
+            self._mascara_terreno = mascara_terreno(cuadro_bgr)
             hsv_sub = cv2.cvtColor(cuadro_bgr[::4, ::4], cv2.COLOR_BGR2HSV)
             mascara_cesped = (
                 (hsv_sub[:, :, 0] >= 30) & (hsv_sub[:, :, 0] <= 85) &
@@ -122,10 +134,15 @@ class CompensadorMovimientoCamara:
                 self._cuadro_anterior_gris = None
                 self._puntos_anteriores = None
                 self._t_acumulada_3x3 = _matriz_identidad_3x3()
-                return self._transformacion_identidad()
+                return self._transformacion_identidad(valida=False)
 
         gris = cv2.cvtColor(cuadro_bgr, cv2.COLOR_BGR2GRAY)
         alto, ancho = gris.shape[:2]
+        if self._cuadro_anterior_gris is not None and self._cuadro_anterior_gris.shape != gris.shape:
+            self.reiniciar()
+            self._cuadro_anterior_gris = gris
+            self._extraer_nuevos_puntos(gris, cajas_excluidas)
+            return self._transformacion_identidad(valida=False)
 
         # Si es el primer fotograma, inicializamos puntos y retornamos identidad
         if self._cuadro_anterior_gris is None:
@@ -140,7 +157,7 @@ class CompensadorMovimientoCamara:
         if self._puntos_anteriores is None or len(self._puntos_anteriores) < self.min_inliers:
             # Imposible extraer puntos suficientes
             self._cuadro_anterior_gris = gris
-            return self._transformacion_identidad()
+            return self._transformacion_identidad(valida=False)
 
         # Flujo óptico piramidal Lucas-Kanade
         puntos_actuales, estado, _ = cv2.calcOpticalFlowPyrLK(
@@ -156,37 +173,54 @@ class CompensadorMovimientoCamara:
         if puntos_actuales is None or estado is None:
             self._cuadro_anterior_gris = gris
             self._extraer_nuevos_puntos(gris, cajas_excluidas)
-            return self._transformacion_identidad()
+            return self._transformacion_identidad(valida=False)
 
-        validos = (estado.flatten() == 1)
+        # Comprobar ida/vuelta: una textura parecida en otra zona no es una correspondencia.
+        vuelta, estado_vuelta, _ = cv2.calcOpticalFlowPyrLK(
+            gris, self._cuadro_anterior_gris, puntos_actuales, None,
+            winSize=(21, 21), maxLevel=3,
+        )
+        if vuelta is None or estado_vuelta is None:
+            self._cuadro_anterior_gris = gris
+            self._extraer_nuevos_puntos(gris, cajas_excluidas)
+            return self._transformacion_identidad(valida=False)
+        validos = ((estado.flatten() == 1) & (estado_vuelta.flatten() == 1)
+                   & (np.linalg.norm(vuelta - self._puntos_anteriores, axis=2).ravel() < 1.5))
         p_ant = self._puntos_anteriores[validos]
         p_act = puntos_actuales[validos]
 
         if len(p_ant) < self.min_inliers:
             self._cuadro_anterior_gris = gris
             self._extraer_nuevos_puntos(gris, cajas_excluidas)
-            return self._transformacion_identidad()
+            return self._transformacion_identidad(valida=False)
 
-        # Estimación afín parcial con RANSAC
-        m_2x3, inliers = cv2.estimateAffinePartial2D(
-            p_ant,
-            p_act,
-            method=cv2.RANSAC,
-            ransacReprojThreshold=self.umbral_ransac,
-        )
+        # El paneo de una cámara elevada cambia la perspectiva del plano.
+        if self.proyectivo:
+            m_3x3, inliers = cv2.findHomography(
+                p_ant, p_act, cv2.RANSAC, self.umbral_ransac,
+            )
+            m_2x3 = m_3x3[:2].copy() if m_3x3 is not None else None
+        else:
+            m_2x3, inliers = cv2.estimateAffinePartial2D(
+                p_ant, p_act, method=cv2.RANSAC, ransacReprojThreshold=self.umbral_ransac,
+            )
+            m_3x3 = np.eye(3, dtype=np.float64)
+            if m_2x3 is not None:
+                m_3x3[:2] = m_2x3
 
-        if m_2x3 is None or inliers is None:
+        if m_2x3 is None or inliers is None or not np.isfinite(m_3x3).all():
             self._cuadro_anterior_gris = gris
             self._extraer_nuevos_puntos(gris, cajas_excluidas)
-            return self._transformacion_identidad()
+            return self._transformacion_identidad(valida=False)
 
         num_inliers = int(np.sum(inliers))
         pct_inliers = num_inliers / max(1, len(p_ant))
+        self.correspondencias = num_inliers
 
         if num_inliers < self.min_inliers:
             self._cuadro_anterior_gris = gris
             self._extraer_nuevos_puntos(gris, cajas_excluidas)
-            return self._transformacion_identidad()
+            return self._transformacion_identidad(valida=False)
 
         # Descomponer matriz 2x3 afín parcial:
         # [[a, -b, tx],
@@ -199,17 +233,18 @@ class CompensadorMovimientoCamara:
         escala = float(np.sqrt(a * a + b * b))
         rotacion = float(np.arctan2(b, a))
 
-        # Restricciones físicas de cámara táctica de estadio (montada en trípode elevado):
-        # 1. Paneo horizontal suave: máx 40 px por fotograma muestreado (200 ms)
-        # 2. Inclinación vertical (tilt) casi nula: máx 15 px por fotograma
-        # 3. Zoom estable (0.95 a 1.05) y rotación/roll casi cero (< 0.08 rad)
-        # 4. Inliers suficientes (al menos 20% de puntos estables)
+        esquinas = np.array([[0, 0], [ancho, 0], [ancho, alto], [0, alto]], dtype=np.float32)
+        denominadores = np.c_[esquinas, np.ones(4)] @ m_3x3[2]
+        proyectadas = cv2.perspectiveTransform(esquinas.reshape(-1, 1, 2), m_3x3).reshape(-1, 2)
+        area = cv2.contourArea(proyectadas.astype(np.float32), oriented=True) / (ancho * alto)
+        # Límites proporcionales a resolución e intervalo real, no un desplazamiento fijo.
+        dt = max(1 / 120, min(float(dt_s if dt_s is not None else .2), 1.0))
+        desplazamiento = np.max(np.linalg.norm(proyectadas - esquinas, axis=1)) / np.hypot(ancho, alto)
+        cobertura = cv2.contourArea(cv2.convexHull(p_ant[inliers.ravel() == 1])) / (ancho * alto)
         es_valida = (
-            abs(tx) < 40.0 and
-            abs(ty) < 15.0 and
-            0.95 <= escala <= 1.05 and
-            abs(rotacion) < 0.08 and
-            pct_inliers >= 0.20
+            np.all(denominadores > 0) and np.isfinite(proyectadas).all()
+            and .5 < area < 2.0 and desplazamiento < max(.10, dt * .9)
+            and cobertura > .015 and pct_inliers >= .45
         )
 
         if not es_valida:
@@ -217,25 +252,15 @@ class CompensadorMovimientoCamara:
             self._cuadro_anterior_gris = gris
             self._extraer_nuevos_puntos(gris, cajas_excluidas)
             self._t_acumulada_3x3 = _matriz_identidad_3x3()
-            return self._transformacion_identidad()
+            return self._transformacion_identidad(valida=False)
 
-        m_3x3 = np.eye(3, dtype=np.float64)
-        m_3x3[:2, :] = m_2x3
+        proyectados = cv2.perspectiveTransform(p_ant, m_3x3)
+        self.error_px = float(np.median(np.linalg.norm(
+            proyectados[inliers.ravel() == 1] - p_act[inliers.ravel() == 1], axis=2)))
 
-        # En cámaras tácticas montadas en tribuna (trípode nivelado):
-        # El movimiento físico real es exclusivamente paneo horizontal (dx) y micro-tilt vertical (dy).
-        # Para evitar la acumulación de distorsiones angulares espurias en videos largos (1000+ cuadros),
-        # acumulamos el desplazamiento translacional neto y mantenemos la ortogonalidad perfecta.
-        # Acumulación de traslación con límite proporcional a la resolución del plano
-        max_dx = float(ancho * 1.2)
-        max_dy = float(alto * 0.35)
-        dx_acum = float(np.clip(self._t_acumulada_3x3[0, 2] + tx, -max_dx, max_dx))
-        dy_acum = float(np.clip(self._t_acumulada_3x3[1, 2] + ty, -max_dy, max_dy))
-
-        nueva_acum = np.eye(3, dtype=np.float64)
-        nueva_acum[0, 2] = dx_acum
-        nueva_acum[1, 2] = dy_acum
-        self._t_acumulada_3x3 = nueva_acum
+        # Composición, no suma de desplazamientos: conserva escala y rotación.
+        # La referencia absoluta sigue dependiendo de marcas conocidas de cancha.
+        self._t_acumulada_3x3 = m_3x3 @ self._t_acumulada_3x3
 
         # Guardar estado para el siguiente cuadro
         self._cuadro_anterior_gris = gris
@@ -268,6 +293,11 @@ class CompensadorMovimientoCamara:
         alto, ancho = gris.shape[:2]
         mascara = np.full((alto, ancho), 255, dtype=np.uint8)
 
+        # El contorno de césped incluye las líneas blancas de su interior. Evita
+        # seguir espectadores/vallas, que no pertenecen al plano del terreno.
+        if alto >= 400 and ancho >= 600 and hasattr(self, "_mascara_terreno"):
+            mascara &= self._mascara_terreno
+
         # Excluir márgenes extremos (marcadores de TV, barras de estado y vallas publicitarias LED)
         mascara[:int(alto * 0.12), :] = 0
         mascara[int(alto * 0.88):, :] = 0
@@ -289,7 +319,7 @@ class CompensadorMovimientoCamara:
         )
         self._puntos_anteriores = puntos
 
-    def _transformacion_identidad(self) -> TransformacionCamara:
+    def _transformacion_identidad(self, valida: bool = True) -> TransformacionCamara:
         res = TransformacionCamara(
             dx=0.0,
             dy=0.0,
@@ -297,8 +327,8 @@ class CompensadorMovimientoCamara:
             escala=1.0,
             matriz_afine=_matriz_identidad_2x3(),
             matriz_3x3=_matriz_identidad_3x3(),
-            inliers_pct=1.0,
-            es_valida=True,
+            inliers_pct=1.0 if valida else 0.0,
+            es_valida=valida,
         )
         self._ultima_transformacion = res
         return res
@@ -318,7 +348,7 @@ class CompensadorMovimientoCamara:
             [x2, y2],
             [x1, y2],
         ], dtype=np.float32).reshape(-1, 1, 2)
-        transformados = cv2.transform(puntos, transformacion.matriz_afine).reshape(-1, 2)
+        transformados = cv2.perspectiveTransform(puntos, transformacion.matriz_3x3).reshape(-1, 2)
         nx1 = float(np.min(transformados[:, 0]))
         ny1 = float(np.min(transformados[:, 1]))
         nx2 = float(np.max(transformados[:, 0]))

@@ -27,6 +27,9 @@ interface Props {
   colorLocal?: string;
   colorVisitante?: string;
   className?: string;
+  campoVisible?: number[][] | null;
+  largoM?: number;
+  anchoM?: number;
 }
 
 const CONFIG_DEFECTO: ConfiguracionPlano2D = {
@@ -106,6 +109,9 @@ export const Plano2DCancha = memo(function Plano2DCancha({
   colorLocal,
   colorVisitante,
   className = "",
+  campoVisible,
+  largoM = 105,
+  anchoM = 68,
 }: Props) {
   const [jugadorSeleccionado, setJugadorSeleccionado] = useState<PosicionDetectada | null>(null);
   const clipId = useId();
@@ -119,8 +125,8 @@ export const Plano2DCancha = memo(function Plano2DCancha({
         mapa.set(j.tid, j);
       }
     }
-    return Array.from(mapa.values());
-  }, [jugadores]);
+    return Array.from(mapa.values()).filter(j => Number.isFinite(j.x) && Number.isFinite(j.y) && j.x >= 0 && j.x <= largoM && j.y >= 0 && j.y <= anchoM);
+  }, [jugadores, largoM, anchoM]);
 
   const cfg: ConfiguracionPlano2D = { ...CONFIG_DEFECTO, ...configuracion };
   const { mostrarEtiquetas, mostrarEstelaBalon, altoContraste, invertirLados } = cfg;
@@ -132,8 +138,8 @@ export const Plano2DCancha = memo(function Plano2DCancha({
   const colorLineas = altoContraste ? "#ffffff" : "rgba(255, 255, 255, 0.88)";
 
   // Coordenadas transformadas si está invertido
-  const transformarX = (x: number) => (invertirLados ? LARGO - x : x);
-  const transformarY = (y: number) => (invertirLados ? ANCHO - y : y);
+  const transformarX = (x: number) => (invertirLados ? LARGO - x / largoM * LARGO : x / largoM * LARGO);
+  const transformarY = (y: number) => (invertirLados ? ANCHO - y / anchoM * ANCHO : y / anchoM * ANCHO);
 
   return (
     <div className={`plano-cancha-contenedor ${altoContraste ? "plano-alto-contraste" : ""} ${className}`}>
@@ -224,6 +230,10 @@ export const Plano2DCancha = memo(function Plano2DCancha({
           <rect x="105" y="30.34" width="2.44" height="7.32" fill="url(#red-arco)" />
         </g>
 
+        {campoVisible && campoVisible.length >= 3 && <g clipPath={`url(#${clipId})`}>
+          <polygon points={campoVisible.map(([x, y]) => `${transformarX(x)},${transformarY(y)}`).join(" ")}
+            fill="rgba(255,255,255,0.12)" stroke="#bce6cf" strokeWidth="0.55" strokeDasharray="2 1" />
+        </g>}
         {/* Estela de trayectoria reciente del balón (resaltada en color ámbar neón) */}
         {mostrarEstelaBalon && estelaBalon.length > 1 && (
           <g className="plano-estela-grupo">
@@ -249,8 +259,8 @@ export const Plano2DCancha = memo(function Plano2DCancha({
         {/* Jugadores detectados con interpolación fluida de posición y acotados al campo */}
         {jugadoresUnicos.map((j) => {
           const col = obtenerColorEquipo(j.equipo, altoContraste, colorLocal, colorVisitante);
-          const px = transformarX(Math.min(LARGO - 0.8, Math.max(0.8, j.x)));
-          const py = transformarY(Math.min(ANCHO - 0.8, Math.max(0.8, j.y)));
+          const px = transformarX(j.x);
+          const py = transformarY(j.y);
           const esSeleccionado = jugadorSeleccionado?.tid === j.tid;
 
           const etiqueta =

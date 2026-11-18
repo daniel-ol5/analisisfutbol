@@ -15,7 +15,10 @@ usuario ADMIN o ANALISTA del club alcanza: el worker solo toma videos de ese clu
 from __future__ import annotations
 
 import argparse
+import contextlib
 import gc
+import getpass
+import hashlib
 import logging
 import math
 import os
@@ -27,11 +30,12 @@ from pathlib import Path
 from typing import Any, Protocol
 
 import numpy as np
-
 from calibracion.homografia import cargar_homografia
-from procesamiento.api import ApiBackend, Cancelado
-from procesamiento.mensajes import Contexto, EstadoPipeline, armar_mensaje
 from seguimiento.tipos import Deteccion
+
+from procesamiento.api import ApiBackend, Cancelado
+from procesamiento.fuente import CuadroProcesado
+from procesamiento.mensajes import Contexto, EstadoPipeline, armar_mensaje
 
 log = logging.getLogger("procesamiento")
 
@@ -39,7 +43,7 @@ log = logging.getLogger("procesamiento")
 TAMANO_LOTE = 25
 VID_STRIDE = 6
 
-Cuadros = Iterable[tuple[np.ndarray, list[Deteccion]]]
+Cuadros = Iterable[CuadroProcesado | tuple[np.ndarray, list[Deteccion]]]
 
 
 class Backend(Protocol):
@@ -50,13 +54,20 @@ class Backend(Protocol):
 
 
 def contexto(trabajo: dict[str, Any], fps_muestreo: float) -> Contexto:
+    if trabajo.get("modo_calibracion") == "MANUAL" and not trabajo.get("referencia"):
+        raise ValueError("La calibración manual anterior no identifica su fuente. "
+                         "Vincúlala al video y cuadro en Calibrar cámara antes de procesar")
     return Contexto(
         partido_id=trabajo["partido_id"],
-        homografia=cargar_homografia(trabajo["matriz_h"]),
+        homografia=cargar_homografia(trabajo["matriz_h"]) if trabajo.get("matriz_h") else None,
         es_local=trabajo["es_local"],
         color_propio=trabajo["color_propio"],
         color_rival=trabajo.get("color_rival"),
         fps_muestreo=fps_muestreo,
+        largo_m=trabajo.get("largo_m", 105.0),
+        ancho_m=trabajo.get("ancho_m", 68.0),
+        modo_calibracion=trabajo.get("modo_calibracion", "MANUAL"),
+        referencia=trabajo.get("referencia"),
     )
 
 
@@ -68,45 +79,54 @@ def procesar_trabajo(
     total_cuadros: int,
     vid_stride: int = VID_STRIDE,
     tamano_lote: int = TAMANO_LOTE,
+    dispositivo: str = "cpu",
 ) -> int:
     """Procesa todos los cuadros, manda los lotes y cierra. Devuelve las muestras enviadas.
 
     Si el backend cancela, `backend.resultados` lanza `Cancelado` y se corta
     sin cerrar: el video ya volvió a SUBIDO.
     """
-    if fps_video <= 0:
+    if not math.isfinite(fps_video) or fps_video <= 0:
         raise ValueError("El video no informa sus cuadros por segundo")
+    if vid_stride < 1 or tamano_lote < 1:
+        raise ValueError("El salto y el tamaño del lote deben ser positivos")
     ctx = contexto(trabajo, fps_muestreo=5.0)
     video_id = trabajo["video_id"]
 
-    salto_emision = max(1, int(round(fps_video / (5.0 * vid_stride)))) if vid_stride < 5 else 1
-    total_muestras_emitir = (
-        max(1, math.ceil(total_cuadros / (vid_stride * salto_emision)))
-        if total_cuadros > 0
-        else None
-    )
-
-    estado = EstadoPipeline()
+    estado = EstadoPipeline(dispositivo=dispositivo, largo_m=ctx.largo_m, ancho_m=ctx.ancho_m,
+                            habilitar_reconocimiento=ctx.modo_calibracion == "AUTOMATICA" or bool(ctx.referencia))
+    if ctx.modo_calibracion == "AUTOMATICA" and estado.rastreador_homografia.estimador_pitch is None:
+        raise ValueError("Instala el modelo de cancha: python -m calibracion.instalar_modelo")
     lote: list[dict[str, Any]] = []
     enviadas = 0
 
-    def progreso(hechas: int) -> int:
-        if total_muestras_emitir is None:
-            return 0
-        return min(99, int(100 * hechas / total_muestras_emitir))
-
-    for i, (cuadro, detecciones) in enumerate(cuadros):
-        if i % salto_emision != 0:
+    siguiente_t = 0.0
+    indice = 0
+    inicio = time.perf_counter()
+    hechas = 0
+    for i, item in enumerate(cuadros):
+        if isinstance(item, CuadroProcesado):
+            cuadro, detecciones, t, indice = item.imagen, item.detecciones, item.t, item.indice
+        else:  # Adaptadores de pruebas y fuentes antiguas.
+            cuadro, detecciones = item
+            indice, t = i * vid_stride, i * vid_stride / fps_video
+        # Cámara, balón y colores avanzan también entre emisiones.
+        mensaje = armar_mensaje(ctx, t, cuadro, detecciones, estado=estado)
+        hechas += 1
+        mensaje["calidad"]["fps"] = round(hechas / max(time.perf_counter() - inicio, 1e-6), 2)
+        if t + 1e-6 < siguiente_t:
             continue
-        t = round(i * vid_stride / fps_video, 2)
-        lote.append(armar_mensaje(ctx, t, cuadro, detecciones, estado=estado))
+        siguiente_t = (math.floor((t + 1e-6) * 5) + 1) / 5
+        lote.append(mensaje)
         if len(lote) >= tamano_lote:
             enviadas += len(lote)
-            backend.resultados(video_id, progreso(enviadas), lote)
+            progreso = min(99, int(100 * (indice + vid_stride) / total_cuadros)) if total_cuadros else 0
+            backend.resultados(video_id, progreso, lote)
             lote = []
     if lote:
         enviadas += len(lote)
-        backend.resultados(video_id, progreso(enviadas), lote)
+        progreso = min(99, int(100 * (indice + vid_stride) / total_cuadros)) if total_cuadros else 0
+        backend.resultados(video_id, progreso, lote)
 
     backend.terminar(video_id, ok=True)
     return enviadas
@@ -116,6 +136,8 @@ def atender_uno(
     backend: Backend,
     abrir_video: Callable[[dict[str, Any], Path], tuple[Cuadros, float, int]],
     carpeta: Path,
+    vid_stride: int = VID_STRIDE,
+    dispositivo: str = "cpu",
 ) -> bool:
     """Toma y procesa un trabajo. Devuelve False si no había ninguno."""
     trabajo = backend.tomar()
@@ -127,7 +149,8 @@ def atender_uno(
     try:
         backend.descargar(trabajo["archivo"], ruta)
         cuadros, fps, total = abrir_video(trabajo, ruta)
-        enviadas = procesar_trabajo(trabajo, cuadros, backend, fps, total)
+        enviadas = procesar_trabajo(trabajo, cuadros, backend, fps, total, vid_stride=vid_stride,
+                                   dispositivo=dispositivo)
         log.info("Video %s procesado: %d muestras", video_id, enviadas)
     except Cancelado:
         log.info("Video %s: el procesamiento se canceló", video_id)
@@ -137,20 +160,17 @@ def atender_uno(
     finally:
         if "cuadros" in locals():
             if hasattr(cuadros, "close"):
-                try:
+                with contextlib.suppress(Exception):
                     cuadros.close()
-                except Exception:
-                    pass
             del cuadros
         gc.collect()
-        try:
+        with contextlib.suppress(OSError):
             ruta.unlink(missing_ok=True)
-        except OSError:
-            pass
     return True
 
 
-def abrir_con_yolo(dispositivo: str, clases: str, carpeta: Path, vid_stride: int = VID_STRIDE):
+def abrir_con_yolo(dispositivo: str, clases: str, carpeta: Path, vid_stride: int = VID_STRIDE,
+                   tamano_img: int = 1280):
     """Fábrica de `abrir_video` con el modelo real. Importa ultralytics solo al usarse."""
 
     def abrir(trabajo: dict[str, Any], ruta: Path) -> tuple[Cuadros, float, int]:
@@ -162,25 +182,33 @@ def abrir_con_yolo(dispositivo: str, clases: str, carpeta: Path, vid_stride: int
             ConfigModelo,
             ModeloDeteccion,
         )
+
         from procesamiento.fuente import datos_del_video, seguir_con_cuadros
 
         modelo = trabajo.get("modelo")
         pesos = str(_PESOS_FUTBOL if _PESOS_FUTBOL.exists() and clases == "futbol" else "yolo11n.pt")
         if modelo:
             pesos = str(_bajar_pesos(modelo["archivo_url"], carpeta / "modelos"))
+        elif clases == "propio":
+            raise ValueError("Para --clases propio debes registrar y seleccionar un modelo entrenado")
+        elif clases == "futbol" and not _PESOS_FUTBOL.exists():
+            log.warning("No hay pesos especializados; se usará COCO con sus clases correctas")
 
         clases_map = (
             CLASES_FUTBOL
-            if clases == "futbol"
+            if clases == "futbol" and (modelo or _PESOS_FUTBOL.exists())
             else (CLASES_PROPIO if clases == "propio" else CLASES_COCO)
         )
         config = ConfigModelo(
             ruta_pesos=pesos,
             dispositivo=dispositivo,
             clases=dict(clases_map),
+            tamano_img=tamano_img,
         )
         fps, total = datos_del_video(ruta)
-        return seguir_con_cuadros(ModeloDeteccion(config), ruta, vid_stride), fps, total
+        referencia = trabajo.get("referencia") or {}
+        indices = {referencia["cuadro_indice"]} if referencia.get("cuadro_indice") is not None else set()
+        return seguir_con_cuadros(ModeloDeteccion(config), ruta, vid_stride, indices_incluir=indices), fps, total
 
     return abrir
 
@@ -190,9 +218,10 @@ def _bajar_pesos(url: str, carpeta: Path) -> Path:
     import urllib.request
 
     carpeta.mkdir(parents=True, exist_ok=True)
-    destino = carpeta / Path(url.split("?")[0]).name
+    nombre = Path(url.split("?")[0]).name
+    destino = carpeta / f"{hashlib.sha256(url.encode()).hexdigest()[:16]}-{nombre}"
     if not destino.exists():
-        urllib.request.urlretrieve(url, destino)  # noqa: S310 — https validado al registrar
+        urllib.request.urlretrieve(url, destino)
     return destino
 
 
@@ -210,16 +239,27 @@ def argumentos(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--espera", type=float, default=10.0, help="Segundos entre consultas sin trabajo")
     p.add_argument("--stride", type=int, default=None,
                    help="Paso de cuadros para el tracker (1 en GPU para máxima continuidad, 6 en CPU)")
+    p.add_argument("--tamano-img", type=int, default=1280, help="Tamaño de inferencia; no redimensiona el archivo")
     p.add_argument("--una-vez", action="store_true", help="Procesar como mucho un video y salir")
     args = p.parse_args(argv)
+    if not args.token and args.email and not args.password:
+        args.password = getpass.getpass("Contraseña del analista: ")
     if not args.token and not (args.email and args.password):
         p.error("Debe especificar --token, o bien --email y --password")
+    if (args.stride is not None and args.stride < 1) or args.tamano_img < 32:
+        p.error("--stride debe ser positivo y --tamano-img al menos 32")
     return args
 
 
 def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     args = argumentos(argv)
+    from deteccion.modelo import ConfigModelo, ModeloDeteccion
+
+    efectivo = ModeloDeteccion(ConfigModelo(dispositivo=args.dispositivo)).dispositivo_efectivo()
+    if efectivo != args.dispositivo:
+        log.warning("%s no está disponible; se usará %s", args.dispositivo, efectivo)
+    args.dispositivo = efectivo
     backend = ApiBackend(
         args.api,
         email=args.email or "",
@@ -229,10 +269,11 @@ def main(argv: list[str] | None = None) -> int:
     carpeta = Path(tempfile.gettempdir()) / "areatecnica-worker"
     stride = args.stride if args.stride is not None else (1 if "cuda" in args.dispositivo else VID_STRIDE)
     log.info("Iniciando worker en %s (dispositivo: %s, stride: %d)...", args.api, args.dispositivo, stride)
-    abrir = abrir_con_yolo(args.dispositivo, args.clases, carpeta, vid_stride=stride)
+    abrir = abrir_con_yolo(args.dispositivo, args.clases, carpeta, vid_stride=stride,
+                          tamano_img=args.tamano_img)
     log.info("Esperando videos en %s", args.api)
     while True:
-        atendio = atender_uno(backend, abrir, carpeta)
+        atendio = atender_uno(backend, abrir, carpeta, vid_stride=stride, dispositivo=args.dispositivo)
         if args.una_vez:
             return 0
         if not atendio:

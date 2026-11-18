@@ -1,7 +1,8 @@
 from unittest.mock import MagicMock
+
+import cv2
 import numpy as np
 import pytest
-
 from calibracion.dinamica import (
     EstimadorHomografiaPitch,
     RastreadorHomografiaDinamica,
@@ -18,14 +19,14 @@ def test_generar_keypoints_campo_estandar():
         assert 0.0 <= y <= 68.0, f"Y={y} fuera de rango en keypoint {idx}"
 
     # Córners
-    assert kpts[0] == (0.0, 0.0)
-    assert kpts[5] == (0.0, 68.0)
-    assert kpts[24] == (105.0, 0.0)
-    assert kpts[29] == (105.0, 68.0)
+    assert kpts[0] == (0.0, 68.0)
+    assert kpts[5] == (0.0, 0.0)
+    assert kpts[24] == (105.0, 68.0)
+    assert kpts[29] == (105.0, 0.0)
 
     # Línea media y círculo central
-    assert kpts[13] == (52.5, 0.0)
-    assert kpts[16] == (52.5, 68.0)
+    assert kpts[13] == (52.5, 68.0)
+    assert kpts[16] == (52.5, 0.0)
     assert kpts[30] == pytest.approx((52.5 - 9.15, 34.0), abs=1e-3)
     assert kpts[31] == pytest.approx((52.5 + 9.15, 34.0), abs=1e-3)
 
@@ -76,6 +77,15 @@ def test_estimador_con_mock_yolo():
     estimador._modelo = mock_modelo
 
     frame_dummy = np.zeros((720, 1280, 3), dtype=np.uint8)
+    frame_dummy[:] = (35, 110, 40)
+    cv2.rectangle(frame_dummy, (100, 50), (1150, 594), (255, 255, 255), 3)
+    cv2.line(frame_dummy, (625, 50), (625, 594), (255, 255, 255), 3)
+    cv2.ellipse(frame_dummy, (625, 322), (92, 73), 0, 0, 360, (255, 255, 255), 3)
+    for fondo, signo in ((0, 1), (105, -1)):
+        for profundidad, semi in ((16.5, 20.16), (5.5, 9.16)):
+            xa, xb = sorted((round(100 + 10 * fondo), round(100 + 10 * (fondo + signo * profundidad))))
+            cv2.rectangle(frame_dummy, (xa, round(50 + 8 * (34 - semi))),
+                          (xb, round(50 + 8 * (34 + semi))), (255, 255, 255), 3)
     res = estimador.estimar(frame_dummy)
 
     assert res.es_valida
@@ -84,6 +94,8 @@ def test_estimador_con_mock_yolo():
     assert res.error_medio_m < 0.05
     assert len(res.puntos_imagen) == len(indices_usados)
     assert len(res.puntos_cancha) == len(indices_usados)
+    # El mismo ajuste perfecto sin líneas reales no valida una referencia.
+    assert not estimador.estimar(np.zeros_like(frame_dummy)).es_valida
 
 
 def test_rastreador_homografia_dinamica_gmc():
@@ -97,9 +109,9 @@ def test_rastreador_homografia_dinamica_gmc():
         matriz_3x3=np.array([[1.0, 0.0, 50.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]),
         inliers_pct=0.9, es_valida=True
     ))
-    gmc._t_acumulada_3x3 = np.array([[1.0, 0.0, 50.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]])
-
     rastreador = RastreadorHomografiaDinamica(estimador_pitch=None, gmc=gmc)
+    rastreador.reiniciar(H_0)
+    gmc._t_acumulada_3x3 = np.array([[1.0, 0.0, 50.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]])
     frame_dummy = np.zeros((100, 100, 3), dtype=np.uint8)
 
     H_din = rastreador.actualizar(frame_dummy, homografia_referencia=H_0)
@@ -120,7 +132,7 @@ def test_rastreador_homografia_dinamica_suavizado_recalibracion():
 
     # Estimador mock que devuelve una homografía levemente distinta
     H_pitch = np.array([
-        [1.0, 0.0, 10.0],
+        [1.0, 0.0, 1.0],
         [0.0, 1.0, 0.0],
         [0.0, 0.0, 1.0],
     ], dtype=np.float64)
@@ -140,5 +152,5 @@ def test_rastreador_homografia_dinamica_suavizado_recalibracion():
     # Forzar recalibración
     H_result = rastreador.actualizar(frame_dummy, homografia_referencia=H_0, forzar_recalibracion=True)
 
-    # Suavizado al 50%: (1 - 0.5) * 0.0 + 0.5 * 10.0 = 5.0
-    assert H_result[0, 2] == pytest.approx(5.0, abs=1e-3)
+    # Correcciones pequeñas se suavizan; los saltos grandes se rechazan.
+    assert H_result[0, 2] == pytest.approx(.5, abs=1e-3)

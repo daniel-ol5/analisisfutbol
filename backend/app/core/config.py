@@ -37,6 +37,7 @@ class Settings(BaseSettings):
     videos_dir: str = "./almacen/videos"
     video_max_bytes: int = 16 * 1024**3       # 16 GiB: un partido en 4K entra holgado
     video_max_trozo_bytes: int = 64 * 1024**2  # tope de cada PUT; el cliente usa 8 MiB
+    vision_auto_worker: bool = False  # El worker externo toma la cola; evita competir en CPU.
 
     @property
     def origenes(self) -> list[str]:

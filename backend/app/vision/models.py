@@ -45,6 +45,8 @@ class Calibracion(Base):
 
     largo_m: Mapped[float] = mapped_column(Float)
     ancho_m: Mapped[float] = mapped_column(Float)
+    modo: Mapped[str] = mapped_column(String(16), default="MANUAL", server_default="MANUAL")
+    referencia: Mapped[dict | None] = mapped_column(JSON(none_as_null=True), nullable=True)
     # JSON genérico: funciona igual en SQLite y PostgreSQL.
     puntos_imagen: Mapped[list[dict[str, float]]] = mapped_column(JSON)
     puntos_cancha: Mapped[list[dict[str, float]]] = mapped_column(JSON)

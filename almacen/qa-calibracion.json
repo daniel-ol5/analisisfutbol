@@ -1,0 +1,16 @@
+{
+  "errors": [],
+  "desktopOverflow": false,
+  "mobileOverflow": false,
+  "configuracionesGuardadas": [
+    {
+      "modo": "AUTOMATICA",
+      "puntos": 0
+    },
+    {
+      "modo": "MANUAL",
+      "puntos": 8
+    }
+  ],
+  "alcance": "Interfaz con API simulada; no mide precisión geométrica"
+}
