@@ -1,0 +1,80 @@
+@startuml paquetes-por-capas
+!theme plain
+!pragma layout smetana
+top to bottom direction
+skinparam packageStyle folder
+skinparam shadowing false
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName SansSerif
+skinparam defaultFontColor #172B35
+skinparam ArrowColor #476475
+skinparam ArrowFontColor #294858
+skinparam ArrowFontSize 12
+skinparam nodesep 24
+skinparam ranksep 42
+skinparam package {
+  BorderColor #748F9B
+  FontColor #172B35
+  FontSize 14
+}
+
+title Área Técnica · Diagrama UML de paquetes por capas
+
+package "Presentación" as Presentacion #EAF5FA {
+  package "Aplicación web\nReact · web/src" as web #FFFFFF
+  package "Aplicación móvil\nFlutter · movil/lib" as movil #FFFFFF
+  package "Rutas HTTP y WebSocket\nFastAPI · router.py · schemas.py" as API #FFFFFF
+  web -[hidden]right- movil
+  web ..> API
+  movil ..> API
+}
+
+package "Negocio" as Negocio #EAF5EC {
+  package "Usuarios y permisos" as seguridad #FFFFFF
+  package "Equipos y planteles" as deportivo #FFFFFF
+  package "Calibración y videos" as vision #FFFFFF
+  package "Operación del partido" as partido #FFFFFF
+  package "Métricas y análisis" as analisis #FFFFFF
+  package "Asistencia y reportes" as asistencia #FFFFFF
+
+  seguridad -[hidden]right- deportivo
+  deportivo -[hidden]right- vision
+  partido -[hidden]right- analisis
+  analisis -[hidden]right- asistencia
+  seguridad -[hidden]down- partido
+  deportivo -[hidden]down- analisis
+  vision -[hidden]down- asistencia
+}
+
+package "Datos" as Datos #F2ECF7 {
+  package "Acceso a base de datos\nSQLAlchemy · models.py\ncore/database.py" as ORM #FFFFFF
+  package "Acceso a grabaciones\nvision/almacen.py" as Almacen #FFFFFF
+  ORM -[hidden]right- Almacen
+}
+
+package "Infraestructura" as Infraestructura #FFF3DC {
+  database "PostgreSQL" as DB #FFFFFF
+  folder "Almacenamiento actual\nGrabaciones y muestras" as Archivos #FFFFFF
+  package "Configuración, correo\ny canal en vivo" as core #FFFFFF
+  package "Worker de visión · Python" as Worker #FFFAF2 {
+    package "Orquestación y cliente de API\nvision/procesamiento" as Procesamiento #FFFFFF
+    package "Detección, seguimiento y calibración\nvision/deteccion · seguimiento · calibracion" as Inferencia #FFFFFF
+    Procesamiento ..> Inferencia
+  }
+  DB -[hidden]right- Archivos
+  Archivos -[hidden]right- core
+  core -[hidden]right- Procesamiento
+}
+
+API .down.> Negocio : invoca casos de uso
+Negocio .down.> Datos
+API -[hidden]down- deportivo
+analisis -[hidden]down- ORM
+ORM .down.> DB : SQL
+Almacen .down.> Archivos
+Procesamiento .up.> API : HTTP y WebSocket
+
+legend bottom
+  Las flechas punteadas indican dependencias. El worker se ejecuta en un proceso separado.
+endlegend
+@enduml

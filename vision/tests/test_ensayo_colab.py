@@ -56,6 +56,8 @@ def test_paquete_colab_solo_incluye_codigo_y_configuracion(tmp_path):
         nombres = paquete.namelist()
         assert "vision/procesamiento/directo.py" in nombres
         assert "vision/evaluacion/ensayo_video.py" in nombres
+        assert "vision/entrenamiento/entrenar.py" in nombres
+        assert "vision/evaluacion/validacion_yolo.py" in nombres
         assert "vision/seguimiento/tracker_futbol.yaml" in nombres
         assert set(nombres) == {f"vision/{n}" for n in manifiesto} | {"manifiesto.json"}
         assert all(not n.endswith((".env", ".pt", ".mp4", ".db")) for n in nombres)

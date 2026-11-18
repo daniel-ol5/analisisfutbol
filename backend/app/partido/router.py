@@ -335,6 +335,7 @@ async def ingesta(ws: WebSocket, partido_id: int, hub: HubDep, partidos: Partido
             await almacen.agregar(mensaje)
             await hub.difundir(canal, {"tipo": "posiciones",
                                        "datos": mensaje.model_dump(mode="json")})
+            await service.evaluar_reglas_ingesta(worker.club_id, mensaje)
     except (WebSocketDisconnect, RuntimeError):
         pass
     finally:

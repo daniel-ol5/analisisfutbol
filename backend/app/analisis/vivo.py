@@ -30,7 +30,7 @@ import asyncio
 import logging
 import time
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -41,6 +41,8 @@ from app.analisis.metricas import intervalo_de, jugadores_de_partido, motor_desd
 from app.analisis.motor.motor import MotorPartido, Salida, minutos_de, porcentajes
 from app.analisis.motor.muestras import muestra_de_mensaje
 from app.analisis.parametros import PARAMETROS
+from app.asistencia import service as asistencia
+from app.asistencia.contexto import EstadoTactico
 from app.core.config import settings
 from app.core.realtime import Hub, canal_partido, obtener_hub
 from app.deportivo.models import Partido
@@ -62,10 +64,13 @@ Vaciar = Callable[[], Awaitable[None]]
 class _Vivo:
     motor: MotorPartido
     club_id: int
+    tactica: EstadoTactico = field(default_factory=EstadoTactico)
+    ultima_evaluacion_t: float = float("-inf")
 
 
 class AnalisisEnVivo:
     REVISION_ESTADO_S = 5.0
+    INTERVALO_REGLAS_S = 5.0
 
     def __init__(self, sesiones: async_sessionmaker[AsyncSession] | None = None,
                  hub: Hub | None = None,
@@ -106,6 +111,29 @@ class AnalisisEnVivo:
             await self._despachar(mensaje.partido, vivo, salida)
         except Exception:
             log.exception("Falló el análisis en vivo del partido %s", mensaje.partido)
+
+    async def evaluar_reglas(self, club_id: int, mensaje: MensajeWorker) -> None:
+        """Solo se llama desde /ingesta. El análisis diferido no genera sugerencias en vivo."""
+        partido_id = mensaje.partido
+        try:
+            async with self._candado(partido_id):
+                vivo = self._vivos.get(partido_id)
+                if vivo is None or vivo.club_id != club_id:
+                    return
+                if not vivo.tactica.observar(mensaje, vivo.motor):
+                    return
+                t = round(mensaje.t, 2)
+                if t - vivo.ultima_evaluacion_t < self.INTERVALO_REGLAS_S:
+                    return
+                vivo.ultima_evaluacion_t = t
+                async with self.sesiones() as db:
+                    reloj_activo = await asistencia.evaluar_en_vivo(
+                        db, partido_id, club_id, t, vivo.tactica.metricas(),
+                    )
+                if not reloj_activo:
+                    vivo.tactica.interrumpir()
+        except Exception:
+            log.exception("Falló la evaluación táctica del partido %s", partido_id)
 
     async def _hidratar(self, partido_id: int, vaciar: Vaciar | None) -> _Vivo | None:
         if self.reloj() < self._descartados.get(partido_id, float("-inf")):

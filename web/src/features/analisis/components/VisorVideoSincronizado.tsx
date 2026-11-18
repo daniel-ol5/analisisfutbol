@@ -95,7 +95,9 @@ export function VisorVideoSincronizado({ partidoId, jugadores, balon, colorLocal
       if (video.current) { video.current.srcObject = media; await video.current.play(); }
     } catch { setError("No se pudo abrir la vista previa de la cámara."); }
   };
-  const puntos = [...jugadores, ...(balon ? [balon] : [])];
+  const detecciones = muestra?.detecciones ?? [];
+  const jugadoresProyectados = detecciones.length ? [] : jugadores;
+  const balonDeSeguimiento = balon && !detecciones.some(p => p.clase === "BALON") ? [balon] : [];
   return <section className="analisis-video" aria-label="Video del partido">
     <div className="analisis-video-barra">
       <div role="group" aria-label="Fuente">
@@ -124,13 +126,13 @@ export function VisorVideoSincronizado({ partidoId, jugadores, balon, colorLocal
       {lineas && fuente === "servidor" && <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-label="Líneas de cancha estimadas" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none" }}>
         {muestra?.calidad.lineas_imagen?.map((p, i) => <polyline key={i} points={p.map(x => x.join(",")).join(" ")} fill="none" stroke="#5fffe1" strokeWidth={.25} />)}
       </svg>}
-      {cajas && fuente === "servidor" && muestra?.detecciones?.map((p, i) => <div key={`raw-${i}`} className="analisis-caja" style={{
-        left: `${p.bbox[0]}%`, top: `${p.bbox[1]}%`, width: `${p.bbox[2] - p.bbox[0]}%`, height: `${p.bbox[3] - p.bbox[1]}%`, borderColor: "#f9d65c",
-      }}><span>{p.clase} {p.tid}</span></div>)}
-      {cajas && fuente === "servidor" && !muestra?.detecciones?.length && puntos.map(p => p.bbox && <div key={p.tid} className="analisis-caja" style={{
+      {cajas && fuente === "servidor" && detecciones.map((p, i) => <div key={`raw-${i}`} className="analisis-caja" style={{
+        left: `${p.bbox[0]}%`, top: `${p.bbox[1]}%`, width: `${p.bbox[2] - p.bbox[0]}%`, height: `${p.bbox[3] - p.bbox[1]}%`, borderColor: p.clase === "BALON" ? "white" : "#f9d65c",
+      }}><span>{p.clase === "BALON" ? "Balón" : `${p.clase} ${p.tid}`}</span></div>)}
+      {cajas && fuente === "servidor" && [...jugadoresProyectados, ...balonDeSeguimiento].map(p => p.bbox && <div key={p.tid} className="analisis-caja" style={{
         left: `${p.bbox[0]}%`, top: `${p.bbox[1]}%`, width: `${p.bbox[2] - p.bbox[0]}%`, height: `${p.bbox[3] - p.bbox[1]}%`,
         borderColor: p === balon ? "white" : p.equipo === "LOCAL" ? colorLocal : colorVisitante,
-      }}><span>{p === balon ? "Balón" : p.dorsal ?? p.tid}</span></div>)}
+      }}><span>{p === balon ? "Balón (seguimiento)" : p.dorsal ?? p.tid}</span></div>)}
     </div>
     <div className="analisis-video-pie">
       {fuente === "servidor" && <><label><input type="checkbox" checked={cajas} onChange={e => setCajas(e.target.checked)} /> Mostrar detecciones</label>

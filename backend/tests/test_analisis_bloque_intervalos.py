@@ -74,6 +74,7 @@ def test_compacidad_es_el_area_del_poligono_envolvente_de_los_jugadores_de_campo
     b = _bloque([(1, 3.0, 34.0), *campo])        # el arquero queda fuera del polígono
     assert b.compacidad_m2 == pytest.approx(20.0 * 48.0)
     assert b.amplitud_m == pytest.approx(48.0)
+    assert b.distancia_centro_m == pytest.approx(26.0)
     # Un jugador dentro del rectángulo no cambia el área; uno fuera de él, sí.
     assert _bloque([(1, 3.0, 34.0), *campo, (6, 30.0, 30.0)]).compacidad_m2 == pytest.approx(960.0)
     assert _bloque([(1, 3.0, 34.0), *campo, (6, 50.0, 34.0)]).compacidad_m2 > 960.0

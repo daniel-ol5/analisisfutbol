@@ -7,6 +7,7 @@ las tablas de métricas no tienen `club_id`, cuelgan de `partido`.
 """
 
 from collections.abc import AsyncIterator, Iterable
+from dataclasses import fields
 
 from sqlalchemy import delete, insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -29,6 +30,14 @@ from app.partido.models import AsignacionTrack
 from app.vision.models import Calibracion
 
 LOTE_LECTURA = 5000
+
+# Persistir todos los acumuladores de intervalo que tienen columna en el modelo.
+# Los acumuladores usados solo durante el partido quedan en memoria.
+CAMPOS_EQUIPO_PERSISTIDOS = tuple(
+    campo.name
+    for campo in fields(AcumEquipo)
+    if campo.name in MetricaIntervalo.__table__.columns
+)
 
 
 async def contexto_de(db: AsyncSession, partido: Partido,
@@ -128,7 +137,7 @@ def _filas_intervalo(partido_id: int, intervalo: AcumIntervalo,
         {"partido_id": partido_id, "intervalo": intervalo.indice, "equipo": equipo,
          "minuto_desde": desde, "minuto_hasta": hasta, "t_desde": t_desde, "t_hasta": t_hasta,
          "parcial": intervalo.parcial, "disputa_s": intervalo.disputa_s,
-         **{campo: getattr(acum, campo) for campo in AcumEquipo.__slots__}}
+         **{campo: getattr(acum, campo) for campo in CAMPOS_EQUIPO_PERSISTIDOS}}
         for equipo, acum in intervalo.equipos.items()
     ]
     tracks = [
@@ -187,7 +196,7 @@ async def intervalos_guardados(db: AsyncSession, partido_id: int, *,
                 disputa_s=f.disputa_s, cerrado=True, parcial=f.parcial)
         if f.equipo in EQUIPOS_CAMPO:
             acum.equipos[f.equipo] = AcumEquipo(
-                **{campo: getattr(f, campo) for campo in AcumEquipo.__slots__})
+                **{campo: getattr(f, campo) for campo in CAMPOS_EQUIPO_PERSISTIDOS})
 
     if con_tracks:
         tracks = (await db.execute(

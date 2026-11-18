@@ -49,6 +49,11 @@ class AcumEquipo:
     suma_amplitud_m: float = 0.0
     suma_compacidad_m: float = 0.0
     n_forma: int = 0
+    # Acumuladores en memoria para comparar ritmo observado por jugador.
+    tiempo_ritmo_s: float = 0.0
+    distancia_ritmo_m: float = 0.0
+    # Distancia media al centro de cada muestra para la regla «Bloque muy disperso».
+    suma_distancia_centro_m: float = 0.0
     # T-102 (CU-45): las mismas sumas, separadas por fase. Con balón = el equipo
     # posee; sin balón = posee el rival. En disputa o sin balón visible la muestra
     # solo entra en los totales de arriba.
@@ -311,6 +316,8 @@ class MotorPartido:
             )
             for destino in self._destinos(m.t, intervalo):
                 acum = destino.equipos[equipo]
+                if b.distancia_centro_m is not None:
+                    acum.suma_distancia_centro_m += b.distancia_centro_m
                 for sufijo in ("", f"_{fase}") if fase else ("",):
                     if b.altura_linea_m is not None:
                         setattr(acum, f"suma_altura{sufijo}_m",
@@ -366,9 +373,13 @@ class MotorPartido:
             track.distancia_m += paso.distancia_m
             if paso.velocidad_ms is not None and paso.velocidad_ms > track.velocidad_max_ms:
                 track.velocidad_max_ms = paso.velocidad_ms
-            if equipo in EQUIPOS_CAMPO and paso.distancia_m:
+            if equipo in EQUIPOS_CAMPO and (paso.distancia_m or paso.velocidad_ms is not None):
                 for destino in self._destinos(m.t, intervalo):
-                    destino.equipos[equipo].distancia_m += paso.distancia_m
+                    acum = destino.equipos[equipo]
+                    acum.distancia_m += paso.distancia_m
+                    if paso.velocidad_ms is not None:
+                        acum.tiempo_ritmo_s += paso.tiempo_s
+                        acum.distancia_ritmo_m += paso.velocidad_ms * paso.tiempo_s
 
             if paso.sprint_desde_t is not None:
                 # Se cuenta en el intervalo donde EMPEZÓ, aunque ya esté cerrado.

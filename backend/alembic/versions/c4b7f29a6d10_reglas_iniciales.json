@@ -1,0 +1,86 @@
+[
+  {
+    "nombre": "Bloque defensivo bajo",
+    "condicion": {"y": [{">=": ["minuto", 5]}, {"<": ["altura_linea_m", 22]}]},
+    "plantilla_mensaje": "Pide a la defensa ganar metros cuando el balón salga de nuestra zona.",
+    "plantilla_justificacion": "La línea defensiva promedió {altura_linea_m:.1f} m desde nuestro arco en los últimos 15 segundos.",
+    "prioridad": "MEDIA", "cooldown_s": 300
+  },
+  {
+    "nombre": "Ataque con poca amplitud",
+    "condicion": {"y": [{">=": ["minuto", 5]}, {"<": ["amplitud_propia_m", 26]}, {">=": ["posesion_propia_pct", 55]}]},
+    "plantilla_mensaje": "Pide a los jugadores de banda que se abran para dar una salida exterior.",
+    "plantilla_justificacion": "La amplitud observada fue de {amplitud_propia_m:.1f} m en los últimos 15 segundos y tuvimos el {posesion_propia_pct:.0f} % de la posesión observada en los últimos 30.",
+    "prioridad": "MEDIA", "cooldown_s": 300
+  },
+  {
+    "nombre": "Bloque muy disperso",
+    "condicion": {"y": [{">=": ["minuto", 5]}, {">": ["compacidad_propia_m", 26]}]},
+    "plantilla_mensaje": "Pide al bloque que se junte para ofrecer apoyos más cercanos.",
+    "plantilla_justificacion": "Los jugadores de campo observados estuvieron en promedio a {compacidad_propia_m:.1f} m del centro del bloque en los últimos 15 segundos.",
+    "prioridad": "MEDIA", "cooldown_s": 300
+  },
+  {
+    "nombre": "Baja posesión propia",
+    "condicion": {"y": [{">=": ["minuto", 5]}, {"<": ["posesion_propia_pct", 35]}]},
+    "plantilla_mensaje": "Pide apoyos cortos al recuperar el balón para asegurar el primer pase.",
+    "plantilla_justificacion": "Nuestra posesión observada fue del {posesion_propia_pct:.0f} % en los últimos 30 segundos.",
+    "prioridad": "MEDIA", "cooldown_s": 300
+  },
+  {
+    "nombre": "Baja precisión de pase",
+    "condicion": {"y": [{">=": ["minuto", 5]}, {">=": ["pases_intentados_propios", 5]}, {"<": ["precision_pase_propio_pct", 60]}]},
+    "plantilla_mensaje": "Pide pases más sencillos y que el receptor ofrezca una línea clara de apoyo.",
+    "plantilla_justificacion": "Se completó el {precision_pase_propio_pct:.0f} % de {pases_intentados_propios:.0f} pases propios detectados en los últimos 30 segundos.",
+    "prioridad": "ALTA", "cooldown_s": 300
+  },
+  {
+    "nombre": "Posesión con poca circulación",
+    "condicion": {"y": [{">=": ["minuto", 5]}, {">=": ["posesion_propia_pct", 65]}, {"<=": ["pases_intentados_propios", 2]}]},
+    "plantilla_mensaje": "Pide movilidad cerca del balón para ofrecer más opciones de pase.",
+    "plantilla_justificacion": "Tuvimos el {posesion_propia_pct:.0f} % de la posesión observada y se detectaron {pases_intentados_propios:.0f} intentos de pase propios en 30 segundos.",
+    "prioridad": "BAJA", "cooldown_s": 300
+  },
+  {
+    "nombre": "Circulación rival sostenida",
+    "condicion": {"y": [{">=": ["minuto", 5]}, {">=": ["posesion_rival_pct", 65]}, {">=": ["pases_completados_rival", 6]}]},
+    "plantilla_mensaje": "Coordina la presión al pase hacia un rival de espaldas y cierra las líneas de apoyo.",
+    "plantilla_justificacion": "El rival tuvo el {posesion_rival_pct:.0f} % de la posesión observada y completó {pases_completados_rival:.0f} pases detectados en 30 segundos.",
+    "prioridad": "ALTA", "cooldown_s": 300
+  },
+  {
+    "nombre": "Presión adelantada con posesión rival",
+    "condicion": {"y": [{">=": ["minuto", 5]}, {">": ["altura_linea_m", 45]}, {">=": ["posesion_rival_pct", 60]}]},
+    "plantilla_mensaje": "Si la primera línea no llega a presionar, pide a la defensa proteger la espalda.",
+    "plantilla_justificacion": "La línea defensiva promedió {altura_linea_m:.1f} m desde nuestro arco en los últimos 15 segundos y el rival tuvo el {posesion_rival_pct:.0f} % de posesión observada en los últimos 30.",
+    "prioridad": "ALTA", "cooldown_s": 300
+  },
+  {
+    "nombre": "Carga reciente elevada",
+    "condicion": {"y": [{">=": ["minuto", 25]}, {">=": ["ritmo_propio_m_min", 125]}]},
+    "plantilla_mensaje": "Revisa cómo llegan físicamente los jugadores antes de sostener este ritmo.",
+    "plantilla_justificacion": "En los últimos 30 segundos, los jugadores propios observados se desplazaron a un ritmo medio de {ritmo_propio_m_min:.0f} m/min por jugador.",
+    "prioridad": "BAJA", "cooldown_s": 600
+  },
+  {
+    "nombre": "Descenso reciente del ritmo",
+    "condicion": {"y": [{">=": ["minuto", 55]}, {">=": ["caida_ritmo_propio_pct", 25]}]},
+    "plantilla_mensaje": "Consulta a los jugadores si sienten desgaste y valora un cambio o un ajuste del ritmo.",
+    "plantilla_justificacion": "El ritmo de desplazamiento observado cayó un {caida_ritmo_propio_pct:.0f} % en los últimos 30 segundos respecto a los 30 segundos anteriores.",
+    "prioridad": "MEDIA", "cooldown_s": 600
+  },
+  {
+    "nombre": "Amonestaciones recientes",
+    "condicion": {">=": ["amarillas_propias_10min", 2]},
+    "plantilla_mensaje": "Recuerda a los amonestados que eviten entradas tardías y disputas innecesarias.",
+    "plantilla_justificacion": "La planilla registra {amarillas_propias_10min:.0f} amarillas propias en los últimos diez minutos de juego.",
+    "prioridad": "ALTA", "cooldown_s": 600
+  },
+  {
+    "nombre": "Reorganización tras una expulsión",
+    "condicion": {">=": ["rojas_propias", 1]},
+    "plantilla_mensaje": "Reordena las líneas y explica quién cubre el espacio del jugador expulsado.",
+    "plantilla_justificacion": "La planilla registra {rojas_propias:.0f} expulsiones propias en el partido.",
+    "prioridad": "CRITICA", "cooldown_s": 3600
+  }
+]
