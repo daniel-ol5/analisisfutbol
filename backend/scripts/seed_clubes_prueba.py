@@ -10,6 +10,7 @@ Idempotente: si el usuario admin de un club ya existe, no lo vuelve a crear.
 """
 
 import asyncio
+import os
 from dataclasses import dataclass
 from datetime import date
 
@@ -176,6 +177,9 @@ async def sembrar_club(db: AsyncSession, datos: ClubDemo) -> bool:
 
 
 async def ejecutar() -> None:
+    # T-105: crea administradores con contraseñas que están escritas en este archivo.
+    if os.getenv("APP_ENV", "").strip().lower() in {"production", "produccion", "prod"}:
+        raise RuntimeError("seed_clubes_prueba no puede ejecutarse con APP_ENV de producción")
     async with SessionLocal() as db:
         for datos in CLUBES_DEMO:
             creado = await sembrar_club(db, datos)

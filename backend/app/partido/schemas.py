@@ -19,6 +19,7 @@ class TipoEventoManual(StrEnum):
     AMARILLA = "AMARILLA"
     ROJA = "ROJA"
     SUSTITUCION = "SUSTITUCION"
+    TIRO = "TIRO"
 
 
 class Lado(StrEnum):
@@ -116,6 +117,8 @@ class EventoManual(EventoManualCrear):
     uuid: UUID
     capturado_en: datetime
     minuto: int
+    segundo: int | None = Field(default=None, ge=0,
+        description="Segundo exacto del partido; nulo si solo se indicó el minuto")
     origen: str = "MANUAL"
     convertida_en_roja: bool = Field(default=False,
         description="True cuando una segunda amarilla se convirtio automaticamente")

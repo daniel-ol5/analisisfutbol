@@ -62,7 +62,6 @@ class Jugador(Base):
             "dorsal",
             unique=True,
             postgresql_where=text("activo"),
-            sqlite_where=text("activo"),
         ),
     )
 
@@ -200,10 +199,8 @@ class Posicion(Base):
         Index("ix_posicion_partido_t", "partido_id", "t"),
     )
 
-    # Un partido son ~620.000 filas: BigInteger. En SQLite solo INTEGER autoincrementa.
-    id: Mapped[int] = mapped_column(
-        BigInteger().with_variant(Integer, "sqlite"), primary_key=True
-    )
+    # Un partido son ~620.000 filas: BigInteger.
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     partido_id: Mapped[int] = mapped_column(ForeignKey("partido.id", ondelete="CASCADE"))
     t: Mapped[float] = mapped_column(Numeric(8, 2, asdecimal=False))
     track_id: Mapped[int] = mapped_column(Integer)

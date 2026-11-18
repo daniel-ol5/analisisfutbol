@@ -1,15 +1,33 @@
 """Configuración de la aplicación, leída del entorno."""
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Claves que están escritas en el repositorio (valor por defecto, .env.example,
+# docker-compose): cualquiera que lea el código puede firmar tokens con ellas.
+CLAVES_PUBLICAS = {
+    "cambiar-esta-clave-antes-de-desplegar",
+    "clave-solo-para-desarrollo-no-usar-en-produccion",
+}
+ENTORNOS_PRODUCCION = {"production", "produccion", "prod"}
+LARGO_MIN_CLAVE = 32
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
+    app_env: str = ""
+    """`development`, `production`... Con un entorno de producción el arranque exige una
+    SECRET_KEY propia (T-105): con la del repositorio se podría falsificar un token de
+    cualquier club y saltarse el aislamiento entre clubes."""
+
     proyecto: str = "Área Técnica"
     version: str = "0.1.0"
 
-    database_url: str = "sqlite+aiosqlite:///./areatecnica.db"
+    database_url: str = ""
+    """PostgreSQL 16: `postgresql+asyncpg://usuario:clave@host:5432/base`. Sin valor por
+    defecto a propósito: la aplicación no arranca sin una base configurada."""
+    db_null_pool: bool = False
 
     secret_key: str = "cambiar-esta-clave-antes-de-desplegar"
     algoritmo: str = "HS256"
@@ -38,6 +56,20 @@ class Settings(BaseSettings):
     video_max_bytes: int = 16 * 1024**3       # 16 GiB: un partido en 4K entra holgado
     video_max_trozo_bytes: int = 64 * 1024**2  # tope de cada PUT; el cliente usa 8 MiB
     vision_auto_worker: bool = False  # El worker externo toma la cola; evita competir en CPU.
+
+    @model_validator(mode="after")
+    def exigir_clave_propia_en_produccion(self) -> "Settings":
+        if not self.secret_key.strip():
+            raise ValueError("SECRET_KEY no puede estar vacía: defínela en el .env")
+        if self.app_env.strip().lower() in ENTORNOS_PRODUCCION and (
+            self.secret_key in CLAVES_PUBLICAS or len(self.secret_key) < LARGO_MIN_CLAVE
+        ):
+            raise ValueError(
+                "SECRET_KEY debe ser propia y de al menos "
+                f"{LARGO_MIN_CLAVE} caracteres cuando APP_ENV es de producción. Generar una con: "
+                "python -c \"import secrets; print(secrets.token_urlsafe(48))\""
+            )
+        return self
 
     @property
     def origenes(self) -> list[str]:
