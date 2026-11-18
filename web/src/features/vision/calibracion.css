@@ -57,6 +57,7 @@
 }
 
 .cal-campo {
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -70,6 +71,8 @@
 
 .cal-input,
 .cal-input-archivo {
+  max-width: 100%;
+  min-width: 0;
   padding: 7px 10px;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
@@ -820,6 +823,8 @@
 }
 
 @media (max-width: 640px) {
+  .cal-barra-config { grid-template-columns: minmax(0, 1fr); }
+  .cal-pagina { padding: 24px 16px 80px; }
   .cal-resultado-cifras {
     grid-template-columns: 1fr;
   }

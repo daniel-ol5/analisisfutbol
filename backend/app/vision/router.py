@@ -14,10 +14,10 @@ from fastapi import (
     Body,
     Depends,
     File,
-    HTTPException,
-    Query,
     Form,
     Header,
+    HTTPException,
+    Query,
     Request,
     Response,
     UploadFile,
@@ -28,6 +28,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app.core.deps import Actual, Db, requiere_rol
 from app.core.pendiente import RESPUESTA_501
+from app.deportivo.service import ver_partido
 from app.partido.service import AlmacenPosiciones, obtener_almacen_posiciones
 from app.vision import procesamiento, service, videos
 from app.vision.almacen import AlmacenVideos, obtener_almacen_videos
@@ -105,21 +106,20 @@ async def validar_calibracion(partido_id: int, datos: CalibracionGuardar,
 
 
 @router.post("/partidos/{partido_id}/calibracion/detectar-ia",
+             deprecated=True,
              dependencies=[Depends(requiere_rol("ADMIN", "ANALISTA"))],
              summary="Detectar puntos clave de la cancha automáticamente con IA (YOLO Pose)")
 async def detectar_calibracion_ia(
     partido_id: int,
     archivo: Annotated[UploadFile, File(...)],
     usuario: Actual,
+    db: Db,
     largo_m: Annotated[float, Form()] = 105.0,
     ancho_m: Annotated[float, Form()] = 68.0,
 ) -> dict[str, Any]:
-    contenido = await archivo.read()
-    return procesamiento.detectar_calibracion_con_ia(
-        contenido,
-        largo_m=largo_m,
-        ancho_m=ancho_m,
-    )
+    await ver_partido(db, usuario, partido_id)
+    raise HTTPException(409, "El reconocimiento de cancha se ejecuta en el worker. "
+                        "Guarda la configuración con modo AUTOMATICA y procesa la fuente seleccionada")
 
 
 @router.get("/sedes/{sede}/calibracion-previa", response_model=Calibracion,
@@ -244,6 +244,36 @@ async def activar_modelo(modelo_id: int, usuario: Actual, db: Db,
 # ---------------- CU-27, CU-28 · Video ----------------
 
 AlmacenDep = Annotated[AlmacenVideos, Depends(obtener_almacen_videos)]
+
+
+@router.get("/videos/{video_id}/cuadro", summary="Extraer una referencia del video con su PTS real")
+async def cuadro_calibracion(video_id: int, usuario: Actual, db: Db, almacen: AlmacenDep,
+                            t_s: Annotated[float, Query(ge=0, le=14400, allow_inf_nan=False)] = 0) -> dict:
+    import base64
+
+    import cv2
+
+    ruta = await procesamiento.archivo(db, usuario, video_id, almacen)
+
+    def extraer():
+        cap = cv2.VideoCapture(str(ruta))
+        try:
+            cap.set(cv2.CAP_PROP_POS_MSEC, t_s * 1000)
+            ok, imagen = cap.read()
+            if not ok:
+                raise HTTPException(422, "No hay un cuadro legible en ese instante")
+            pts = cap.get(cv2.CAP_PROP_POS_MSEC) / 1000
+            indice = max(0, round(cap.get(cv2.CAP_PROP_POS_FRAMES)) - 1)
+            ok, png = cv2.imencode(".png", imagen)
+            if not ok:
+                raise HTTPException(422, "No se pudo preparar la imagen")
+            return {"imagen_base64": base64.b64encode(png).decode("ascii"),
+                    "tiempo_s": pts, "cuadro_indice": indice,
+                    "ancho_px": imagen.shape[1], "alto_px": imagen.shape[0]}
+        finally:
+            cap.release()
+
+    return await run_in_threadpool(extraer)
 
 # CU-28: suben video el analista y el asistente (y el administrador).
 PUEDEN_SUBIR = Depends(requiere_rol("ADMIN", "ANALISTA", "ASISTENTE"))
@@ -394,11 +424,16 @@ async def descargar_video(video_id: int, usuario: Actual, db: Db,
 
 
 @router.post("/partidos/{partido_id}/transmitir-vivo", status_code=status.HTTP_202_ACCEPTED,
-             summary="CU-24, CU-40, CU-41 · Iniciar emisión sincronizada a 5 Hz con visor de video/cámara")
-async def iniciar_transmision_vivo(partido_id: int, usuario: Actual,
-                                   t_inicio_s: float = 0.0,
-                                   duracion_s: float = 60.0,
+             summary="Reproducir telemetría ya procesada, sin ejecutar inferencia ni guardar posiciones")
+async def iniciar_transmision_vivo(partido_id: int, usuario: Actual, db: Db,
+                                   t_inicio_s: float = Query(0, ge=0),
+                                   duracion_s: float = Query(60, gt=0, le=10800),
                                    video_id: int | None = None) -> dict[str, object]:
+    await ver_partido(db, usuario, partido_id)
+    if video_id is not None:
+        video = await videos.ver_video(db, usuario, video_id)
+        if video.partido_id != partido_id:
+            raise HTTPException(status.HTTP_409_CONFLICT, "El video no pertenece a este partido")
     procesamiento.programar_transmision_vivo_partido(
         partido_id, usuario, duracion_s=duracion_s, t_inicio_s=t_inicio_s, video_id=video_id
     )
@@ -413,13 +448,16 @@ async def iniciar_transmision_vivo(partido_id: int, usuario: Actual,
 
 @router.post("/partidos/{partido_id}/pausar-vivo", status_code=status.HTTP_200_OK,
              summary="CU-24, CU-40 · Pausar emisión sincronizada cuando el video o cámara se pausa")
-async def pausar_transmision_vivo(partido_id: int, usuario: Actual) -> dict[str, object]:
+async def pausar_transmision_vivo(partido_id: int, usuario: Actual, db: Db) -> dict[str, object]:
+    await ver_partido(db, usuario, partido_id)
     await procesamiento.pausar_transmision_vivo_partido(partido_id, usuario.club_id)
     return {"ok": True, "partido_id": partido_id, "estado": "pausado"}
 
 
 @router.post("/vivo/analizar-cuadro", response_model=MensajeWorker,
-             summary="CU-24, CU-40 · Inferencia YOLO + Color en tiempo real desde cámara web o video local")
+             deprecated=True,
+             summary="Ruta retirada: usar el worker persistente y el canal de ingesta",
+             responses={409: {"description": "Se requiere el pipeline persistente del worker"}})
 async def analizar_cuadro_en_vivo(
     archivo: Annotated[UploadFile, File(...)],
     usuario: Actual,

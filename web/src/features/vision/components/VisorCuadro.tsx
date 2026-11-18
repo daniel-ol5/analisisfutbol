@@ -210,6 +210,21 @@ export function VisorCuadro({
                         esPeor ? `es-peor ${peorEnAlerta ? "es-alerta" : "es-suave"}` : ""
                       }`}
                       transform={`translate(${par.imagen.x}, ${par.imagen.y})`}
+                      tabIndex={0}
+                      role="button"
+                      aria-label={`Referencia ${idx + 1}: ${par.etiqueta}`}
+                      onKeyDown={(e) => {
+                        const desplazamiento: Record<string, [number, number]> = {
+                          ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1],
+                        };
+                        const delta = desplazamiento[e.key];
+                        if (!delta || !dimensiones) return;
+                        e.preventDefault(); e.stopPropagation();
+                        onSeleccionarPar(par.id); onInicioArrastreMarcador(par.id);
+                        const paso = e.shiftKey ? 10 : 1;
+                        onMoverMarcador(par.id, { x: Math.max(0, Math.min(dimensiones.ancho, par.imagen.x + delta[0] * paso)),
+                          y: Math.max(0, Math.min(dimensiones.alto, par.imagen.y + delta[1] * paso)) });
+                      }}
                       onPointerDown={(e) => alBajarEnMarcador(e, par.id)}
                     >
                       <title>{`#${idx + 1} ${par.etiqueta} (${par.imagen.x} px, ${par.imagen.y} px)${

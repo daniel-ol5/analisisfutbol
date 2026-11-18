@@ -25,7 +25,7 @@ from app.vision.homografia import (
     calcular_homografia,
     es_valida,
 )
-from app.vision.models import Calibracion, ModeloML
+from app.vision.models import Calibracion, ModeloML, Video
 from app.vision.schemas import ActivarModelo, CalibracionGuardar, ErrorCalibracion, ModeloCrear
 
 
@@ -78,6 +78,8 @@ def _calcular(datos: CalibracionGuardar) -> ResultadoHomografia:
 
 def validar_calibracion(datos: CalibracionGuardar) -> ErrorCalibracion:
     """CU-21: error de reproyección SIN guardar nada ni consultar la base."""
+    if datos.modo == "AUTOMATICA":
+        raise HTTPException(409, "La referencia automática se verifica en cada cuadro del worker")
     r = _calcular(datos)
     valida = es_valida(r.error_medio_m)
     if valida:
@@ -114,7 +116,16 @@ async def guardar_calibracion(
     verla y corregirla. Al editar se recalcula todo: la matriz anterior ya no
     corresponde a los puntos nuevos.
     """
-    resultado = _calcular(datos)
+    if datos.referencia and datos.referencia.video_id:
+        video = await db.get(Video, datos.referencia.video_id)
+        verificar_pertenencia(video, usuario)
+        if video.partido_id != partido_id:
+            raise HTTPException(422, "El video de referencia pertenece a otro partido")
+        if video.duracion_s is None or datos.referencia.tiempo_s > video.duracion_s:
+            raise HTTPException(422, "El cuadro de referencia está fuera del video disponible")
+        if datos.referencia.ancho_px and video.resolucion and video.resolucion != f"{datos.referencia.ancho_px}x{datos.referencia.alto_px}":
+            raise HTTPException(422, "La resolución de referencia no coincide con el video")
+    resultado = _calcular(datos) if datos.modo == "MANUAL" else None
     calibracion = await _buscar_calibracion(db, usuario, partido_id)
     creada = calibracion is None
     if calibracion is None:
@@ -123,16 +134,19 @@ async def guardar_calibracion(
 
     calibracion.largo_m = datos.largo_m
     calibracion.ancho_m = datos.ancho_m
+    calibracion.modo = datos.modo
+    calibracion.referencia = datos.referencia.model_dump() if datos.referencia else None
     calibracion.puntos_imagen = [p.model_dump() for p in datos.puntos_imagen]
     calibracion.puntos_cancha = [p.model_dump() for p in datos.puntos_cancha]
     calibracion.coef_distorsion = datos.coef_distorsion
     # T-036: `resultado` ya se calculó con los puntos corregidos si llegó la intrínseca.
     calibracion.matriz_camara = datos.matriz_camara
     calibracion.tamano_imagen = datos.tamano_imagen
-    calibracion.matriz_h = resultado.matriz
-    calibracion.error_medio_m = resultado.error_medio_m
-    calibracion.error_max_m = resultado.error_max_m
-    calibracion.valida = es_valida(resultado.error_medio_m)
+    calibracion.matriz_h = resultado.matriz if resultado else None
+    calibracion.error_medio_m = resultado.error_medio_m if resultado else None
+    calibracion.error_max_m = resultado.error_max_m if resultado else None
+    # Configurar reconocimiento no certifica una referencia que aún no se observó.
+    calibracion.valida = es_valida(resultado.error_medio_m) if resultado else False
 
     try:
         await db.commit()

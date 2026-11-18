@@ -1,0 +1,17 @@
+{
+  "grabacion": {
+    "estado": "PROCESADO",
+    "muestras": 50,
+    "muestras_con_referencia": 50
+  },
+  "directo": {
+    "muestras_recibidas_por_websocket": 16,
+    "muestras_con_referencia": 16
+  },
+  "posiciones_en_db": {
+    "1": 130,
+    "2": 28
+  },
+  "duracion_prueba_s": 43.89389080000001,
+  "limites": "CPU local; ASGI y WebSocket en proceso; no mide GPU, red f\u00edsica ni precisi\u00f3n t\u00e1ctica"
+}

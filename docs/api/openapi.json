@@ -2031,6 +2031,7 @@
         ],
         "summary": "Detectar puntos clave de la cancha automáticamente con IA (YOLO Pose)",
         "operationId": "detectar_calibracion_ia_api_vision_partidos__partido_id__calibracion_detectar_ia_post",
+        "deprecated": true,
         "security": [
           {
             "HTTPBearer": []
@@ -2398,6 +2399,77 @@
           },
           "409": {
             "description": "T-064: tiene metricas peores que la version activa. Para volver atras, enviar forzar=true con el motivo"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/vision/videos/{video_id}/cuadro": {
+      "get": {
+        "tags": [
+          "P3 · Visión por Computadora"
+        ],
+        "summary": "Extraer una referencia del video con su PTS real",
+        "operationId": "cuadro_calibracion_api_vision_videos__video_id__cuadro_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "video_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Video Id"
+            }
+          },
+          {
+            "name": "t_s",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "maximum": 14400,
+              "minimum": 0,
+              "default": 0,
+              "title": "T S"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Cuadro Calibracion Api Vision Videos  Video Id  Cuadro Get"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "Declarado en el contrato, pendiente de implementacion",
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
+                }
+              }
+            }
           },
           "422": {
             "description": "Validation Error",
@@ -3001,7 +3073,7 @@
         "tags": [
           "P3 · Visión por Computadora"
         ],
-        "summary": "CU-24, CU-40, CU-41 · Iniciar emisión sincronizada a 5 Hz con visor de video/cámara",
+        "summary": "Reproducir telemetría ya procesada, sin ejecutar inferencia ni guardar posiciones",
         "operationId": "iniciar_transmision_vivo_api_vision_partidos__partido_id__transmitir_vivo_post",
         "security": [
           {
@@ -3024,7 +3096,8 @@
             "required": false,
             "schema": {
               "type": "number",
-              "default": 0.0,
+              "minimum": 0,
+              "default": 0,
               "title": "T Inicio S"
             }
           },
@@ -3034,7 +3107,9 @@
             "required": false,
             "schema": {
               "type": "number",
-              "default": 60.0,
+              "maximum": 10800,
+              "exclusiveMinimum": 0,
+              "default": 60,
               "title": "Duracion S"
             }
           },
@@ -3155,7 +3230,7 @@
         "tags": [
           "P3 · Visión por Computadora"
         ],
-        "summary": "CU-24, CU-40 · Inferencia YOLO + Color en tiempo real desde cámara web o video local",
+        "summary": "Ruta retirada: usar el worker persistente y el canal de ingesta",
         "operationId": "analizar_cuadro_en_vivo_api_vision_vivo_analizar_cuadro_post",
         "requestBody": {
           "content": {
@@ -3188,6 +3263,9 @@
               }
             }
           },
+          "409": {
+            "description": "Se requiere el pipeline persistente del worker"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -3199,6 +3277,7 @@
             }
           }
         },
+        "deprecated": true,
         "security": [
           {
             "HTTPBearer": []
@@ -5916,16 +5995,6 @@
         "title": "AvisoColores",
         "description": "CU-10: los colores de ambos equipos quedaron demasiado cerca en HSV."
       },
-      "Body_calibracion_intrinseca_api_vision_calibracion_intrinseca_post": {
-        "properties": {
-          "imagenes": {
-            "items": {
-              "type": "string",
-              "contentMediaType": "application/octet-stream"
-            },
-            "type": "array",
-            "title": "Imagenes",
-            "description": "Fotos del tablero, de 5 a 20, JPG o PNG, hasta 10 MB cada una"
       "Body_analizar_cuadro_en_vivo_api_vision_vivo_analizar_cuadro_post": {
         "properties": {
           "archivo": {
@@ -5956,12 +6025,27 @@
         },
         "type": "object",
         "required": [
-          "imagenes"
-        ],
-        "title": "Body_calibracion_intrinseca_api_vision_calibracion_intrinseca_post"
           "archivo"
         ],
         "title": "Body_analizar_cuadro_en_vivo_api_vision_vivo_analizar_cuadro_post"
+      },
+      "Body_calibracion_intrinseca_api_vision_calibracion_intrinseca_post": {
+        "properties": {
+          "imagenes": {
+            "items": {
+              "type": "string",
+              "contentMediaType": "application/octet-stream"
+            },
+            "type": "array",
+            "title": "Imagenes",
+            "description": "Fotos del tablero, de 5 a 20, JPG o PNG, hasta 10 MB cada una"
+          }
+        },
+        "type": "object",
+        "required": [
+          "imagenes"
+        ],
+        "title": "Body_calibracion_intrinseca_api_vision_calibracion_intrinseca_post"
       },
       "Body_detectar_calibracion_ia_api_vision_partidos__partido_id__calibracion_detectar_ia_post": {
         "properties": {
@@ -6010,6 +6094,25 @@
           "partido_id": {
             "type": "integer",
             "title": "Partido Id"
+          },
+          "modo": {
+            "type": "string",
+            "enum": [
+              "MANUAL",
+              "AUTOMATICA"
+            ],
+            "title": "Modo",
+            "default": "MANUAL"
+          },
+          "referencia": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReferenciaCalibracion"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "largo_m": {
             "type": "number",
@@ -6159,12 +6262,30 @@
       },
       "CalibracionGuardar": {
         "properties": {
+          "modo": {
+            "type": "string",
+            "enum": [
+              "MANUAL",
+              "AUTOMATICA"
+            ],
+            "title": "Modo",
+            "default": "MANUAL"
+          },
+          "referencia": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReferenciaCalibracion"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "puntos_imagen": {
             "items": {
               "$ref": "#/components/schemas/Punto"
             },
             "type": "array",
-            "minItems": 8,
             "title": "Puntos Imagen",
             "description": "Puntos marcados sobre el cuadro, en pixeles"
           },
@@ -6173,7 +6294,6 @@
               "$ref": "#/components/schemas/Punto"
             },
             "type": "array",
-            "minItems": 8,
             "title": "Puntos Cancha",
             "description": "Los mismos puntos en metros sobre el plano de la cancha"
           },
@@ -6245,10 +6365,6 @@
           }
         },
         "type": "object",
-        "required": [
-          "puntos_imagen",
-          "puntos_cancha"
-        ],
         "title": "CalibracionGuardar",
         "description": "Se exigen al menos 8 puntos repartidos por toda la cancha.\n\nCon 4 la homografia ajusta exacta y el residual da cero, que no informa nada.\nSolo puntos sobre el plano del suelo: nunca el travesano, que esta a 2,44 m."
       },
@@ -6578,6 +6694,43 @@
           "minutos"
         ],
         "title": "Descuento"
+      },
+      "DeteccionImagen": {
+        "properties": {
+          "tid": {
+            "type": "integer",
+            "title": "Tid"
+          },
+          "clase": {
+            "type": "string",
+            "title": "Clase"
+          },
+          "conf": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Conf"
+          },
+          "bbox": {
+            "items": {
+              "type": "number",
+              "maximum": 100.0,
+              "minimum": 0.0
+            },
+            "type": "array",
+            "maxItems": 4,
+            "minItems": 4,
+            "title": "Bbox"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tid",
+          "clase",
+          "conf",
+          "bbox"
+        ],
+        "title": "DeteccionImagen"
       },
       "Direccion": {
         "type": "string",
@@ -7332,6 +7485,7 @@
           },
           "fps": {
             "type": "number",
+            "minimum": 0.0,
             "title": "Fps",
             "default": 0
           },
@@ -7347,6 +7501,7 @@
           },
           "retraso_s": {
             "type": "number",
+            "minimum": 0.0,
             "title": "Retraso S",
             "default": 0
           },
@@ -7366,6 +7521,96 @@
               }
             ],
             "title": "Motivo"
+          },
+          "calibracion_valida": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Calibracion Valida",
+            "description": "False: el worker perdió la referencia métrica; no usar posiciones"
+          },
+          "campo_visible": {
+            "anyOf": [
+              {
+                "items": {
+                  "items": {
+                    "type": "number"
+                  },
+                  "type": "array"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Campo Visible",
+            "description": "Polígono del encuadre visible en metros sobre la cancha"
+          },
+          "largo_m": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "Largo M",
+            "default": 105
+          },
+          "ancho_m": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "Ancho M",
+            "default": 68
+          },
+          "estado_calibracion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estado Calibracion"
+          },
+          "ultimo_anclaje_t": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ultimo Anclaje T"
+          },
+          "error_lineas_px": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Lineas Px"
+          },
+          "lineas_imagen": {
+            "items": {
+              "items": {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              "type": "array"
+            },
+            "type": "array",
+            "title": "Lineas Imagen"
           }
         },
         "type": "object",
@@ -8147,6 +8392,7 @@
           },
           "t": {
             "type": "number",
+            "minimum": 0.0,
             "title": "T",
             "description": "Segundos desde el inicio del partido"
           },
@@ -8156,6 +8402,14 @@
             },
             "type": "array",
             "title": "Jugadores"
+          },
+          "detecciones": {
+            "items": {
+              "$ref": "#/components/schemas/DeteccionImagen"
+            },
+            "type": "array",
+            "maxItems": 300,
+            "title": "Detecciones"
           },
           "balon": {
             "anyOf": [
@@ -9348,6 +9602,90 @@
         ],
         "title": "RedPases"
       },
+      "ReferenciaCalibracion": {
+        "properties": {
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "VIDEO",
+              "DIRECTO"
+            ],
+            "title": "Tipo"
+          },
+          "video_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Video Id"
+          },
+          "tiempo_s": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Tiempo S",
+            "default": 0
+          },
+          "cuadro_indice": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cuadro Indice"
+          },
+          "ancho_px": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ancho Px"
+          },
+          "alto_px": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alto Px"
+          },
+          "fuente_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fuente Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tipo"
+        ],
+        "title": "ReferenciaCalibracion"
+      },
       "RefreshTokenInput": {
         "properties": {
           "refresh_token": {
@@ -9932,15 +10270,41 @@
             "description": "null: usar el YOLO preentrenado (no hay modelo activo en el club)"
           },
           "matriz_h": {
-            "items": {
-              "items": {
-                "type": "number"
+            "anyOf": [
+              {
+                "items": {
+                  "items": {
+                    "type": "number"
+                  },
+                  "type": "array"
+                },
+                "type": "array"
               },
-              "type": "array"
-            },
-            "type": "array",
+              {
+                "type": "null"
+              }
+            ],
             "title": "Matriz H",
-            "description": "Homografia pixeles a metros (CU-26)"
+            "description": "Anclaje manual; null en reconocimiento automático"
+          },
+          "modo_calibracion": {
+            "type": "string",
+            "enum": [
+              "MANUAL",
+              "AUTOMATICA"
+            ],
+            "title": "Modo Calibracion",
+            "default": "MANUAL"
+          },
+          "referencia": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReferenciaCalibracion"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "largo_m": {
             "type": "number",

@@ -26,6 +26,20 @@ from app.vision.models import Video
 BASE = "http://test"
 
 
+async def test_replay_no_permite_transmitir_datos_de_otro_club(cliente):
+    a = await _club(cliente, "propio_replay")
+    b = await _club(cliente, "ajeno_replay")
+    r = await cliente.post(f"/api/vision/partidos/{a['partido_id']}/transmitir-vivo", headers=b["auth"])
+    assert r.status_code == 404
+
+
+async def test_ruta_sin_tracking_no_publica_coordenadas_metricas(cliente):
+    club = await _club(cliente, "sin_tracking")
+    r = await cliente.post("/api/vision/vivo/analizar-cuadro", headers=club["auth"],
+                           files={"archivo": ("cuadro.jpg", b"prueba", "image/jpeg")})
+    assert r.status_code == 409
+
+
 class PosicionesEnMemoria:
     """Hace de `AlmacenPosiciones`: registra lo que se guardaría."""
 

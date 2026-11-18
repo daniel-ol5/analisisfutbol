@@ -7,7 +7,7 @@ se reciben sus resultados.
 
 from datetime import datetime
 from enum import StrEnum
-from typing import Annotated, Self
+from typing import Annotated, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -35,15 +35,37 @@ class Punto(BaseModel):
     y: float = Field(allow_inf_nan=False)
 
 
+class ReferenciaCalibracion(BaseModel):
+    tipo: Literal["VIDEO", "DIRECTO"]
+    video_id: int | None = Field(default=None, gt=0)
+    tiempo_s: float = Field(default=0, ge=0, allow_inf_nan=False)
+    cuadro_indice: int | None = Field(default=None, ge=0)
+    ancho_px: int | None = Field(default=None, gt=0)
+    alto_px: int | None = Field(default=None, gt=0)
+    fuente_id: str | None = Field(default=None, min_length=1, max_length=120)
+
+    @model_validator(mode="after")
+    def _fuente(self) -> Self:
+        if self.tipo == "VIDEO" and self.video_id is None:
+            raise ValueError("La referencia de video requiere video_id")
+        if self.tipo == "DIRECTO" and not self.fuente_id:
+            raise ValueError("La referencia de directo requiere un nombre de fuente")
+        if (self.ancho_px is None) != (self.alto_px is None):
+            raise ValueError("Envía ancho_px y alto_px juntos")
+        return self
+
+
 class CalibracionGuardar(BaseModel):
     """Se exigen al menos 8 puntos repartidos por toda la cancha.
 
     Con 4 la homografia ajusta exacta y el residual da cero, que no informa nada.
     Solo puntos sobre el plano del suelo: nunca el travesano, que esta a 2,44 m.
     """
-    puntos_imagen: list[Punto] = Field(min_length=8,
+    modo: Literal["MANUAL", "AUTOMATICA"] = "MANUAL"
+    referencia: ReferenciaCalibracion | None = None
+    puntos_imagen: list[Punto] = Field(default_factory=list,
         description="Puntos marcados sobre el cuadro, en pixeles")
-    puntos_cancha: list[Punto] = Field(min_length=8,
+    puntos_cancha: list[Punto] = Field(default_factory=list,
         description="Los mismos puntos en metros sobre el plano de la cancha")
     largo_m: float = Field(default=105.0, gt=40, lt=130,
         description="Medida real: las canchas formativas casi nunca miden 105 x 68")
@@ -95,6 +117,10 @@ class CalibracionGuardar(BaseModel):
 
     @model_validator(mode="after")
     def _misma_cantidad_de_puntos(self) -> Self:
+        if self.modo == "MANUAL" and len(self.puntos_imagen) < 8:
+            raise ValueError("La calibración manual requiere al menos 8 puntos")
+        if self.modo == "AUTOMATICA" and (self.puntos_imagen or self.puntos_cancha):
+            raise ValueError("El modo automático reconoce la cancha en el worker; no envíes puntos manuales")
         # Cada punto de la imagen se aparea con el punto de la cancha de igual indice.
         # No se valida que los puntos de cancha caigan dentro de largo_m x ancho_m:
         # el sistema de coordenadas de la cancha todavia no esta definido.
@@ -120,6 +146,8 @@ class Calibracion(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
     partido_id: int
+    modo: Literal["MANUAL", "AUTOMATICA"] = "MANUAL"
+    referencia: ReferenciaCalibracion | None = None
     largo_m: float
     ancho_m: float
     puntos_imagen: list[Punto]
@@ -306,7 +334,9 @@ class Trabajo(BaseModel):
     duracion_s: int | None
     modelo: ModeloTrabajo | None = Field(
         description="null: usar el YOLO preentrenado (no hay modelo activo en el club)")
-    matriz_h: list[list[float]] = Field(description="Homografia pixeles a metros (CU-26)")
+    matriz_h: list[list[float]] | None = Field(description="Anclaje manual; null en reconocimiento automático")
+    modo_calibracion: Literal["MANUAL", "AUTOMATICA"] = "MANUAL"
+    referencia: ReferenciaCalibracion | None = None
     largo_m: float
     ancho_m: float
     es_local: bool = Field(description="Si el equipo propio es el LOCAL del mensaje")

@@ -1,0 +1,10 @@
+# Verificación de lógica y evaluación sintética en máquinas sin GPU.
+# No instala Torch ni Ultralytics.
+numpy>=2.1,<3
+scipy>=1.13
+opencv-python-headless>=4.10,<6
+pyyaml>=6
+pytest>=8.3
+pycocotools>=2.0.8
+motmetrics>=1.4,<2
+websockets>=13.1,<18

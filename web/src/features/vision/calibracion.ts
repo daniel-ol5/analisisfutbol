@@ -11,8 +11,7 @@ import type { CalibracionGuardar, HitoCancha, ParCalibracion, Punto } from "./ty
  * coordenadas de la cancha y la plantilla de hitos sugeridos. Cuando quede
  * cerrada, poner esta constante en `null` para ocultar el aviso en la pantalla.
  */
-export const AVISO_PROPUESTA_CALIBRACION: string | null =
-  "Propuesta pendiente de confirmar con el líder: el sistema de coordenadas sitúa el origen (0, 0) en la esquina inferior izquierda del lado de la cámara (tribuna), con X a lo largo (0 a largo_m) e Y a lo ancho (0 a ancho_m), y usa una plantilla de 14 hitos de referencia.";
+export const AVISO_PROPUESTA_CALIBRACION: string | null = null;
 
 // ---------- Límites del contrato (backend/app/vision/schemas.py) ----------
 
@@ -204,6 +203,24 @@ export function construirPlantillaCancha(largoM: number, anchoM: number): HitoCa
       x: L,
       y: ySupM,
     },
+    { id: "circulo-sup", nombre: "Círculo central con mediocampo (banda opuesta)", nombreCorto: "Círculo sup.", x: medioX, y: redondear2(W / 2 + Math.min(9.15, W * .18)) },
+    { id: "circulo-inf", nombre: "Círculo central con mediocampo (tribuna)", nombreCorto: "Círculo inf.", x: medioX, y: redondear2(W / 2 - Math.min(9.15, W * .18)) },
+    { id: "centro", nombre: "Punto central", nombreCorto: "Centro", x: medioX, y: redondear2(W / 2) },
+    ...([0, L] as const).flatMap((fondo, lado) => {
+      const signo = lado === 0 ? 1 : -1;
+      return [
+        { id: `penal-${lado}`, nombre: `Punto penal ${lado === 0 ? "izquierdo" : "derecho"}`, nombreCorto: "Penal", x: fondo + signo * 11, y: redondear2(W / 2) },
+        ...([-1, 1] as const).map(vertical => ({
+          id: `arco-${lado}-${vertical}`, nombre: `Arco penal ${lado === 0 ? "izquierdo" : "derecho"} con frontal ${vertical > 0 ? "superior" : "inferior"}`,
+          nombreCorto: "Arco penal", x: fondo + signo * 16.5,
+          y: redondear2(W / 2 + vertical * Math.sqrt(9.15 ** 2 - 5.5 ** 2)),
+        })),
+        ...([-1, 1] as const).flatMap(vertical => [0, 5.5].map(prof => ({
+          id: `chica-${lado}-${vertical}-${prof}`, nombre: `Área chica ${lado === 0 ? "izquierda" : "derecha"} · ${vertical > 0 ? "superior" : "inferior"} · ${prof ? "frontal" : "meta"}`,
+          nombreCorto: "Área chica", x: fondo + signo * prof, y: redondear2(W / 2 + vertical * 9.16),
+        }))),
+      ];
+    }),
   ];
 }
 

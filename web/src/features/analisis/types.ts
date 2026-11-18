@@ -34,9 +34,18 @@ export interface IndicadorCalidad {
   degradado: boolean;
   /** Motivo de la degradación, si aplica */
   motivo?: string | null;
+  calibracion_valida?: boolean | null;
+  campo_visible?: number[][] | null;
+  largo_m?: number;
+  ancho_m?: number;
+  estado_calibracion?: "SIN_REFERENCIA" | "VERIFICADA" | "SIGUIENDO" | "PERDIDA" | null;
+  ultimo_anclaje_t?: number | null;
+  error_lineas_px?: number | null;
+  lineas_imagen?: number[][][];
 }
 
 export interface MensajeWorker {
+  detecciones?: { tid: number; clase: string; conf: number; bbox: number[] }[];
   /** Identificador del partido */
   partido: number;
   /** Segundos transcurridos desde el inicio del partido */
@@ -53,6 +62,7 @@ export type MensajeWebSocketVivo =
   | { tipo: "listo"; partido: number }
   | { tipo: "pong" }
   | { tipo: "posiciones"; datos: MensajeWorker }
+  | { tipo: "posesion"; datos: { acumulado: { local_pct: number; visitante_pct: number; disputa_pct: number } } }
   | { tipo: "error"; detalle?: unknown; invalidos_seguidos?: number };
 
 export type EstadoConexion =

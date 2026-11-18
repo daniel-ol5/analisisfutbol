@@ -32,6 +32,13 @@ export async function obtenerCalibracion(partidoId: number): Promise<Calibracion
   return data;
 }
 
+export async function obtenerCuadroCalibracion(videoId: number, tiempoS: number): Promise<{
+  imagen_base64: string; tiempo_s: number; cuadro_indice: number; ancho_px: number; alto_px: number;
+}> {
+  const { data } = await api.get(`/vision/videos/${videoId}/cuadro`, { params: { t_s: tiempoS } });
+  return data;
+}
+
 /** CU-19, CU-20 · Guardar o actualizar (upsert) la calibración y medidas de cancha. */
 export async function guardarCalibracion(
   partidoId: number,

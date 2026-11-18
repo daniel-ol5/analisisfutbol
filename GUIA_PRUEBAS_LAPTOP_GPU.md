@@ -1,240 +1,275 @@
-# Guía Operativa de Pruebas en Laptop con GPU · Área Técnica
+# Pruebas de visión en CPU y GPU remota
 
-Esta guía está redactada para el integrante del equipo que dispone de una laptop o PC con tarjeta gráfica **NVIDIA** (GeForce RTX 3050, 3060, 4060 o superior). 
+Esta guía distingue verificación de software, inferencia sobre video y validación
+con anotaciones reales. Pasar pruebas sintéticas no demuestra precisión en cancha.
+Ya se recibió un primer ensayo de detección y seguimiento en una T4 de Colab.
+La precisión y la conexión completa con la aplicación siguen pendientes de validar.
 
-Contiene:
-1. **Qué tienes que hacer exactamente para probar el sistema con tu GPU.**
-2. **Cómo actuar ante posibles problemas o errores comunes (Troubleshooting).**
-3. **Cómo está estructurado técnicamente todo el sistema que construimos.**
+Para comprobar el circuito desde la web con un clip corto y CPU local, usar
+[GUIA_FLUJO_COMPLETO_LOCAL.md](GUIA_FLUJO_COMPLETO_LOCAL.md). Esa prueba no
+sustituye la conexión con la GPU remota. El primer ensayo de T4 recibido ya está
+documentado en [el informe de Colab](docs/validacion/COLAB-2026-11-16-f3114175.md).
 
----
+## Estado del proyecto
 
-## 1. ¿Qué es lo que tienes que hacer para probar? (Paso a Paso)
+- El worker diferido y `procesamiento.directo` usan el mismo ensamblado de
+  posiciones, clasificación, seguimiento del balón y proyección.
+- El reloj usa los tiempos del decodificador. Inferir cada cuadro no multiplica
+  la duración del partido; publicar posiciones a 5 Hz es una decisión independiente.
+- La API coordina trabajos. Por defecto **no inicia un worker en la CPU del servidor**.
+  `VISION_AUTO_WORKER=true` habilita el comportamiento local anterior, solo para pruebas.
+- La reproducción en la web consulta las muestras del video sin reinsertarlas.
+- Al terminar una grabación se recalculan las métricas con los equipos detectados,
+  salvo si el partido está EN_CURSO y el motor de directo es el dueño de las métricas.
+- Los pesos especializados **no están incluidos**. Deben obtenerse de una fuente
+  identificada y validarse contra sus clases. El arranque falla si son incompatibles.
+- Sin pesos especializados se puede probar con COCO (`yolo11n.pt`), que detecta
+  personas y balón; no es evidencia de detección especializada de árbitros.
+- Los puntos de cancha necesitan un checkpoint compatible con el orden de las
+  32 marcas definido en `vision/calibracion/dinamica.py`. Tener cualquier modelo
+  de pose no cumple este requisito. Ese checkpoint sigue pendiente de validar.
+- Cuando se pierde la referencia de cámara se marca la calibración como inválida
+  y se dejan de publicar posiciones métricas. La recuperación automática necesita
+  referencias de cancha verificadas; el flujo óptico por sí solo puede derivar.
 
-El sistema de visión analiza videos de partidos de fútbol reales: detecta jugadores, porteros, árbitros y el balón, rastrea sus trayectorias continuas (Track IDs), clasifica los equipos por el color de sus camisetas bajo la iluminación real del estadio, compensa los movimientos de paneo de la cámara y proyecta las posiciones a metros sobre una cancha reglamentaria 2D (105m × 68m).
+## 1 Preparación local sin GPU
 
-Con tu GPU, el procesamiento que en CPU tarda varios minutos correrá a **30–60 FPS en tiempo real**.
-
----
-
-### Paso 1.1 · Verificar los Requisitos Previos en tu Laptop
-1. **Drivers NVIDIA**: Asegúrate de tener instalados los controladores actualizados de NVIDIA (GeForce Experience o desde [nvidia.com/drivers](https://www.nvidia.com/Download/index.aspx)).
-2. **Python**: Versión 3.10, 3.11 o 3.12 instalada (marcar *"Add python.exe to PATH"* durante la instalación).
-3. **Git**: Tener clonado el repositorio `Deportivo`.
-
----
-
-### Paso 1.2 · Preparar el Entorno con PyTorch CUDA
-Abre una terminal (`PowerShell` o `CMD`) en la carpeta raíz del proyecto `c:\...\Deportivo`:
-
-```powershell
-# 1. Crear el entorno virtual específico para GPU (si no existe)
-python -m venv venv_gpu
-
-# 2. Activar el entorno virtual
-# En PowerShell:
-.\venv_gpu\Scripts\Activate.ps1
-# O en CMD tradicional:
-.\venv_gpu\Scripts\activate.bat
-
-# 3. Instalar PyTorch con aceleración CUDA 12.1 (o 11.8)
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
-
-# 4. Instalar las dependencias de visión y procesamiento
-pip install ultralytics opencv-python numpy requests pydantic httpx
-```
-
-#### Comprobación Inmediata de CUDA:
-Ejecuta este comando en la terminal activada:
-```powershell
-python -c "import torch; print('CUDA disponible:', torch.cuda.is_available(), '| GPU detectada:', torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'NO DISPONIBLE')"
-```
-**Resultado esperado:**
-> `CUDA disponible: True | GPU detectada: NVIDIA GeForce RTX ...`
-
----
-
-### Paso 1.3 · Verificar los Modelos Neuronales
-En la carpeta `vision/pesos/` deben estar presentes los dos modelos especializados que dejamos configurados:
-1. `vision/pesos/yolov8_futbol.pt` *(Detector de 4 clases: balón, portero, jugador, árbitro)*.
-2. `vision/pesos/yolo_cancha_keypoints.pt` *(Detector de 32 marcas y líneas reglamentarias de la cancha FIFA)*.
-
-*(Ambos ya vienen incluidos en el repositorio).*
-
----
-
-### Paso 1.4 · Elegir la Modalidad de Prueba
-
-Tienes dos formas de hacer las pruebas:
-
-#### Modalidad A: Solo Worker GPU (Recomendada si Daniel tiene el Backend corriendo)
-No necesitas instalar PostgreSQL ni Node.js. Daniel corre el backend en su máquina y tú ejecutas el worker con tu GPU apuntando a su IP en la misma red Wi-Fi:
-1. Haz doble clic en `iniciar_worker_gpu.bat`.
-2. Introduce:
-   - **URL de la API**: `http://IP_DE_DANIEL:8000/api` (ejemplo: `http://192.168.1.15:8000/api`).
-   - **Email**: `realbetis@gmail.com`
-   - **Contraseña**: `12345678`
-   - **Dispositivo**: `cuda:0`
-
-#### Modalidad B: Todo Local en tu Laptop
-Si quieres correr todo el sistema (Base de datos + Backend + Frontend + Worker) en tu laptop:
-1. Iniciar PostgreSQL (puerto 5432, base de datos `analisisdeportivo`).
-2. Terminal 1 (Backend):
-   ```powershell
-   $env:PYTHONPATH="backend;vision"
-   backend\venv\Scripts\python -m uvicorn app.main:app --reload --port 8000
-   ```
-3. Terminal 2 (Frontend Web):
-   ```powershell
-   npm --prefix web run dev
-   ```
-4. Terminal 3 (Worker GPU):
-   Doble clic en `iniciar_worker_gpu.bat` (dejar URL en `http://localhost:8000/api`).
-
----
-
-### Paso 1.5 · Probar el Flujo Completo en la Aplicación Web
-
-1. Abre tu navegador en `http://localhost:5173` (o la IP donde corra el frontend).
-2. Inicia sesión con:
-   - **Email**: `realbetis@gmail.com`
-   - **Contraseña**: `12345678`
-3. Ve a la sección **Partidos** y selecciona el partido de prueba (ej. *Partido 7*).
-4. **Prueba de Calibración Inteligente (F5)**:
-   - Entra a **Calibración**.
-   - Haz clic en el botón **«⚡ Detectar puntos con IA»**.
-   - Verás cómo la red neuronal ubica instantáneamente todas las intersecciones de la cancha (córners, áreas, punto penal) y calcula el error métrico en metros automáticamente. Guarda la calibración.
-5. **Prueba de Procesamiento con GPU (F2 + F3 + F4)**:
-   - Ve a la pestaña **Videos**.
-   - Sube un video o usa el video existente (`video-12.mp4` de Manchester City vs Tottenham).
-   - Haz clic en **«Procesar video»**.
-   - En la consola del worker verás cómo tu GPU toma el trabajo, procesa los fotogramas a gran velocidad y la barra de progreso avanza hasta el 100%.
-6. **Prueba en el Radar 2D**:
-   - Entra a **Análisis / Visor de Partido**.
-   - Dale a *Play*: verás cómo los jugadores se mueven en la cancha 2D con sus coordenadas reales, sin saltos de IDs, con los colores de los equipos asignados fielmente y el balón en sincronía con el video.
-
----
-
-## 2. Correcciones y Cómo Actuar ante Problemas (Troubleshooting)
-
-### 🔴 Caso 1: PyTorch no detecta la GPU (`CUDA disponible: False`)
-- **Causa**: Se instaló la versión estándar de PyTorch para CPU (la que viene por defecto en pip).
-- **Cómo actuar**:
-  1. Desinstalar la versión actual:
-     ```powershell
-     pip uninstall torch torchvision -y
-     ```
-  2. Forzar la instalación de la versión con soporte CUDA:
-     ```powershell
-     pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
-     ```
-  3. Revisa en el Administrador de Tareas de Windows (pestaña Rendimiento) que el driver NVIDIA esté activo.
-
----
-
-### 🔴 Caso 2: `ConnectionRefusedError` al conectar el Worker
-- **Causa**: La IP del backend no es alcanzable o el firewall de Windows está bloqueando el puerto 8000.
-- **Cómo actuar**:
-  1. Si estás en red local compartida, averigua la IP del host con `ipconfig` en la máquina del servidor (ej. `192.168.1.XX`).
-  2. Asegúrate de que el backend se inició escuchando en todas las interfaces:
-     `uvicorn app.main:app --host 0.0.0.0 --port 8000`
-  3. Desactiva temporalmente el firewall privado de Windows o crea una regla para permitir conexiones entrantes en el puerto TCP `8000`.
-
----
-
-### 🔴 Caso 3: Error de autenticación (`401 Unauthorized` o `Token inválido`)
-- **Causa**: Credenciales incorrectas o usuario de otro club.
-- **Cómo actuar**:
-  - Utiliza siempre las credenciales predeterminadas del club de prueba:
-    - **Email**: `realbetis@gmail.com`
-    - **Contraseña**: `12345678`
-
----
-
-### 🔴 Caso 4: Memoria de Video Llena (`CUDA Out of Memory`)
-- **Causa**: Si tu GPU tiene 4 GB de VRAM (ej. RTX 3050 Laptop) y se procesa a resolución 4K nativa.
-- **Cómo actuar**:
-  - En la llamada del worker, especifica un tamaño de imagen escalado para inferencia (el tamaño 1280 es el estándar ideal):
-    ```powershell
-    python -m procesamiento.worker --dispositivo cuda:0 --tamano-img 1280
-    ```
-
----
-
-### 🔴 Caso 5: El video se queda en estado "En cola"
-- **Causa**: El worker no estaba encendido al momento de solicitar el procesamiento o se desconectó.
-- **Cómo actuar**:
-  - Simplemente enciende el worker ejecutando `iniciar_worker_gpu.bat`. El worker consultará automáticamente los trabajos pendientes (`/trabajos/tomar`) y reanudará el video de inmediato.
-
----
-
-### 🔴 Caso 6: Colores invertidos o confusión de camisetas
-- **Causa**: Los colores configurados en el partido no corresponden con las camisetas reales que usaron en esa grabación.
-- **Cómo actuar**:
-  - En la vista de partido o video, ajusta el color principal (ej. Celeste `#6CABDD` y Blanco `#FFFFFF`).
-  - Nuestro **Calibrador de Equipos (F4)** automáticamente aprenderá los centroides empíricos de luz del estadio en los primeros 30 cuadros del video y corregirá la asignación.
-
----
-
-## 3. ¿Cómo está Estructurado Todo lo que Hicimos? (Arquitectura Técnica)
-
-El sistema está diseñado de forma profesional siguiendo los estándares de software deportivo de alto nivel (similar a plataformas como Hudl o Second Spectrum), sin datos falsos ni simulaciones cosméticas:
-
-```mermaid
-flowchart TD
-    Video["Video del Partido (MP4 / Transmisión)"] --> Worker["Worker de Visión (GPU · vision/)"]
-    
-    subgraph Pipeline["Pipeline de Visión Cuadro a Cuadro"]
-        Worker --> YoloDet["YOLOv8 Fútbol (yolov8_futbol.pt)\nClases: Balón, Portero, Jugador, Árbitro"]
-        Worker --> YoloPose["YOLOv8 Cancha (yolo_cancha_keypoints.pt)\n32 Puntos Clave Reglamentarios FIFA"]
-        
-        YoloDet --> Tracker["BoT-SORT + GMC (gmc.py)\nCompensación de Paneo de Cámara"]
-        YoloPose --> Dinamica["Homografía Dinámica (dinamica.py)\nRANSAC + Suavizado Temporal"]
-        
-        Tracker --> CalibradorColor["Clustering de Indumentaria (color.py)\nK-Means CIELAB + Filtro Césped/Sombras\nAsignación de Porteros por Mitad"]
-        Tracker --> BalonTrack["Rastreador Cinemático de Balón (balon.py)\nGestión de Oclusiones"]
-        
-        CalibradorColor --> Proyeccion["Proyección a Coordenadas Métricas (X, Y en metros)\nCancha Reglamentaria 105m x 68m"]
-        Dinamica --> Proyeccion
-        BalonTrack --> Proyeccion
-    end
-    
-    Proyeccion --> MensajeWorker["Contrato Unificado MensajeWorker\nJSON por Segundo de Video"]
-    MensajeWorker --> Backend["Backend FastAPI (backend/)\nIngestión de Telemetría a PostgreSQL"]
-    Backend --> Frontend["Frontend React / Vite (web/)\nRadar 2D Táctico + Visor de Video"]
-```
-
----
-
-### Descripción de los Componentes Principales
-
-| Módulo | Archivos Clave | Responsabilidad |
-|---|---|---|
-| **Detección Especializada** | [`vision/deteccion/modelo.py`](file:///c:/Users/Daniel/Desktop/SW1/Deportivo/vision/deteccion/modelo.py) | Carga perezosa de Ultralytics YOLO sobre GPU CUDA. Utiliza `yolov8_futbol.pt` entrenado específicamente en fútbol para distinguir jugadores, porteros, árbitros y el balón en tomas abiertas. |
-| **Seguimiento con Paneo (GMC)** | [`vision/seguimiento/tracker.py`](file:///c:/Users/Daniel/Desktop/SW1/Deportivo/vision/seguimiento/tracker.py)<br>[`vision/seguimiento/gmc.py`](file:///c:/Users/Daniel/Desktop/SW1/Deportivo/vision/seguimiento/gmc.py) | **Compensador Global de Movimiento de Cámara**: utiliza flujo óptico piramidal de alta velocidad ($< 5\text{ ms}$) para compensar los giros y paneos del operador de cámara, impidiendo que el tracker pierda el rastro de los jugadores al moverse la toma. |
-| **Homografía Dinámica por IA** | [`vision/calibracion/dinamica.py`](file:///c:/Users/Daniel/Desktop/SW1/Deportivo/vision/calibracion/dinamica.py) | Detecta **32 puntos reglamentarios de la cancha** (líneas de área, punto penal, círculo central) mediante YOLOv8x-pose. Calcula la matriz de perspectiva $H$ con OpenCV RANSAC y la fusiona de forma suavizada ($\alpha = 0.35$) para proyectar píxeles a metros reales sin saltos. |
-| **Clustering de Indumentaria** | [`vision/seguimiento/color.py`](file:///c:/Users/Daniel/Desktop/SW1/Deportivo/vision/seguimiento/color.py) | **`CalibradorEquiposPartido`**: en los primeros segundos del partido extrae los colores de los torsos en espacio perceptual CIELAB, descarta césped y árbitros, y agrupa en 2 clústeres empíricos ($k=2$). Asigna a los porteros según la mitad que defienden ($x < 52.5\text{ m}$) y estabiliza temporalmente los Track IDs. |
-| **Seguimiento del Balón** | [`vision/seguimiento/balon.py`](file:///c:/Users/Daniel/Desktop/SW1/Deportivo/vision/seguimiento/balon.py) | Rastreador cinemático que valida velocidades físicas realistas de la pelota, ignora detecciones espurias en gradas o vallas y predice la posición cuando el balón queda tapado por el cuerpo de un jugador. |
-| **Pipeline y Contrato Worker** | [`vision/procesamiento/mensajes.py`](file:///c:/Users/Daniel/Desktop/SW1/Deportivo/vision/procesamiento/mensajes.py)<br>[`vision/procesamiento/worker.py`](file:///c:/Users/Daniel/Desktop/SW1/Deportivo/vision/procesamiento/worker.py) | Ensambla las salidas de todos los módulos en el contrato JSON `MensajeWorker`, actualiza el progreso en tiempo real y gestiona la comunicación con la API del backend mediante tokens JWT de sesión. |
-
----
-
-### Resumen de Comandos Rápidos para tu Terminal
+Desde la raíz, PowerShell:
 
 ```powershell
-# Activar entorno
-.\venv_gpu\Scripts\Activate.ps1
-
-# Probar CUDA
-python -c "import torch; print('CUDA OK:', torch.cuda.is_available())"
-
-# Ejecutar tests para validar que todo funcione en tu entorno
-$env:PYTHONPATH="vision;backend"
-python -m pytest vision/tests/
-
-# Iniciar worker
-python vision/procesamiento/worker.py --api http://localhost:8000/api --email realbetis@gmail.com --password 12345678 --dispositivo cuda:0
+python -m venv .venv
+.\.venv\Scripts\python -m pip install -r backend/requirements.txt -r vision/requirements-pruebas.txt
 ```
 
-Con esto, tienes todo lo necesario para ejecutar y validar el sistema al 100% en tu laptop con aceleración por tarjeta gráfica NVIDIA.
+Esto instala pruebas y decodificación de video, sin Torch ni Ultralytics.
 
+```powershell
+cd vision
+..\.venv\Scripts\python -m pytest
+cd ..\backend
+..\.venv\Scripts\python -m pytest
+cd ..\web
+npm.cmd ci
+npm.cmd test
+npm.cmd run build
+```
+
+Las pruebas del backend usan `backend/test.db`, separada de la base de desarrollo.
+Para inspeccionar el archivo proporcionado, desde `vision`:
+
+```powershell
+..\.venv\Scripts\python -m evaluacion.inspeccionar_video "..\almacen\BAYERN - PSG CAMARA TACTICA - YouTube - Google Chrome 2026-11-16 10-12-48.mp4"
+```
+
+El informe contiene resolución, cantidad de cuadros y tiempos reales; no ejecuta
+inferencia. El archivo es una captura de 1376 × 776, de unos 152 segundos,
+y no conserva todo el detalle del original de YouTube.
+
+## 2 Preparar una sesión GPU
+
+### Primera prueba: Google Colab
+
+El equipo eligió **probar primero Colab**. Abrir
+[Primera_prueba_Colab.ipynb](vision/notebooks/Primera_prueba_Colab.ipynb) mediante
+Archivo → Subir cuaderno en [Colab](https://colab.research.google.com/).
+Seleccionar un entorno con GPU y ejecutar las celdas en orden.
+
+Preparar el código en la laptop, desde `vision`:
+
+```powershell
+..\.venv\Scripts\python -m evaluacion.preparar_colab
+```
+
+El comando muestra la ruta de `analisisfutbol-colab.zip` en la carpeta temporal.
+No sobrescribe un paquete existente: cambiar `--salida` para otro ensayo.
+Incluye solo código y configuración del worker, con hashes por archivo.
+No incluye `.env`, videos, pesos, bases de datos, `.git` ni credenciales.
+
+En el cuaderno:
+
+1. Subir ese ZIP, instalar requisitos y comprobar CUDA.
+2. Subir el video. Para el primer ensayo, conservar el límite de 30 segundos.
+3. Para detección y seguimiento, mantener `USAR_CALIBRACION=False`.
+4. Para posiciones en metros, descargar `primer-cuadro.png` desde Archivos de
+   Colab, calibrarlo en la aplicación local, guardar y pulsar **Descargar calibración**.
+   Subir ese JSON con `USAR_CALIBRACION=True`. Debe corresponder a ese primer encuadre
+   y a la resolución original; no sustituirlo por una matriz identidad.
+5. Ejecutar grabación y directo simulado con las mismas opciones.
+6. Descargar el ZIP con cajas por cuadro, muestras métricas opcionales, capturas,
+   tiempos, versiones, GPU y hashes. Conservarlo antes de desconectar el entorno.
+
+El ensayo usa el código del proyecto sin conectar la API local a Internet.
+Los resultados se descargan para revisión; **no se importan automáticamente a
+la aplicación**. El directo simulado procesa el archivo a velocidad real con el
+lector que descarta cuadros atrasados: no prueba transporte de cámara ni WebSocket.
+
+El dispositivo observado se consulta en el predictor de Ultralytics. Sus pesos
+originales pueden permanecer en CPU mientras una copia realiza la inferencia
+en CUDA. Consultar solo `YOLO.model.parameters()` puede producir un diagnóstico
+incorrecto. `lap` se instala con los requisitos antes de iniciar el seguimiento.
+La lectura se conserva desde el evento `on_predict_postprocess_end`, aunque el
+predictor sea liberado después. Para continuar una sesión que ya tiene el video
+subido, copiar [Continuar_prueba_Colab.py](vision/notebooks/Continuar_prueba_Colab.py)
+completo en una celda nueva. Por defecto ejecuta ambos ensayos sin calibración,
+verifica CUDA durante la inferencia y descarga un ZIP; no requiere repetir la
+subida del video. Para la segunda fase, cambiar `USAR_CALIBRACION_ENSAYO` a `True`
+y subir el JSON válido de la aplicación cuando lo solicite. Mantener los mismos
+pesos y tamaño de inferencia para comparar con el primer ensayo.
+
+Según la [FAQ oficial](https://research.google.com/colaboratory/faq.html), Colab
+no garantiza GPU, límites ni duración de sesión. Se usa aquí como cuaderno
+interactivo de evaluación. No instalar servidores SSH ni mantener workers
+distribuidos en su modalidad gratuita. Un directo de partido completo sigue
+necesitando validar un entorno estable. No se ha ejecutado este cuaderno en
+una GPU de Colab todavía.
+
+### Alternativa posterior para el directo: instancia con SSH
+
+Si Colab no cubre la siguiente fase, evaluar **Vast.ai bajo demanda**, una A5000 o
+3090/4090 de 24 GB, solo durante sesiones concretas. El worker es independiente
+del proveedor. Comparar costo por minuto de video y retraso del directo.
+No hay una instancia contratada ni una cuenta conectada por este proyecto.
+
+En [Vast.ai](https://cloud.vast.ai/), crear/verificar la cuenta y revisar el saldo.
+Para SSH, registrar una clave pública propia siguiendo su
+[guía oficial](https://docs.vast.ai/guides/instances/connect/ssh.md).
+La clave privada permanece en la laptop. Seleccionar una oferta con:
+
+- Una GPU de 24 GB, al menos 16 GB de RAM y espacio suficiente para entorno y clip.
+- Modalidad **on-demand** para el directo; una oferta interrumpible puede detenerse.
+- Host verificado, duración disponible mayor que el ensayo y buena conexión.
+- Desglose visible de cómputo, disco y transferencia de datos en ambas direcciones.
+
+Los precios son de mercado, no una tarifa fija del proyecto. Una primera prueba
+de dos horas debe cotizarse antes de contratar, dentro del presupuesto total de
+US$10–20. A 5 Mbit/s, 90 minutos de video representan aproximadamente 3,4 GB de
+entrada, además de resultados y archivos. El almacenamiento se cobra mientras
+existe la instancia, incluso detenida: descargar los resultados antes de eliminarla.
+
+Seleccionar una plantilla PyTorch con CUDA compatible con el controlador del host.
+Comprobar primero:
+
+```bash
+nvidia-smi
+python -c "import torch; print(torch.__version__, torch.cuda.is_available()); print(torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'SIN CUDA')"
+```
+
+Transferir el código autorizado mediante un ZIP o SCP, sin incluir `.env`, `.git`,
+entornos virtuales, `node_modules` o videos innecesarios. No se necesita hacer
+commits ni push para ejecutar el worker remoto.
+
+```bash
+cd /workspace/analisisfutbol
+python -m pip install -r vision/requirements.txt
+python -m pip freeze > /workspace/entorno-prueba.txt
+```
+
+Guardar la versión de Python, Torch, Ultralytics, GPU, pesos y sus hashes en cada
+ensayo. Un rendimiento sin esa información no es reproducible.
+
+## 3 Conectar la API local sin abrirla a Internet
+
+Los pasos 3–5 corresponden a una instancia propia con SSH. El cuaderno de Colab
+del paso 2 funciona por archivos y no necesita estos túneles.
+
+La API puede seguir en la laptop i5. El worker de la nube no puede acceder a
+`localhost` de esa laptop directamente. Usar una API desplegada con HTTPS o un
+túnel SSH. Ejemplo desde la laptop, con los datos de SSH del proveedor:
+
+```powershell
+ssh -N -R 18000:127.0.0.1:8000 -L 19000:127.0.0.1:19000 USUARIO@HOST -p PUERTO_SSH
+```
+
+Esto permite al worker acceder a la API mediante `http://127.0.0.1:18000/api`.
+El segundo reenvío sirve para el ensayo de video comprimido del paso 5.
+Mantener esa terminal abierta. No desactivar el firewall.
+
+## 4 Procesar una grabación
+
+En la web: crear un partido de prueba separado, calibrar su primer encuadre,
+subir un video y solicitar procesamiento. **Un partido en movimiento requiere
+validar la referencia durante los paneos**, no solo calibrar su primer cuadro.
+
+En Bash de la GPU, introducir la contraseña sin guardarla en scripts:
+
+```bash
+read -s -p "Contraseña: " VISION_PASSWORD; export VISION_PASSWORD; echo
+cd /workspace/analisisfutbol/vision
+python -m procesamiento.worker --api http://127.0.0.1:18000/api --email ANALISTA --dispositivo cuda:0 --clases coco --tamano-img 1280 --una-vez
+```
+
+Para pesos de fútbol de cuatro clases, instalarlos previamente en
+`vision/pesos/yolov8_futbol.pt` y usar `--clases futbol`. Comprobar procedencia,
+orden de clases y métricas; el nombre del archivo no acredita su calidad.
+El worker valida `modelo.names` antes de interpretar detecciones.
+
+No usar dos procesamientos del mismo partido como si fueran mediciones
+independientes: la separación por ejecuciones y sustitución de resultados en
+la base es un punto pendiente de la siguiente fase. Usar partidos de prueba separados.
+
+En Análisis → Grabación, escoger el video procesado. El reloj, las cajas y el
+plano siguen el tiempo del reproductor. Pausar o buscar no debe insertar filas.
+Un archivo local en Vista previa no se analiza automáticamente.
+
+## 5 Ensayar directo
+
+Primero probar el mismo archivo a velocidad real. Crear otro partido de prueba,
+calibrarlo e iniciarlo desde Operación del partido. La ingesta exige EN_CURSO.
+En la GPU, usando una ruta de video accesible allí:
+
+```bash
+python -m procesamiento.directo --api http://127.0.0.1:18000/api --email ANALISTA --partido ID --fuente /workspace/clip.mp4 --simular-directo --dispositivo cuda:0 --clases coco --color-propio '#C8102E' --color-rival '#17202A'
+```
+
+Para medir el transporte desde la laptop, el receptor puede abrir una entrada TCP:
+
+```bash
+python -m procesamiento.directo --api http://127.0.0.1:18000/api --email ANALISTA --partido ID --fuente 'tcp://127.0.0.1:19000?listen=1' --dispositivo cuda:0 --clases coco --color-propio '#C8102E' --color-rival '#17202A'
+```
+
+Iniciar inmediatamente el emisor local con FFmpeg, por el túnel SSH del paso 3:
+
+```powershell
+ffmpeg -re -i "RUTA_DEL_VIDEO.mp4" -an -c:v libx264 -preset ultrafast -tune zerolatency -b:v 5M -maxrate 5M -bufsize 1M -f mpegts tcp://127.0.0.1:19000
+```
+
+La entrada TCP depende del soporte FFmpeg del OpenCV de la instancia. Se debe
+verificar en la sesión alquilada; este transporte no se ha ensayado todavía.
+Para la cámara real se sustituye la entrada de archivo por su RTSP o dispositivo
+de captura. No cambiar de encuadre, resolución o fuente sin verificar calibración.
+
+El worker conserva un solo cuadro pendiente para no acumular una cola atrasada.
+`retraso_s` mide procesamiento desde la recepción del cuadro, **no todo el tránsito
+de red**. La latencia de cámara a pantalla se debe medir aparte con un reloj visible.
+En Análisis → Directo, el plano recibe las posiciones por el canal de partido.
+La vista previa de cámara del navegador es local y no transporta video a la GPU.
+
+## 6 Aceptación antes de cerrar la fase
+
+Registrar resultados por clip y por configuración:
+
+| Prueba | Evidencia requerida |
+|---|---|
+| Tiempo | Las últimas posiciones coinciden con la duración real; sin multiplicaciones por stride |
+| Modelos | Clases verificadas, origen y hash de cada checkpoint |
+| Detección y seguimiento | mAP e IDF1 en anotaciones reales; mínimos del backlog: 0,85 y 0,70 |
+| Equipos | Matriz de confusión, incluyendo árbitro, portero y desconocido |
+| Balón | Precisión y cobertura solo cuando es visible; predicción separada de observación |
+| Calibración | Error sobre marcas independientes, al principio y durante paneos; detectar izquierda/derecha ambiguas |
+| Encuadre | Personas fuera del terreno excluidas; posiciones fuera de vista no inventadas |
+| Directo | Sin retraso creciente; objetivo inicial de latencia extremo a extremo menor a 2 s |
+| Resistencia | Sesión de duración de partido, reconexión, expiración de tokens, cancelación |
+| Datos | Reproducir no cambia filas; reintentar un procesamiento no debe mezclar ejecuciones |
+
+La primera batería debe usar tramos cortos anotados de este video y un clip
+independiente para evaluar. Ajustar y medir sobre cuadros vecinos del mismo tramo
+puede ocultar errores. Para recomendaciones colectivas, registrar también cobertura
+del encuadre: observar solo media cancha no permite afirmar que la otra está vacía.
+
+Detener la GPU al terminar, descargar los resultados y revisar almacenamiento
+persistente: detener cómputo no necesariamente detiene todos los cargos.
+
+Referencias: [precios Vast.ai](https://docs.vast.ai/guides/instances/pricing.md),
+[tipos de instancia](https://docs.vast.ai/guides/instances/choosing/instance-types.md),
+[seguimiento Ultralytics](https://docs.ultralytics.com/modes/track),
+[calibración SoccerNet](https://www.soccer-net.org/tasks/camera-calibration).

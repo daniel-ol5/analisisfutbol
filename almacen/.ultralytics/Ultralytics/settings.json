@@ -1,0 +1,19 @@
+{
+  "settings_version": "0.0.8",
+  "datasets_dir": "C:\\Users\\Juan Carlos\\Desktop\\Daniel\\SW1\\deportivo\\datasets",
+  "weights_dir": "C:\\Users\\Juan Carlos\\Desktop\\Daniel\\SW1\\deportivo\\analisisfutbol\\weights",
+  "runs_dir": "C:\\Users\\Juan Carlos\\Desktop\\Daniel\\SW1\\deportivo\\analisisfutbol\\runs",
+  "uuid": "99df00745a26cae748fcb9ff5fdfa483c03bed36a350f1ca23cf47c9f94d2405",
+  "sync": true,
+  "api_key": "",
+  "openai_api_key": "",
+  "clearml": true,
+  "comet": true,
+  "dvc": true,
+  "mlflow": true,
+  "raytune": true,
+  "tensorboard": false,
+  "wandb": false,
+  "vscode_msg": true,
+  "openvino_msg": true
+}

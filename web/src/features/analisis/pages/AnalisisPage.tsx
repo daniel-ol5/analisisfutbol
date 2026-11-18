@@ -23,8 +23,7 @@ export function AnalisisPage() {
     <div className="analisis-pagina">
       {/* Cabecera del Módulo de Análisis Táctico */}
       <header className="page-head" style={{ marginBottom: 0 }}>
-        <span className="kicker">P5 · ANÁLISIS TÁCTICO (CU-40 … CU-48)</span>
-        <h2 style={{ margin: "4px 0 6px" }}>Análisis en Vivo y Pospartido</h2>
+        <h2 style={{ margin: "4px 0 6px" }}>Análisis del partido</h2>
         <p
           style={{
             margin: 0,
@@ -33,9 +32,7 @@ export function AnalisisPage() {
             maxWidth: 780,
           }}
         >
-          Supervisa en vivo el desarrollo del partido con telemetría de tracking a 5 Hz (
-          <strong>CU-40</strong>), evalúa el dibujo táctico y los espacios con el radar 2D oficial (
-          <strong>CU-41</strong>) y analiza la ocupación espacial por intervalos.
+          Revisa el video, las posiciones y las métricas observadas del partido.
         </p>
       </header>
 
@@ -44,7 +41,7 @@ export function AnalisisPage() {
         {[
           {
             id: "vivo" as const,
-            label: "Partido en Vivo y Radar 2D",
+            label: "Partido",
             cu: "CU-40, CU-41 · Activo",
           },
           {
@@ -54,12 +51,12 @@ export function AnalisisPage() {
           },
           {
             id: "metricas" as const,
-            label: "Posesión y Métricas Físicas",
+            label: "Métricas",
             cu: "CU-42, CU-43 · Sprint 4",
           },
           {
             id: "pases" as const,
-            label: "Evolución y Red de Pases",
+            label: "Pases y evolución",
             cu: "CU-45 … CU-48 · Sprint 4",
           },
         ].map((tab) => {
@@ -72,7 +69,6 @@ export function AnalisisPage() {
               onClick={() => setSeccionActiva(tab.id)}
             >
               <span className="analisis-tab-label">{tab.label}</span>
-              <span className="analisis-tab-cu">{tab.cu}</span>
             </button>
           );
         })}

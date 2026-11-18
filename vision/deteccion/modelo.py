@@ -8,12 +8,16 @@ la maquina con GPU (ver vision/README.md).
 
 from __future__ import annotations
 
+import hashlib
+import logging
+import unicodedata
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from seguimiento.tipos import Clase
 
-from pathlib import Path
+log = logging.getLogger(__name__)
 
 # Pesos preentrenados especializados en fútbol (Roboflow / SoccerNet)
 _PESOS_FUTBOL = Path(__file__).resolve().parent.parent / "pesos" / "yolov8_futbol.pt"
@@ -34,6 +38,25 @@ CLASES_PROPIO: dict[int, Clase] = {0: Clase.JUGADOR, 1: Clase.ARBITRO, 2: Clase.
 
 # Mapa de clases del modelo especializado de fútbol (4 clases: ball, goalkeeper, player, referee)
 CLASES_FUTBOL: dict[int, Clase] = {0: Clase.BALON, 1: Clase.PORTERO, 2: Clase.JUGADOR, 3: Clase.ARBITRO}
+
+
+def validar_clases(nombres: dict[int, str] | list[str], clases: dict[int, Clase]) -> None:
+    """Impide interpretar etiquetas de otro checkpoint como jugadores o balón."""
+    alias = {
+        Clase.JUGADOR: {"person", "player", "jugador"},
+        Clase.PORTERO: {"goalkeeper", "goalie", "portero", "arquero"},
+        Clase.ARBITRO: {"referee", "arbitro"},
+        Clase.BALON: {"ball", "sports ball", "balon", "pelota"},
+    }
+    nombres = dict(enumerate(nombres)) if isinstance(nombres, list) else nombres
+    for indice, clase in clases.items():
+        nombre = str(nombres.get(indice, "")).lower().replace("_", " ").strip()
+        nombre = "".join(c for c in unicodedata.normalize("NFD", nombre) if not unicodedata.combining(c))
+        if nombre not in alias[clase]:
+            raise ValueError(
+                f"Modelo incompatible: clase {indice} es {nombre!r}, se esperaba {clase.value}. "
+                "Selecciona el mapa de clases correspondiente a estos pesos."
+            )
 
 
 @dataclass
@@ -60,6 +83,7 @@ class ModeloDeteccion:
     def __init__(self, config: ConfigModelo | None = None) -> None:
         self.config = config or ConfigModelo()
         self._modelo: Any | None = None
+        self._dispositivo_observado: str | None = None
 
     def dispositivo_efectivo(self) -> str:
         """Resuelve el dispositivo seguro: si pide cuda pero torch no tiene CUDA, usa cpu."""
@@ -73,10 +97,38 @@ class ModeloDeteccion:
                 return "cpu"
         return dev
 
+    def dispositivo_inferencia(self) -> str | None:
+        """Dispositivo del predictor que ejecutó la inferencia, no de los pesos base.
+
+        Ultralytics puede copiar el modelo al preparar su predictor. Consultar
+        `YOLO.model.parameters()` puede devolver CPU aunque el predictor use CUDA.
+        Se conserva también la lectura tomada al terminar una inferencia, para
+        que siga disponible aunque Ultralytics libere o sustituya el predictor.
+        """
+        if self._dispositivo_observado is not None:
+            return self._dispositivo_observado
+        predictor = getattr(self._modelo, "predictor", None)
+        dispositivo = getattr(predictor, "device", None)
+        return str(dispositivo) if dispositivo is not None else None
+
+    def _registrar_dispositivo(self, predictor: Any) -> None:
+        dispositivo = getattr(predictor, "device", None)
+        self._dispositivo_observado = str(dispositivo) if dispositivo is not None else None
+
     def cargar(self) -> Any:
         from ultralytics import YOLO  # importa torch: solo en la maquina con GPU
 
-        self._modelo = YOLO(self.config.ruta_pesos)
+        modelo = YOLO(self.config.ruta_pesos)
+        validar_clases(modelo.names, self.config.clases)
+        modelo.add_callback("on_predict_postprocess_end", self._registrar_dispositivo)
+        self._dispositivo_observado = None
+        ruta = Path(self.config.ruta_pesos)
+        digest = None
+        if ruta.is_file():
+            with ruta.open("rb") as archivo:
+                digest = hashlib.file_digest(archivo, "sha256").hexdigest()
+        log.info("Modelo cargado: %s | SHA256=%s | clases=%s", ruta, digest, modelo.names)
+        self._modelo = modelo
         return self._modelo
 
     @property
