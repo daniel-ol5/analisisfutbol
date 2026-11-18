@@ -709,6 +709,7 @@ class _PartidoPaginaState extends State<PartidoPagina>
     final partido = _partido;
     final alineacion = _alineacion;
     final partidoInfo = _partidoSeleccionado;
+    final resumenPartidoId = partidoInfo?.id ?? partido?.id;
     final fase = determinarFasePartido(
       estado,
       estadoPartido: partidoInfo?.estado ?? partido?.estado,
@@ -745,20 +746,14 @@ class _PartidoPaginaState extends State<PartidoPagina>
             tooltip: 'Actualizar estado',
             icon: const Icon(Icons.refresh_rounded),
             onPressed: _recargar,
-          if (partido != null) IconButton(key: const Key('abrir-resumen'), tooltip: 'Resumen', icon: const Icon(Icons.insights_rounded), onPressed: () => context.push('/partidos/${partido.id}/resumen')), // T-081 (Alejandra): abre el resumen de métricas
-          TextButton.icon(
-            key: const Key('eventos-pendientes'),
-            onPressed: _pendientes > 0 && !_sincronizando
-                ? () => _sincronizar(anunciar: true)
-                : null,
-            icon: _sincronizando
-                ? const SizedBox.square(
-                    dimension: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.cloud_upload_outlined),
-            label: Text('Pendientes: $_pendientes'),
           ),
+          if (resumenPartidoId != null)
+            IconButton(
+              key: const Key('abrir-resumen'),
+              tooltip: 'Resumen',
+              icon: const Icon(Icons.insights_rounded),
+              onPressed: () => context.push('/partidos/$resumenPartidoId/resumen'),
+            ),
         ],
       ),
       body: RefreshIndicator(

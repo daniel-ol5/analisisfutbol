@@ -10,6 +10,7 @@
     "lint": "oxlint",
     "format": "prettier --write .",
     "typecheck": "tsc -b",
+    "audit:ci": "node scripts/audit-ci.mjs",
     "test": "vitest run",
     "test:watch": "vitest"
   },
