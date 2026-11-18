@@ -19,6 +19,7 @@ para que la pérdida transitoria de un defensor no haga saltar la línea.
 """
 
 from dataclasses import dataclass
+from math import hypot
 
 from app.analisis.parametros import Parametros
 from app.deportivo.schemas import Direccion
@@ -30,6 +31,7 @@ class MuestraBloque:
     altura_linea_m: float | None
     amplitud_m: float | None
     compacidad_m2: float | None
+    distancia_centro_m: float | None = None
 
 
 def area_envolvente(puntos: list[tuple[float, float]]) -> float:
@@ -123,9 +125,14 @@ def bloque_equipo(
     if len(campo) >= p.jugadores_linea:
         retrasados = sorted(n[1] for n in campo)[: p.jugadores_linea]
         altura = sum(retrasados) / len(retrasados)
-    amplitud = compacidad = None
+    amplitud = compacidad = distancia_centro = None
     if len(campo) >= 2:
+        xs = [n[1] for n in campo]
         ys = [n[2] for n in campo]
+        centro_x = sum(xs) / len(campo)
+        centro_y = sum(ys) / len(campo)
+        coordenadas = list(zip(xs, ys, strict=True))
         amplitud = max(ys) - min(ys)
-        compacidad = area_envolvente([(n[1], n[2]) for n in campo])
-    return MuestraBloque(altura, amplitud, compacidad)
+        compacidad = area_envolvente(coordenadas)
+        distancia_centro = sum(hypot(x - centro_x, y - centro_y) for x, y in coordenadas) / len(campo)
+    return MuestraBloque(altura, amplitud, compacidad, distancia_centro)

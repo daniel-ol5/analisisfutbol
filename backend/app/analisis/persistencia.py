@@ -7,6 +7,7 @@ las tablas de métricas no tienen `club_id`, cuelgan de `partido`.
 """
 
 from collections.abc import AsyncIterator, Iterable
+from dataclasses import fields
 
 from sqlalchemy import delete, insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -30,11 +31,12 @@ from app.vision.models import Calibracion
 
 LOTE_LECTURA = 5000
 
-# Los acumuladores de ritmo se consultan en una ventana en vivo y se descartan
-# cuando se pierde calidad. No forman parte de los intervalos persistidos.
-CAMPOS_EQUIPO_PERSISTIDOS = (
-    "posesion_s", "pases_intentados", "pases_completados", "distancia_m",
-    "suma_altura_m", "n_altura", "suma_amplitud_m", "suma_compacidad_m", "n_forma",
+# Persistir todos los acumuladores de intervalo que tienen columna en el modelo.
+# Los acumuladores usados solo durante el partido quedan en memoria.
+CAMPOS_EQUIPO_PERSISTIDOS = tuple(
+    campo.name
+    for campo in fields(AcumEquipo)
+    if campo.name in MetricaIntervalo.__table__.columns
 )
 
 

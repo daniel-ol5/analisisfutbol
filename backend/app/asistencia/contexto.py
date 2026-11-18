@@ -83,8 +83,7 @@ class EstadoTactico:
             if bloque.n_forma >= 12:
                 if bloque.amplitud_m is not None:
                     datos["amplitud_propia_m"] = bloque.amplitud_m
-                if bloque.compacidad_m is not None:
-                    datos["compacidad_propia_m"] = bloque.compacidad_m
+                datos["compacidad_propia_m"] = bloque.suma_distancia_centro_m / bloque.n_forma
 
         if self._desde_balon is not None and t - self._desde_balon >= VENTANA_JUEGO_S + motor.p.pase_max_hueco_s:
             juego = motor.ultimos(VENTANA_JUEGO_S)

@@ -52,6 +52,8 @@ class AcumEquipo:
     # Acumuladores en memoria para comparar ritmo observado por jugador.
     tiempo_ritmo_s: float = 0.0
     distancia_ritmo_m: float = 0.0
+    # Distancia media al centro de cada muestra para la regla «Bloque muy disperso».
+    suma_distancia_centro_m: float = 0.0
     # T-102 (CU-45): las mismas sumas, separadas por fase. Con balón = el equipo
     # posee; sin balón = posee el rival. En disputa o sin balón visible la muestra
     # solo entra en los totales de arriba.
@@ -314,6 +316,8 @@ class MotorPartido:
             )
             for destino in self._destinos(m.t, intervalo):
                 acum = destino.equipos[equipo]
+                if b.distancia_centro_m is not None:
+                    acum.suma_distancia_centro_m += b.distancia_centro_m
                 for sufijo in ("", f"_{fase}") if fase else ("",):
                     if b.altura_linea_m is not None:
                         setattr(acum, f"suma_altura{sufijo}_m",
