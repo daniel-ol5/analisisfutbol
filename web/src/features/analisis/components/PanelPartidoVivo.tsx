@@ -9,12 +9,13 @@ import type { ConfiguracionPlano2D, ItemLineaTiempo, MensajeWorker } from "../ty
 import { LineaTiempoPartido } from "./LineaTiempoPartido";
 import { MetricasDelMinuto } from "./MetricasDelMinuto";
 import { Plano2DCancha } from "./Plano2DCancha";
+import { usePartidoUrl } from "../hooks/usePartidosAnalisis";
 import { VisorVideoSincronizado, type ModoDisposicionVivo } from "./VisorVideoSincronizado";
 
-export function PanelPartidoVivo({ partidoIdInicial }: { partidoIdInicial?: number }) {
+export function PanelPartidoVivo() {
   const equipos = useQuery({ queryKey: ["equipos"], queryFn: () => listarEquipos() });
   const partidos = useQuery({ queryKey: ["partidos"], queryFn: () => listarPartidos() });
-  const [seleccionado, setSeleccionado] = useState<number | null>(partidoIdInicial ?? null);
+  const { partidoId: seleccionado, elegir } = usePartidoUrl();
   const id = seleccionado ?? partidos.data?.[0]?.id ?? null;
   const partido = partidos.data?.find((p) => p.id === id);
   const equipo = equipos.data?.find((e) => e.id === partido?.equipo_id);
@@ -111,13 +112,7 @@ export function PanelPartidoVivo({ partidoIdInicial }: { partidoIdInicial?: numb
           <select
             aria-label="Seleccionar partido"
             value={id ?? ""}
-            onChange={(e) => {
-              setSeleccionado(Number(e.target.value));
-              setMuestra(null);
-              setDirecto(false);
-              setSalto(null);
-              setMinutoFiltro(null);
-            }}
+            onChange={(e) => elegir(Number(e.target.value))}
           >
             {!partidos.data?.length && (
               <option value="">{partidos.isPending ? "Cargando…" : "Sin partidos"}</option>

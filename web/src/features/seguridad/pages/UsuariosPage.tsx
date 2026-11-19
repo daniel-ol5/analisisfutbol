@@ -122,15 +122,11 @@ export function UsuariosPage() {
   }
 
   return (
-    <main className="usuarios">
+    <section className="usuarios">
       {/* Cabecera de página */}
       <header className="usuarios-cabecera">
         <div>
-          <p className="kicker">Paquete P1 · CU-04</p>
-          <h1>Gestión de Usuarios y Roles</h1>
-          <p className="usuarios-subtitulo">
-            Administra los integrantes del cuerpo técnico, asigna permisos por rol y controla el acceso al club.
-          </p>
+          <h2>Usuarios del club</h2>
         </div>
         <Button
           onClick={() => {
@@ -558,6 +554,6 @@ export function UsuariosPage() {
           <strong>{aReactivar && ETIQUETA_ROL[aReactivar.rol]}</strong>?
         </p>
       </Modal>
-    </main>
+    </section>
   );
 }

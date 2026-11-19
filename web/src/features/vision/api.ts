@@ -5,6 +5,7 @@
  * dentro de los componentes.
  */
 import { api } from "@/shared/api/client";
+import { estadoHttp } from "@/shared/lib/errors";
 
 import type { MensajeWorker } from "@/features/analisis/types";
 import type { Partido } from "@/features/deportivo";
@@ -160,8 +161,16 @@ export async function enviarTrozo(
 
 /** CU-27 · Deja el video en la cola de procesamiento. */
 export async function lanzarProceso(videoId: number, datos: LanzarProceso): Promise<Video> {
-  const { data } = await api.post<Video>(`/vision/videos/${videoId}/procesar`, datos);
-  return data;
+  try {
+    const { data } = await api.post<Video>(`/vision/videos/${videoId}/procesar`, datos);
+    return data;
+  } catch (error) {
+    if (estadoHttp(error) === 409) {
+      const actual = await verVideo(videoId).catch(() => null);
+      if (actual?.estado === "PROCESANDO") return actual;
+    }
+    throw error;
+  }
 }
 
 /** CU-27 · Cancela un procesamiento en cola o en curso. */
@@ -174,12 +183,47 @@ export async function eliminarVideo(videoId: number): Promise<void> {
   await api.delete(`/vision/videos/${videoId}`);
 }
 
-/** Obtiene el binario del video subido para reproducirlo en el visor táctico en vivo. */
-export async function descargarArchivoVideo(videoId: number): Promise<Blob> {
-  const { data } = await api.get<Blob>(`/vision/videos/${videoId}/archivo`, {
-    responseType: "blob",
-  });
-  return data;
+const TAMANO_BLOQUE_VIDEO = 1024 * 1024;
+
+interface BloqueVideo {
+  inicio: number;
+  total_bytes: number;
+  tipo: string;
+  contenido_base64: string;
+}
+
+/** Descarga la grabación como bloques JSON autenticados para reconstruirla en el visor. */
+export async function descargarArchivoVideo(
+  { id, tamano_bytes }: Pick<Video, "id" | "tamano_bytes">,
+  signal: AbortSignal,
+  onProgreso: (porcentaje: number) => void,
+): Promise<Blob> {
+  if (tamano_bytes <= 0) throw new Error("El video está vacío.");
+
+  const partes: BlobPart[] = [];
+  const ruta = `/vision/videos/${id}/archivo/bloque`;
+  let tipo = "";
+  for (let inicio = 0; inicio < tamano_bytes; inicio += TAMANO_BLOQUE_VIDEO) {
+    const cantidad = Math.min(TAMANO_BLOQUE_VIDEO, tamano_bytes - inicio);
+    const pedir = () =>
+      api.get<BloqueVideo>(ruta, { params: { inicio, cantidad }, signal });
+    const { data } = await pedir().catch((error: unknown) => {
+      const estado = estadoHttp(error);
+      if (signal.aborted || (estado !== undefined && estado < 500)) throw error;
+      return pedir();
+    });
+    const binario = atob(data.contenido_base64);
+    if (data.inicio !== inicio || data.total_bytes !== tamano_bytes || binario.length !== cantidad) {
+      throw new Error("La descarga del video quedó incompleta.");
+    }
+    const bytes = new Uint8Array(cantidad);
+    for (let i = 0; i < cantidad; i++) bytes[i] = binario.charCodeAt(i);
+    partes.push(bytes);
+    tipo = data.tipo;
+    onProgreso(Math.floor(((inicio + cantidad) / tamano_bytes) * 100));
+  }
+
+  return new Blob(partes, { type: tipo });
 }
 
 /** Inicia la transmisión sincronizada a 5 Hz para acompañar al video o cámara en vivo. */
@@ -215,8 +259,8 @@ export async function pausarTransmisionVivoPartido(
 }
 
 /** CU-24, CU-40, CU-41 · Descargar telemetría persistida del video para sincronización directa sin retardo. */
-export async function obtenerMuestrasVideo(videoId: number): Promise<MensajeWorker[]> {
-  const { data } = await api.get<MensajeWorker[]>(`/vision/videos/${videoId}/muestras`);
+export async function obtenerMuestrasVideo(videoId: number, signal?: AbortSignal): Promise<MensajeWorker[]> {
+  const { data } = await api.get<MensajeWorker[]>(`/vision/videos/${videoId}/muestras`, { signal });
   return data;
 }
 

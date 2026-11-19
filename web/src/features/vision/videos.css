@@ -9,7 +9,7 @@
   gap: 14px;
 }
 
-.vid-pagina h1 {
+.vid-pagina h2 {
   font-size: var(--fs-xl);
   font-weight: var(--fw-black);
   letter-spacing: -0.02em;
@@ -161,28 +161,9 @@
   transition: width 0.4s ease;
 }
 
-.vid-progreso--indeterminado span {
-  width: 30%;
-  animation: vid-espera 1.4s ease-in-out infinite;
-}
-
-@keyframes vid-espera {
-  from {
-    transform: translateX(-100%);
-  }
-  to {
-    transform: translateX(340%);
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
   .vid-progreso span {
     transition: none;
-  }
-  .vid-progreso--indeterminado span {
-    animation: none;
-    width: 100%;
-    opacity: 0.35;
   }
 }
 

@@ -1,0 +1,43 @@
+.asistencia-panel {
+  max-width: 780px;
+}
+
+.asistencia-panel > .ui-campo {
+  max-width: 420px;
+  margin-bottom: 18px;
+}
+
+.asistencia-lista {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.asistencia-lista li {
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.asistencia-fila {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.asistencia-lista h2 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.asistencia-lista p {
+  margin: 6px 0;
+}
+
+.asistencia-lista small {
+  color: var(--text-3);
+}

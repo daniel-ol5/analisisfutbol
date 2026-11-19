@@ -339,14 +339,9 @@ export function PartidoPage() {
         <div>
           <h1>
             {enVistaAsignar
-              ? "Asignación de jugadores a identificadores"
+              ? "Asignación de jugadores"
               : "Control del partido en vivo"}
           </h1>
-          <p className="par-subtitulo">
-            {enVistaAsignar
-              ? "Asociación de cada identificador detectado (track) a un jugador del plantel, con vigencia temporal y reasignación tras oclusiones (CU-34, CU-35)."
-              : "Inicio del partido con dirección de ataque, entretiempo, tiempo de descuento y cierre del cronómetro (CU-30, CU-31)."}
-          </p>
         </div>
 
         <div className="par-selector-caja">
@@ -374,29 +369,24 @@ export function PartidoPage() {
         </div>
       </header>
 
-      <nav className="par-tabs" aria-label="Secciones del partido">
+      <nav className="area-pestañas" aria-label="Secciones del partido">
         <Link
           to={`/partido${partidoIdActivo !== null ? `?partidoId=${partidoIdActivo}` : ""}`}
-          className={`par-tab ${!enVistaAsignar ? "par-tab--activa" : ""}`}
           aria-current={!enVistaAsignar ? "page" : undefined}
         >
-          Control y cronómetro
+          Control en vivo
         </Link>
         <Link
           to={`/partido/asignar${partidoIdActivo !== null ? `?partidoId=${partidoIdActivo}` : ""}`}
-          className={`par-tab ${enVistaAsignar ? "par-tab--activa" : ""}`}
           aria-current={enVistaAsignar ? "page" : undefined}
         >
-          Asignar identificadores
+          Asignar jugadores
         </Link>
       </nav>
 
       {!puedeOperar && (
         <div className="par-aviso-rol" role="note">
-          Modo lectura ({rolActual ?? "sin rol"}): solo los roles <strong>ADMIN</strong> y{" "}
-          <strong>ANALISTA</strong> pueden iniciar, pausar, agregar descuento, finalizar el partido
-          o asignar jugadores a identificadores. Los controles están deshabilitados para evitar
-          errores de permisos (403).
+          Vista de lectura. El administrador o analista opera los controles del partido.
         </div>
       )}
 

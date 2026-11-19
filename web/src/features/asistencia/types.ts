@@ -1,8 +1,20 @@
-/** Tipos del dominio de Asistencia y Reportes  —  P6 · CU-49 … CU-58.
- *
- * Escritos a mano desde docs/api/openapi.json (esquemas Recomendacion,
- * DatoSoporte y Valoracion) y docs/api/websockets.md (mensaje `recomendacion`).
- */
+export type Prioridad = "CRITICA" | "ALTA" | "MEDIA" | "BAJA";
+
+export interface Recomendacion {
+  id: number;
+  minuto: number;
+  mensaje: string;
+  justificacion: string;
+  prioridad: Prioridad;
+}
+
+export interface ReglaTactica {
+  id: number;
+  nombre: string;
+  prioridad: Prioridad;
+  activa: boolean;
+}
+// ---------- CU-49, CU-54 Reglas tácticas ----------
 
 export type Prioridad = "CRITICA" | "ALTA" | "MEDIA" | "BAJA";
 

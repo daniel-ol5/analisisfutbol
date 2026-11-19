@@ -1,14 +1,7 @@
-/// Gestión Deportiva (P2 · CU-09 … CU-17).
-///
-/// Separa de forma limpia:
-/// - Pestaña 0: Gestionar Equipos (CU-09) con CRUD completo (Crear, Ver, Editar, Baja/Reactivar).
-/// - Pestaña 1: Indumentaria de Equipo (CU-10) con registro/edición de kits, vista óptica y restablecimiento.
-/// - Pestaña 2: Plantel de Jugadores (CU-11) con CRUD completo (Crear, Ver, Editar, Baja/Reactivar).
-/// - Pestañas 3 y 4: Partidos (CU-15) y Alineación (CU-17).
+/// Equipos, plantel e indumentaria del club en móvil.
 library;
 
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../app/tema.dart';
 import '../../shared/api/almacenamiento.dart';
@@ -35,6 +28,8 @@ const List<({String nombre, String hex})> _paletaColoresKits = [
   (nombre: 'Negro Azabache', hex: '#18181B'),
 ];
 
+enum _SeccionDeportiva { equipos, plantel, indumentaria }
+
 class DeportivoPagina extends StatefulWidget {
   const DeportivoPagina({super.key});
 
@@ -43,8 +38,8 @@ class DeportivoPagina extends StatefulWidget {
 }
 
 class _DeportivoPaginaState extends State<DeportivoPagina> {
-  // 0: Equipos (CU-09), 1: Indumentaria (CU-10), 2: Plantel (CU-11), 3: Partidos (CU-15), 4: Alineación (CU-17)
-  int _pestanaActiva = 0;
+  _SeccionDeportiva _seccion = _SeccionDeportiva.equipos;
+  int? _equipoIndumentaria;
 
   List<Equipo> _equipos = [];
   bool _cargando = true;
@@ -224,6 +219,7 @@ class _DeportivoPaginaState extends State<DeportivoPagina> {
     final guardado = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       backgroundColor: Theme.of(context).colorScheme.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
@@ -239,31 +235,23 @@ class _DeportivoPaginaState extends State<DeportivoPagina> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Text(
-                    'P2 · CU-09',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 1.0,
-                      color: verde,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
                   Text(
                     equipoEditar != null
-                        ? 'Editar equipo: ${equipoEditar.nombre}'
-                        : 'Registrar nuevo equipo',
+                        ? 'Editar equipo'
+                        : 'Nuevo equipo',
                     style: const TextStyle(
                         fontSize: 22, fontWeight: FontWeight.w900),
                   ),
                   const SizedBox(height: 16),
                   TextFormField(
                     controller: ctrlNombre,
+                    maxLength: 120,
+                    textInputAction: TextInputAction.next,
                     textCapitalization: TextCapitalization.words,
                     decoration: const InputDecoration(
-                      labelText: 'Nombre del equipo *',
-                      hintText: 'Ej. Primera División, Reserva, Sub-19',
-                      border: OutlineInputBorder(),
+                      labelText: 'Nombre del equipo',
+                      hintText: 'Ej. Horizonte Juvenil',
+                      counterText: '',
                     ),
                     validator: (v) => (v == null || v.trim().isEmpty)
                         ? 'Ingresa el nombre del equipo'
@@ -272,20 +260,23 @@ class _DeportivoPaginaState extends State<DeportivoPagina> {
                   const SizedBox(height: 12),
                   TextFormField(
                     controller: ctrlCategoria,
+                    maxLength: 40,
+                    textInputAction: TextInputAction.next,
                     textCapitalization: TextCapitalization.words,
                     decoration: const InputDecoration(
                       labelText: 'Categoría / División',
                       hintText: 'Ej. División Profesional, Sub-17',
-                      border: OutlineInputBorder(),
+                      counterText: '',
                     ),
                   ),
                   const SizedBox(height: 12),
                   TextFormField(
                     controller: ctrlTemporada,
+                    maxLength: 20,
                     decoration: const InputDecoration(
                       labelText: 'Temporada',
                       hintText: 'Ej. 2026',
-                      border: OutlineInputBorder(),
+                      counterText: '',
                     ),
                   ),
                   if (errorLocal != null) ...[
@@ -320,7 +311,7 @@ class _DeportivoPaginaState extends State<DeportivoPagina> {
                             minimumSize: const Size.fromHeight(48),
                           ),
                           child: const Text(
-                            'CANCELAR',
+                            'Cancelar',
                             style: TextStyle(fontWeight: FontWeight.w800),
                           ),
                         ),
@@ -355,6 +346,7 @@ class _DeportivoPaginaState extends State<DeportivoPagina> {
                                       Navigator.of(ctx).pop(true);
                                     }
                                   } catch (e) {
+                                    if (!ctx.mounted) return;
                                     setModalState(() {
                                       errorLocal = e is ErrorApi
                                           ? e.detalle
@@ -364,7 +356,6 @@ class _DeportivoPaginaState extends State<DeportivoPagina> {
                                   }
                                 },
                           style: FilledButton.styleFrom(
-                            backgroundColor: verde,
                             minimumSize: const Size.fromHeight(48),
                           ),
                           child: guardando
@@ -377,7 +368,7 @@ class _DeportivoPaginaState extends State<DeportivoPagina> {
                                   ),
                                 )
                               : Text(
-                                  equipoEditar != null ? 'GUARDAR' : 'CREAR',
+                                  equipoEditar != null ? 'Guardar cambios' : 'Crear equipo',
                                   style: const TextStyle(
                                       fontWeight: FontWeight.w800),
                                 ),
@@ -423,7 +414,7 @@ class _DeportivoPaginaState extends State<DeportivoPagina> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('CANCELAR'),
+            child: const Text('Cancelar'),
           ),
           FilledButton(
             style: FilledButton.styleFrom(
@@ -469,6 +460,7 @@ class _DeportivoPaginaState extends State<DeportivoPagina> {
     final guardado = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       backgroundColor: Theme.of(context).colorScheme.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
@@ -500,7 +492,7 @@ class _DeportivoPaginaState extends State<DeportivoPagina> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const Text(
-                  'P2 · CU-10 · INDUMENTARIA OFICIAL',
+                  'Contraste de colores',
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w800,
@@ -649,7 +641,7 @@ class _DeportivoPaginaState extends State<DeportivoPagina> {
                           minimumSize: const Size.fromHeight(48),
                         ),
                         child: const Text(
-                          'CANCELAR',
+                          'Cancelar',
                           style: TextStyle(fontWeight: FontWeight.w800),
                         ),
                       ),
@@ -688,7 +680,7 @@ class _DeportivoPaginaState extends State<DeportivoPagina> {
                           minimumSize: const Size.fromHeight(48),
                         ),
                         child: const Text(
-                          'GUARDAR KITS',
+                          'Guardar indumentaria',
                           style: TextStyle(fontWeight: FontWeight.w800),
                         ),
                       ),
@@ -721,7 +713,7 @@ class _DeportivoPaginaState extends State<DeportivoPagina> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('CANCELAR'),
+            child: const Text('Cancelar'),
           ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: verde),
@@ -783,6 +775,7 @@ class _DeportivoPaginaState extends State<DeportivoPagina> {
     final resultado = await showModalBottomSheet<Jugador>(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       backgroundColor: Theme.of(context).colorScheme.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
@@ -800,7 +793,7 @@ class _DeportivoPaginaState extends State<DeportivoPagina> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     const Text(
-                      'P2 · CU-11',
+                      'Plantel',
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w800,
@@ -1009,7 +1002,7 @@ class _DeportivoPaginaState extends State<DeportivoPagina> {
                               minimumSize: const Size.fromHeight(48),
                             ),
                             child: const Text(
-                              'CANCELAR',
+                              'Cancelar',
                               style: TextStyle(fontWeight: FontWeight.w800),
                             ),
                           ),
@@ -1152,7 +1145,7 @@ class _DeportivoPaginaState extends State<DeportivoPagina> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
-                        'FICHA DEL FUTBOLISTA (CU-11)',
+                        'Ficha del jugador',
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w800,
@@ -1243,7 +1236,7 @@ class _DeportivoPaginaState extends State<DeportivoPagina> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('CANCELAR'),
+            child: const Text('Cancelar'),
           ),
           FilledButton(
             style: FilledButton.styleFrom(
@@ -1278,114 +1271,63 @@ class _DeportivoPaginaState extends State<DeportivoPagina> {
 
   @override
   Widget build(BuildContext context) {
-    final t = Theme.of(context);
-
+    final esPlantel = _seccion == _SeccionDeportiva.plantel;
+    final esIndumentaria = _seccion == _SeccionDeportiva.indumentaria;
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          'Gestión Deportiva',
-          style: TextStyle(fontWeight: FontWeight.w800),
-        ),
+        title: Text(esIndumentaria ? 'Indumentaria' : 'Gestión deportiva'),
+        leading: esIndumentaria ? BackButton(
+          onPressed: () => setState(() => _seccion = _SeccionDeportiva.equipos),
+        ) : null,
         actions: [
           IconButton(
-            tooltip: 'Sincronizar ahora',
+            tooltip: 'Sincronizar',
             icon: const Icon(Icons.sync_rounded),
-            onPressed: () => _pestanaActiva == 2
+            onPressed: () => esPlantel
                 ? _cargarJugadores(forzarRed: true)
                 : _cargarEquipos(forzarRed: true),
           ),
         ],
       ),
-      floatingActionButton: _pestanaActiva == 0
-          ? FloatingActionButton.extended(
-              onPressed: () => _mostrarFormularioEquipo(),
-              backgroundColor: verde,
-              foregroundColor: Colors.white,
-              icon: const Icon(Icons.add),
-              label: const Text(
-                'Nuevo equipo',
-                style: TextStyle(fontWeight: FontWeight.w800),
-              ),
-            )
-          : (_pestanaActiva == 2 && _equipos.isNotEmpty)
-              ? FloatingActionButton.extended(
-                  onPressed: () => _mostrarFormularioJugador(),
-                  backgroundColor: verde,
-                  foregroundColor: Colors.white,
-                  icon: const Icon(Icons.person_add_alt_1),
-                  label: const Text(
-                    'Nuevo jugador',
-                    style: TextStyle(fontWeight: FontWeight.w800),
-                  ),
-                )
-              : null,
+      floatingActionButton: switch (_seccion) {
+        _SeccionDeportiva.equipos => FloatingActionButton.extended(
+          onPressed: _mostrarFormularioEquipo,
+          icon: const Icon(Icons.add),
+          label: const Text('Nuevo equipo'),
+        ),
+        _SeccionDeportiva.plantel when _equipos.isNotEmpty =>
+          FloatingActionButton.extended(
+            onPressed: _mostrarFormularioJugador,
+            icon: const Icon(Icons.person_add_alt_1),
+            label: const Text('Nuevo jugador'),
+          ),
+        _ => null,
+      },
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Barra de navegación superior de casos de uso (Equipos CU-09 e Indumentaria CU-10 separados)
-          Container(
-            decoration: BoxDecoration(
-              color: t.colorScheme.surface,
-              border: Border(
-                bottom: BorderSide(
-                  color: t.colorScheme.outlineVariant,
-                  width: 1.5,
-                ),
-              ),
-            ),
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              child: Row(
-                children: [
-                  _PestanaBoton(
-                    titulo: 'Equipos',
-                    codigo: 'CU-09',
-                    activo: _pestanaActiva == 0,
-                    onTap: () => setState(() => _pestanaActiva = 0),
-                  ),
-                  const SizedBox(width: 6),
-                  _PestanaBoton(
-                    titulo: 'Indumentaria',
-                    codigo: 'CU-10',
-                    activo: _pestanaActiva == 1,
-                    onTap: () => setState(() => _pestanaActiva = 1),
-                  ),
-                  const SizedBox(width: 6),
-                  _PestanaBoton(
-                    titulo: 'Plantel',
-                    codigo: 'CU-11',
-                    activo: _pestanaActiva == 2,
-                    onTap: () {
-                      setState(() => _pestanaActiva = 2);
-                      _asegurarPlantelCargado();
-                    },
-                  ),
-                  const SizedBox(width: 6),
-                  _PestanaBoton(
-                    titulo: 'Partidos',
-                    codigo: 'CU-15',
-                    activo: _pestanaActiva == 3,
-                    onTap: () => setState(() => _pestanaActiva = 3),
-                  ),
-                  const SizedBox(width: 6),
-                  _PestanaBoton(
-                    titulo: 'Alineación',
-                    codigo: 'CU-17',
-                    activo: _pestanaActiva == 4,
-                    onTap: () => setState(() => _pestanaActiva = 4),
-                  ),
+          if (!esIndumentaria)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+              child: SegmentedButton<_SeccionDeportiva>(
+                segments: const [
+                  ButtonSegment(value: _SeccionDeportiva.equipos, label: Text('Equipos')),
+                  ButtonSegment(value: _SeccionDeportiva.plantel, label: Text('Plantel')),
                 ],
+                selected: {_seccion},
+                showSelectedIcon: false,
+                onSelectionChanged: (valores) {
+                  final seccion = valores.single;
+                  setState(() => _seccion = seccion);
+                  if (seccion == _SeccionDeportiva.plantel) _asegurarPlantelCargado();
+                },
               ),
             ),
-          ),
-
           Expanded(
-            child: switch (_pestanaActiva) {
-              0 => _construirVistaEquipos(),
-              1 => _construirVistaIndumentaria(),
-              2 => _construirVistaPlantel(),
-              int p => _construirVistaCasosPendientes(p),
+            child: switch (_seccion) {
+              _SeccionDeportiva.equipos => _construirVistaEquipos(),
+              _SeccionDeportiva.plantel => _construirVistaPlantel(),
+              _SeccionDeportiva.indumentaria => _construirVistaIndumentaria(),
             },
           ),
         ],
@@ -1617,8 +1559,19 @@ class _DeportivoPaginaState extends State<DeportivoPagina> {
                     _confirmarCambioEstadoEquipo(eq, activar: false),
                 onReactivar: () =>
                     _confirmarCambioEstadoEquipo(eq, activar: true),
+                onIrPlantel: eq.activo ? () {
+                  setState(() => _seccion = _SeccionDeportiva.plantel);
+                  if (_equipoPlantelId == eq.id) {
+                    _asegurarPlantelCargado();
+                  } else {
+                    _seleccionarEquipoPlantel(eq.id);
+                  }
+                } : null,
                 onIrIndumentaria: () {
-                  setState(() => _pestanaActiva = 1);
+                  setState(() {
+                    _equipoIndumentaria = eq.id;
+                    _seccion = _SeccionDeportiva.indumentaria;
+                  });
                 },
               ),
         ],
@@ -1634,52 +1587,15 @@ class _DeportivoPaginaState extends State<DeportivoPagina> {
     final colorBorde =
         esOscuro ? const Color(0xFF475569) : const Color(0xFFCBD5E1);
 
+    final equipos = _equipos.where((eq) => eq.id == _equipoIndumentaria).toList();
+
     return RefreshIndicator(
       color: verde,
       onRefresh: () => _cargarEquipos(forzarRed: true),
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
         children: [
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: verde.withValues(alpha: esOscuro ? 0.16 : 0.08),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: verde, width: 1.4),
-            ),
-            child: const Row(
-              children: [
-                Icon(Icons.checkroom_rounded, color: verde, size: 26),
-                SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'CU-10 · REGISTRO DE INDUMENTARIA DE EQUIPO',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w900,
-                          color: verde,
-                        ),
-                      ),
-                      SizedBox(height: 2),
-                      Text(
-                        'Configura, visualiza o restablece los colores Titular, Alternativa y Arquero de cada división.',
-                        style: TextStyle(
-                          fontSize: 13.5,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 14),
-
-          if (_equipos.isEmpty)
+          if (equipos.isEmpty)
             Container(
               padding:
                   const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
@@ -1702,7 +1618,7 @@ class _DeportivoPaginaState extends State<DeportivoPagina> {
               ),
             )
           else
-            for (final eq in _equipos)
+            for (final eq in equipos)
               Card(
                 margin: const EdgeInsets.only(bottom: 14),
                 elevation: 0,
@@ -1739,24 +1655,6 @@ class _DeportivoPaginaState extends State<DeportivoPagina> {
                                   ),
                                 ),
                               ],
-                            ),
-                          ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: verde.withValues(alpha: 0.14),
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: verde),
-                            ),
-                            child: const Text(
-                              'CU-10',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w900,
-                                fontFamily: 'monospace',
-                                color: verde,
-                              ),
                             ),
                           ),
                         ],
@@ -1825,6 +1723,7 @@ class _DeportivoPaginaState extends State<DeportivoPagina> {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       backgroundColor: Theme.of(context).colorScheme.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
@@ -1882,7 +1781,7 @@ class _DeportivoPaginaState extends State<DeportivoPagina> {
                 const Divider(),
                 const SizedBox(height: 12),
                 const Text(
-                  'COLORES DE INDUMENTARIA (CU-10)',
+                  'Indumentaria',
                   style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w900,
@@ -1916,7 +1815,7 @@ class _DeportivoPaginaState extends State<DeportivoPagina> {
                     ),
                     onPressed: () => Navigator.pop(context),
                     child: const Text(
-                      'CERRAR FICHA',
+                      'Cerrar ficha',
                       style:
                           TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
                     ),
@@ -2196,132 +2095,6 @@ class _DeportivoPaginaState extends State<DeportivoPagina> {
     );
   }
 
-  /// Pestañas de Agenda (CU-15) y Alineación (CU-17): las dos viven en
-  /// /partidos, porque la alineación se abre desde un partido de la agenda.
-  Widget _construirVistaCasosPendientes(int pestana) {
-    final t = Theme.of(context);
-    final datos = switch (pestana) {
-      3 => (
-          paquete: 'P2 · CU-15',
-          titulo: 'Agenda de Partidos',
-          desc:
-              'Próximos partidos y resultados, también sin conexión para consultarla en la cancha.'
-        ),
-      _ => (
-          paquete: 'P2 · CU-17',
-          titulo: 'Ver Alineación y Formación',
-          desc:
-              'Elige un partido en la agenda para ver los titulares, el capitán, la formación y el banco.'
-        ),
-    };
-
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
-      children: [
-        Text(
-          datos.paquete,
-          style: const TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w800,
-            color: verde,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          datos.titulo,
-          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
-        ),
-        const SizedBox(height: 16),
-        Text(
-          datos.desc,
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-            color: t.colorScheme.onSurfaceVariant,
-            height: 1.5,
-          ),
-        ),
-        const SizedBox(height: 20),
-        FilledButton.icon(
-          onPressed: () => context.go('/partidos'),
-          style: FilledButton.styleFrom(
-            backgroundColor: verde,
-            minimumSize: const Size.fromHeight(52),
-          ),
-          icon: const Icon(Icons.sports_soccer),
-          label: const Text(
-            'ABRIR AGENDA DE PARTIDOS',
-            style: TextStyle(fontWeight: FontWeight.w800),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _PestanaBoton extends StatelessWidget {
-  const _PestanaBoton({
-    required this.titulo,
-    required this.codigo,
-    required this.activo,
-    required this.onTap,
-  });
-
-  final String titulo;
-  final String codigo;
-  final bool activo;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(6),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-        decoration: BoxDecoration(
-          border: Border(
-            bottom: BorderSide(
-              color: activo ? verde : Colors.transparent,
-              width: 3.0,
-            ),
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              titulo,
-              style: TextStyle(
-                fontSize: 15,
-                fontWeight: activo ? FontWeight.w900 : FontWeight.w600,
-                color: activo ? verde : null,
-              ),
-            ),
-            const SizedBox(width: 5),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-              decoration: BoxDecoration(
-                color: activo
-                    ? verde.withValues(alpha: 0.15)
-                    : Colors.grey.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(3),
-              ),
-              child: Text(
-                codigo,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800,
-                  fontFamily: 'monospace',
-                  color: activo ? verde : null,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 }
 
 class _FilaColorDetalle extends StatelessWidget {

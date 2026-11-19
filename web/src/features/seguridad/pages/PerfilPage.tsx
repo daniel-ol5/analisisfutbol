@@ -6,6 +6,7 @@ import { FormularioPerfil } from "../components/FormularioPerfil";
 import { HABILITAR_CAMBIO_PASSWORD, HABILITAR_EDICION_PERFIL } from "../config";
 import { mensajeDeError } from "../errors";
 import { usePerfil } from "../hooks";
+import { ETIQUETA_ROL } from "../types";
 
 import "./perfil.css";
 
@@ -13,9 +14,7 @@ export function PerfilPage() {
   const perfil = usePerfil();
 
   return (
-    <main className="perfil">
-      <h1>Mi perfil</h1>
-
+    <section className="perfil" aria-label="Mi perfil">
       {perfil.isPending && <p className="perfil-estado">Cargando tu perfil…</p>}
 
       {perfil.isError && (
@@ -38,7 +37,7 @@ export function PerfilPage() {
               <dd>{perfil.data.club_nombre}</dd>
               <dt>Rol</dt>
               <dd>
-                <Badge tono="info">{perfil.data.rol}</Badge>
+                <Badge tono="info">{ETIQUETA_ROL[perfil.data.rol]}</Badge>
               </dd>
               <dt>Estado</dt>
               <dd>
@@ -70,6 +69,6 @@ export function PerfilPage() {
           )}
         </>
       )}
-    </main>
+    </section>
   );
 }

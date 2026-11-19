@@ -247,6 +247,13 @@ FORMATOS_VIDEO: dict[str, tuple[str, ...]] = {
 }
 
 
+class BloqueVideo(BaseModel):
+    inicio: int
+    total_bytes: int
+    tipo: str
+    contenido_base64: str
+
+
 class VideoIniciar(BaseModel):
     """Primer paso de la carga por partes: se declara el archivo sin subirlo."""
 

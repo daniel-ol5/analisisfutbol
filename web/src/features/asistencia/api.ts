@@ -5,6 +5,7 @@
  * dentro de los componentes.
  */
 import { api } from "@/shared/api/client";
+import type { Recomendacion, ReglaTactica } from "./types";
 
 import type { OpcionValoracion, Recomendacion, Valoracion } from "./types";
 import type { Partido } from "@/features/deportivo";

@@ -13,7 +13,7 @@
   margin: var(--sp-1) 0 var(--sp-5);
 }
 
-.usuarios h1 {
+.usuarios h2 {
   margin: 6px 0 6px;
   font-size: var(--fs-xl);
   font-weight: var(--fw-black);

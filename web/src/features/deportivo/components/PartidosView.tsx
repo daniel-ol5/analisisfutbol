@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 
 import { useSesion } from "@/features/seguridad/session";
 import { mensajeDeError } from "@/shared/lib/errors";
@@ -33,18 +34,23 @@ function fechaLegible(valor: string): string {
 
 export function PartidosView({
   onVerAlineacion,
-}: { onVerAlineacion?: (partidoId: number) => void } = {}) {
+  vista = "calendario",
+}: {
+  onVerAlineacion?: (partidoId: number) => void;
+  vista?: "calendario" | "programar" | "competiciones";
+} = {}) {
+  const [parametros] = useSearchParams();
   const sesion = useSesion();
   const esAdmin = sesion?.usuario.rol === "ADMIN";
   const puedeProgramar = esAdmin || sesion?.usuario.rol === "DT";
-  const equipos = useEquiposParaPartido(puedeProgramar);
-  const competiciones = useCompeticiones(puedeProgramar);
+  const equipos = useEquiposParaPartido(puedeProgramar && vista === "programar");
+  const competiciones = useCompeticiones(puedeProgramar && vista !== "calendario");
   const programar = useProgramarPartido();
   const crearCompeticionMut = useCrearCompeticion();
 
   const [mostrarFormCompeticion, setMostrarFormCompeticion] = useState(false);
   const [nombreCompeticion, setNombreCompeticion] = useState("");
-  const [temporadaCompeticion, setTemporadaCompeticion] = useState(
+  const [temporadaCompeticion, setTemporadaCompeticion] = useState(() =>
     String(new Date().getFullYear()),
   );
   const [fechaInicioComp, setFechaInicioComp] = useState("");
@@ -58,7 +64,7 @@ export function PartidosView({
   const [fecha, setFecha] = useState("");
   const [hora, setHora] = useState("");
   const [sede, setSede] = useState("");
-  const [competicionId, setCompeticionId] = useState("");
+  const [competicionId, setCompeticionId] = useState(parametros.get("competicion") ?? "");
   const [errores, setErrores] = useState<ErroresFormulario>({});
   const [partidoCreado, setPartidoCreado] = useState<Partido | null>(null);
 
@@ -141,7 +147,6 @@ export function PartidosView({
         fecha_fin: fechaFinComp || null,
       });
       setCompeticionCreada(nueva);
-      setCompeticionId(String(nueva.id));
       setNombreCompeticion("");
       setFechaInicioComp("");
       setFechaFinComp("");
@@ -151,26 +156,27 @@ export function PartidosView({
     }
   };
 
-  const errorCarga = equipos.error ?? competiciones.error;
-  const cargando = equipos.isLoading || competiciones.isLoading;
+  const errorCarga =
+    vista === "programar" ? (equipos.error ?? competiciones.error) : competiciones.error;
+  const cargando =
+    vista === "programar" ? equipos.isLoading || competiciones.isLoading : competiciones.isLoading;
   const sinEquipos = !cargando && (equipos.data?.length ?? 0) === 0;
 
-  if (!puedeProgramar) {
-    return <AgendaPartidos onVerAlineacion={onVerAlineacion} />;
+  if (vista === "calendario" || !puedeProgramar) {
+    return <AgendaPartidos onVerAlineacion={onVerAlineacion} puedeProgramar={puedeProgramar} />;
   }
 
   return (
     <section className="partidos-vista" aria-labelledby="partidos-titulo">
       <div className="partidos-cabecera">
         <div>
-          <span className="kicker">CU-14 · PROGRAMACIÓN DE PARTIDOS</span>
-          <h3 id="partidos-titulo">Programar un encuentro</h3>
-          <p>
-            Registra la logística del partido. Al guardar quedará disponible en estado PROGRAMADO
-            para la agenda y la alineación.
-          </p>
+          <h2 id="partidos-titulo">
+            {vista === "programar" ? "Programar partido" : "Competiciones del club"}
+          </h2>
         </div>
-        <span className="partidos-estado-inicial">Estado inicial · PROGRAMADO</span>
+        <Link className="volver" to="/deportivo/calendario">
+          ← Volver al calendario
+        </Link>
       </div>
 
       {errorCarga && (
@@ -179,7 +185,7 @@ export function PartidosView({
           <Button
             variante="secundario"
             onClick={() => {
-              void equipos.refetch();
+              if (vista === "programar") void equipos.refetch();
               void competiciones.refetch();
             }}
           >
@@ -195,120 +201,125 @@ export function PartidosView({
       )}
 
       {competicionCreada && (
-        <Alert tono="ok" titulo="Competición registrada (CU-13)">
-          {competicionCreada.nombre} · Temporada {competicionCreada.temporada} quedó disponible y
-          seleccionada para programar partidos.
+        <Alert tono="ok" titulo="Competición registrada">
+          {competicionCreada.nombre} · Temporada {competicionCreada.temporada}.{" "}
+          <Link
+            className="volver"
+            to={`/deportivo/calendario/programar?competicion=${competicionCreada.id}`}
+          >
+            Programar partido →
+          </Link>
         </Alert>
       )}
 
-      {/* CU-13 · Gestión de Competiciones y Temporadas */}
-      <div
-        className="partidos-formulario"
-        style={{ marginBottom: 18, padding: "16px 20px" }}
-        aria-labelledby="competiciones-titulo"
-      >
+      {vista === "competiciones" && (
         <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            flexWrap: "wrap",
-            gap: 12,
-          }}
+          className="partidos-formulario"
+          style={{ marginBottom: 18, padding: "16px 20px" }}
+          aria-labelledby="competiciones-titulo"
         >
-          <div>
-            <span className="kicker">CU-13 · COMPETICIONES Y TEMPORADAS</span>
-            <h4 id="competiciones-titulo" style={{ margin: "2px 0 4px", fontSize: 16 }}>
-              Torneos del club ({competiciones.data?.length ?? 0})
-            </h4>
-            <p style={{ margin: 0, fontSize: 13, color: "var(--text-2)" }}>
-              {competiciones.data && competiciones.data.length > 0
-                ? competiciones.data.map((c) => `${c.nombre} (${c.temporada})`).join(" · ")
-                : "Aún no hay competiciones registradas en el club. Registra un torneo oficial o programa partidos amistosos."}
-            </p>
-          </div>
-          {esAdmin && (
-            <Button
-              type="button"
-              variante={mostrarFormCompeticion ? "secundario" : "primario"}
-              onClick={() => {
-                setErrorCompeticion(null);
-                setMostrarFormCompeticion((prev) => !prev);
-              }}
-            >
-              {mostrarFormCompeticion ? "Cancelar" : "+ Nueva competición"}
-            </Button>
-          )}
-        </div>
-
-        {esAdmin && mostrarFormCompeticion && (
-          <form
-            onSubmit={alCrearCompeticion}
-            noValidate
+          <div
             style={{
-              marginTop: 16,
-              paddingTop: 16,
-              borderTop: "1px solid var(--line)",
               display: "flex",
-              flexDirection: "column",
-              gap: 14,
+              justifyContent: "space-between",
+              alignItems: "center",
+              flexWrap: "wrap",
+              gap: 12,
             }}
           >
-            <div className="partidos-grilla">
-              <Input
-                etiqueta="Nombre de la competición *"
-                placeholder="Ej. LaLiga EA Sports, Copa del Rey"
-                maxLength={120}
-                value={nombreCompeticion}
-                disabled={crearCompeticionMut.isPending}
-                onChange={(e) => setNombreCompeticion(e.currentTarget.value)}
-              />
-              <Input
-                etiqueta="Temporada *"
-                placeholder="Ej. 2026 o 2025/2026"
-                maxLength={20}
-                value={temporadaCompeticion}
-                disabled={crearCompeticionMut.isPending}
-                onChange={(e) => setTemporadaCompeticion(e.currentTarget.value)}
-              />
-              <Input
-                etiqueta="Fecha de inicio (opcional)"
-                type="date"
-                value={fechaInicioComp}
-                disabled={crearCompeticionMut.isPending}
-                onChange={(e) => setFechaInicioComp(e.currentTarget.value)}
-              />
-              <Input
-                etiqueta="Fecha de finalización (opcional)"
-                type="date"
-                value={fechaFinComp}
-                disabled={crearCompeticionMut.isPending}
-                onChange={(e) => setFechaFinComp(e.currentTarget.value)}
-              />
-            </div>
-            {errorCompeticion && (
-              <Alert tono="error" titulo="No se pudo registrar la competición">
-                {errorCompeticion}
-              </Alert>
-            )}
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
-              <Button type="submit" disabled={crearCompeticionMut.isPending}>
-                {crearCompeticionMut.isPending ? "Guardando…" : "Guardar competición"}
-              </Button>
-            </div>
-          </form>
-        )}
-      </div>
-
-      <div className="partidos-distribucion">
-        <form className="partidos-formulario" onSubmit={alEnviar} noValidate>
-          <div className="partidos-formulario-cabecera">
             <div>
-              <strong>Datos del encuentro</strong>
-              <span>Los campos marcados son obligatorios.</span>
+              <h3 id="competiciones-titulo" style={{ margin: 0, fontSize: 16 }}>
+                Torneos registrados
+              </h3>
             </div>
+            {esAdmin && (
+              <Button
+                type="button"
+                variante={mostrarFormCompeticion ? "secundario" : "primario"}
+                onClick={() => {
+                  setErrorCompeticion(null);
+                  setMostrarFormCompeticion((prev) => !prev);
+                }}
+              >
+                {mostrarFormCompeticion ? "Cancelar" : "+ Nueva competición"}
+              </Button>
+            )}
           </div>
 
+          {esAdmin && mostrarFormCompeticion && (
+            <form
+              onSubmit={alCrearCompeticion}
+              noValidate
+              style={{
+                marginTop: 16,
+                paddingTop: 16,
+                borderTop: "1px solid var(--line)",
+                display: "flex",
+                flexDirection: "column",
+                gap: 14,
+              }}
+            >
+              <div className="partidos-grilla">
+                <Input
+                  etiqueta="Nombre de la competición *"
+                  placeholder="Ej. LaLiga EA Sports, Copa del Rey"
+                  maxLength={120}
+                  value={nombreCompeticion}
+                  disabled={crearCompeticionMut.isPending}
+                  onChange={(e) => setNombreCompeticion(e.currentTarget.value)}
+                />
+                <Input
+                  etiqueta="Temporada *"
+                  placeholder="Ej. 2026 o 2025/2026"
+                  maxLength={20}
+                  value={temporadaCompeticion}
+                  disabled={crearCompeticionMut.isPending}
+                  onChange={(e) => setTemporadaCompeticion(e.currentTarget.value)}
+                />
+                <Input
+                  etiqueta="Fecha de inicio (opcional)"
+                  type="date"
+                  value={fechaInicioComp}
+                  disabled={crearCompeticionMut.isPending}
+                  onChange={(e) => setFechaInicioComp(e.currentTarget.value)}
+                />
+                <Input
+                  etiqueta="Fecha de finalización (opcional)"
+                  type="date"
+                  value={fechaFinComp}
+                  disabled={crearCompeticionMut.isPending}
+                  onChange={(e) => setFechaFinComp(e.currentTarget.value)}
+                />
+              </div>
+              {errorCompeticion && (
+                <Alert tono="error" titulo="No se pudo registrar la competición">
+                  {errorCompeticion}
+                </Alert>
+              )}
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+                <Button type="submit" disabled={crearCompeticionMut.isPending}>
+                  {crearCompeticionMut.isPending ? "Guardando…" : "Guardar competición"}
+                </Button>
+              </div>
+            </form>
+          )}
+          {cargando && <p role="status">Cargando competiciones…</p>}
+          {competiciones.data?.length === 0 && <p>Aún no hay competiciones registradas.</p>}
+          {!!competiciones.data?.length && (
+            <ul className="partidos-competiciones">
+              {competiciones.data.map((competicion) => (
+                <li key={competicion.id}>
+                  <strong>{competicion.nombre}</strong>
+                  <span>{competicion.temporada}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
+      {vista === "programar" && (
+        <form className="partidos-formulario" onSubmit={alEnviar} noValidate>
           {cargando ? (
             <div className="partidos-cargando" role="status">
               Cargando equipos y competiciones…
@@ -409,7 +420,6 @@ export function PartidosView({
                   error={errores.sede}
                   maxLength={160}
                   placeholder="Ej. Estadio Municipal, cancha principal"
-                  ayuda="Se utilizará después para asociar la calibración de cámara de la cancha."
                   disabled={programar.isPending}
                   onChange={(evento) => {
                     setSede(evento.currentTarget.value);
@@ -422,8 +432,9 @@ export function PartidosView({
 
           {sinEquipos && (
             <Alert tono="aviso" titulo="Primero registra un equipo">
-              No hay equipos activos disponibles. Créalo en la pestaña Gestionar Equipos antes de
-              programar el partido.
+              <Link to="/deportivo/equipos" className="volver">
+                Ir a equipos →
+              </Link>
             </Alert>
           )}
 
@@ -442,23 +453,7 @@ export function PartidosView({
             </Button>
           </div>
         </form>
-
-        <aside className="partidos-resumen" aria-label="Resumen de programación">
-          <span className="kicker">Antes de guardar</span>
-          <h4>Verifica la logística</h4>
-          <ol>
-            <li>El equipo debe estar activo y pertenecer a tu club.</li>
-            <li>La fecha y hora deben estar en el futuro.</li>
-            <li>La competición es opcional para encuentros amistosos.</li>
-            <li>El partido aparecerá en la agenda después de guardarlo.</li>
-          </ol>
-          <div className="partidos-resumen-nota">
-            Administradores y directores técnicos pueden programar. Solo el administrador podrá
-            reprogramar o cancelar posteriormente.
-          </div>
-        </aside>
-      </div>
-      <AgendaPartidos onVerAlineacion={onVerAlineacion} />
+      )}
     </section>
   );
 }

@@ -200,6 +200,13 @@ export function VideosPage() {
       colorRival: string | null;
     }) =>
       lanzarProceso(id, { color_propio: colorPropio, color_rival: colorRival }),
+    onSuccess: async (video) => {
+      const queryKey = ["vision", "videos", video.partido_id];
+      await cliente.cancelQueries({ queryKey, exact: true });
+      cliente.setQueryData<Video[]>(queryKey, (lista) =>
+        lista?.map((actual) => (actual.id === video.id ? video : actual)),
+      );
+    },
     onSettled: refrescar,
   });
   const cancelar = useMutation({ mutationFn: cancelarProceso, onSettled: refrescar });
@@ -210,16 +217,8 @@ export function VideosPage() {
   const partido = opciones.find((p) => p.id === partidoId) ?? null;
 
   return (
-    <main className="vid-pagina">
-      <Link to="/vision" className="volver">
-        ← Visión por Computadora
-      </Link>
-      <span className="kicker">CU-27 · CU-28 · VIDEO DEL PARTIDO</span>
-      <h1>Video del partido</h1>
-      <p className="vid-intro">
-        Sube el video grabado de un partido (MP4, MOV o MKV) y procésalo para obtener las mismas
-        métricas que un partido en vivo. La subida se puede pausar y retomar, incluso otro día.
-      </p>
+    <section className="vid-pagina">
+      <h2>Videos del partido</h2>
 
       {partidos.isError && (
         <Alert tono="error" titulo="No se pudo cargar la agenda">
@@ -228,7 +227,7 @@ export function VideosPage() {
       )}
       {partidos.isSuccess && opciones.length === 0 && (
         <Alert tono="info" titulo="Todavía no hay partidos">
-          Programa un partido en Gestión Deportiva para poder subir su video.
+          <Link to="/deportivo/calendario">Ir al calendario para programar un partido →</Link>
         </Alert>
       )}
 
@@ -312,7 +311,7 @@ export function VideosPage() {
           />
         ))}
       </ul>
-    </main>
+    </section>
   );
 }
 
@@ -340,6 +339,7 @@ interface PropsTarjeta {
 function TarjetaVideo(p: PropsTarjeta) {
   const v = p.video;
   const legible = v.duracion_s !== null;
+  const enCola = v.estado === "PROCESANDO" && v.iniciado_en === null;
 
   return (
     <li className="vid-tarjeta" aria-label={`Video ${v.nombre}`}>
@@ -351,7 +351,7 @@ function TarjetaVideo(p: PropsTarjeta) {
             {formatoFecha.format(new Date(v.creado_en))}
           </span>
         </div>
-        <Badge tono={TONO[v.estado]}>{ETIQUETA_ESTADO[v.estado]}</Badge>
+        <Badge tono={TONO[v.estado]}>{enCola ? "En cola" : ETIQUETA_ESTADO[v.estado]}</Badge>
       </div>
 
       {/* HU-24 · Criterio 3: metadatos leídos del archivo */}
@@ -415,17 +415,17 @@ function TarjetaVideo(p: PropsTarjeta) {
   );
 }
 
-function BarraProgreso({ pct, etiqueta }: { pct: number | null; etiqueta: string }) {
+function BarraProgreso({ pct, etiqueta }: { pct: number; etiqueta: string }) {
   return (
     <div
-      className={pct === null ? "vid-progreso vid-progreso--indeterminado" : "vid-progreso"}
+      className="vid-progreso"
       role="progressbar"
       aria-label={etiqueta}
       aria-valuemin={0}
       aria-valuemax={100}
-      aria-valuenow={pct ?? undefined}
+      aria-valuenow={pct}
     >
-      <span style={{ width: pct === null ? undefined : `${pct}%` }} />
+      <span style={{ width: `${pct}%` }} />
     </div>
   );
 }
@@ -485,14 +485,13 @@ function EstadoProceso({ video: v, puedeProcesar, onCancelar, cancelando }: Prop
   const restante = formatearRestante(v.tiempo_restante_s);
   return (
     <div className="vid-estado">
-      <BarraProgreso
-        pct={enCola ? null : v.progreso_pct}
-        etiqueta={`Procesamiento de ${v.nombre}`}
-      />
+      {!enCola && (
+        <BarraProgreso pct={v.progreso_pct} etiqueta={`Procesamiento de ${v.nombre}`} />
+      )}
       <div className="vid-estado-fila">
         <span aria-live="polite">
           {enCola ? (
-            "En cola: iniciando análisis de visión con IA…"
+            "Esperando al worker de visión. El avance aparecerá cuando tome el video."
           ) : (
             <>
               <strong>{v.progreso_pct}%</strong>

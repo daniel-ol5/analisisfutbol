@@ -11,15 +11,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-import { listarEquipos, listarJugadores, listarPartidos } from "@/features/deportivo/api";
-import type { Equipo, Jugador, Partido } from "@/features/deportivo/types";
+import { listarJugadores } from "@/features/deportivo/api";
+import type { Jugador } from "@/features/deportivo/types";
 
 import { obtenerMapaCalor } from "../api";
 import type { AlcanceMapaCalor, MapaCalor } from "../types";
-
-interface Props {
-  partidoIdInicial?: number;
-}
+import { usePartidosAnalisis, usePartidoUrl } from "../hooks/usePartidosAnalisis";
 
 type IntervaloTiempo = "completo" | "primer_tiempo" | "segundo_tiempo";
 
@@ -35,13 +32,15 @@ function obtenerOpacidadCelda(valor: number): number {
   return Math.min(0.85, Math.max(0.25, valor * 0.9));
 }
 
-export function MapaCalorCancha({ partidoIdInicial }: Props) {
-  const [partidos, setPartidos] = useState<Partido[]>([]);
-  const [equipos, setEquipos] = useState<Equipo[]>([]);
+export function MapaCalorCancha() {
+  const { partidoId, elegir } = usePartidoUrl();
+  const {
+    id: partidoSeleccionadoId, partido: partidoActual,
+    partidos: consultaPartidos, equipos: consultaEquipos,
+  } = usePartidosAnalisis(partidoId);
+  const partidos = consultaPartidos.data ?? [];
+  const equipos = consultaEquipos.data ?? [];
   const [jugadores, setJugadores] = useState<Jugador[]>([]);
-  const [partidoSeleccionadoId, setPartidoSeleccionadoId] = useState<number>(
-    partidoIdInicial ?? 1,
-  );
 
   const [alcance, setAlcance] = useState<AlcanceMapaCalor>("equipo");
   const [lineaSeleccionada, setLineaSeleccionada] = useState<number>(2); // 1: Def, 2: Med, 3: Del
@@ -52,36 +51,6 @@ export function MapaCalorCancha({ partidoIdInicial }: Props) {
   const [mapa, setMapa] = useState<MapaCalor | null>(null);
   const [cargando, setCargando] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-
-  // Cargar lista de partidos y equipos
-  useEffect(() => {
-    let activo = true;
-    async function inicializar() {
-      try {
-        const [listaPartidos, listaEquipos] = await Promise.all([
-          listarPartidos(),
-          listarEquipos(),
-        ]);
-        if (!activo) return;
-        setPartidos(listaPartidos);
-        setEquipos(listaEquipos);
-        if (listaPartidos.length > 0 && !partidoIdInicial) {
-          setPartidoSeleccionadoId(listaPartidos[0].id);
-        }
-      } catch {
-        if (activo) setError("No se pudo cargar la lista de partidos del club.");
-      }
-    }
-    void inicializar();
-    return () => {
-      activo = false;
-    };
-  }, [partidoIdInicial]);
-
-  // Partido actual y equipo
-  const partidoActual = useMemo(() => {
-    return partidos.find((p) => p.id === partidoSeleccionadoId) ?? null;
-  }, [partidos, partidoSeleccionadoId]);
 
   // Cargar jugadores cuando cambia el partido
   useEffect(() => {
@@ -109,7 +78,8 @@ export function MapaCalorCancha({ partidoIdInicial }: Props) {
   // Cargar datos del mapa de calor
   useEffect(() => {
     let activo = true;
-    async function cargarMapa() {
+    if (partidoSeleccionadoId === null) return;
+    async function cargarMapa(id: number) {
       setCargando(true);
       setError(null);
 
@@ -131,7 +101,7 @@ export function MapaCalorCancha({ partidoIdInicial }: Props) {
       }
 
       try {
-        const res = await obtenerMapaCalor(partidoSeleccionadoId, {
+        const res = await obtenerMapaCalor(id, {
           alcance,
           referencia_id: refId,
           desde_minuto: desdeMin,
@@ -153,7 +123,7 @@ export function MapaCalorCancha({ partidoIdInicial }: Props) {
       }
     }
 
-    void cargarMapa();
+    void cargarMapa(partidoSeleccionadoId);
     return () => {
       activo = false;
     };
@@ -213,11 +183,7 @@ export function MapaCalorCancha({ partidoIdInicial }: Props) {
     };
   }, [mapa]);
 
-  const nombreEquipoLocal = useMemo(() => {
-    if (!partidoActual) return "Equipo Local";
-    const eq = equipos.find((e) => e.id === partidoActual.equipo_id);
-    return eq ? eq.nombre : "Equipo Local";
-  }, [partidoActual, equipos]);
+  const nombreEquipoLocal = equipos.find((e) => e.id === partidoActual?.equipo_id)?.nombre ?? "Equipo local";
 
   return (
     <div
@@ -234,16 +200,19 @@ export function MapaCalorCancha({ partidoIdInicial }: Props) {
           <select
             id="selector-partido-calor"
             className="panel-vivo-selector"
-            value={partidoSeleccionadoId}
-            onChange={(e) => setPartidoSeleccionadoId(Number(e.target.value))}
+            value={partidoSeleccionadoId ?? ""}
+            onChange={(e) => elegir(Number(e.target.value))}
           >
+            {partidos.length === 0 && (
+              <option value="">{consultaPartidos.isPending ? "Cargando partidos…" : "Sin partidos"}</option>
+            )}
             {partidos.map((p) => {
               const eq = equipos.find((e) => e.id === p.equipo_id);
               const nombreEq = eq ? eq.nombre : `Equipo ${p.equipo_id}`;
               const fecha = p.fecha_hora ? p.fecha_hora.split("T")[0] : "";
               return (
                 <option key={p.id} value={p.id}>
-                  Partido #{p.id} — {nombreEq} vs {p.rival} ({fecha})
+                  {nombreEq} vs. {p.rival} ({fecha})
                 </option>
               );
             })}

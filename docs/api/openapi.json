@@ -3068,6 +3068,94 @@
         }
       }
     },
+    "/api/vision/videos/{video_id}/archivo/bloque": {
+      "get": {
+        "tags": [
+          "P3 · Visión por Computadora"
+        ],
+        "summary": "Descargar un bloque de la grabación para el visor web",
+        "operationId": "descargar_bloque_video_api_vision_videos__video_id__archivo_bloque_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "video_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Video Id"
+            }
+          },
+          {
+            "name": "inicio",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "title": "Inicio"
+            }
+          },
+          {
+            "name": "cantidad",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 1048576,
+              "exclusiveMinimum": 0,
+              "default": 1048576,
+              "title": "Cantidad"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BloqueVideo"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "Declarado en el contrato, pendiente de implementacion",
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Partido o video inexistente, o de otro club"
+          },
+          "409": {
+            "description": "El video no está disponible"
+          },
+          "416": {
+            "description": "El inicio está fuera del archivo"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/vision/partidos/{partido_id}/transmitir-vivo": {
       "post": {
         "tags": [
@@ -6209,6 +6297,34 @@
         "type": "object",
         "title": "BloqueFase",
         "description": "Altura de linea, amplitud y compacidad promediadas sobre una fase (T-102)."
+      },
+      "BloqueVideo": {
+        "properties": {
+          "inicio": {
+            "type": "integer",
+            "title": "Inicio"
+          },
+          "total_bytes": {
+            "type": "integer",
+            "title": "Total Bytes"
+          },
+          "tipo": {
+            "type": "string",
+            "title": "Tipo"
+          },
+          "contenido_base64": {
+            "type": "string",
+            "title": "Contenido Base64"
+          }
+        },
+        "type": "object",
+        "required": [
+          "inicio",
+          "total_bytes",
+          "tipo",
+          "contenido_base64"
+        ],
+        "title": "BloqueVideo"
       },
       "Body_analizar_cuadro_en_vivo_api_vision_vivo_analizar_cuadro_post": {
         "properties": {

@@ -1,156 +1,120 @@
-import { useState } from "react";
+import { Link, Navigate, Route, Routes, useNavigate, useSearchParams } from "react-router-dom";
+
+import { useSesion } from "@/features/seguridad";
+import { Pestanas } from "@/shared/ui/Pestanas";
+
 import { AlineacionView } from "../components/AlineacionView";
 import { EquiposView } from "../components/EquiposView";
 import { IndumentariaView } from "../components/IndumentariaView";
 import { JugadoresView } from "../components/JugadoresView";
 import { PartidosView } from "../components/PartidosView";
 
-type SeccionDeportivo = "equipos" | "indumentaria" | "jugadores" | "partidos" | "alineacion";
+const EQUIPOS = "/deportivo/equipos";
+const INDUMENTARIA = "/deportivo/equipos/indumentaria";
+const CALENDARIO = "/deportivo/calendario";
+const ALINEACION = "/deportivo/calendario/alineacion";
+
+function idSeleccionado(valor: string | null) {
+  const id = Number(valor);
+  return Number.isSafeInteger(id) && id > 0 ? id : null;
+}
 
 export function DeportivoPage() {
-  const [seccionActiva, setSeccionActiva] = useState<SeccionDeportivo>("equipos");
-  const [equipoIndumentariaId, setEquipoIndumentariaId] = useState<number | null>(null);
-
-  // CU-17: partido elegido en la agenda para abrir directo su alineación.
-  const [partidoAlineacionId, setPartidoAlineacionId] = useState<number | null>(null);
-
-  const handleVerAlineacion = (partidoId: number) => {
-    setPartidoAlineacionId(partidoId);
-    setSeccionActiva("alineacion");
-  };
-
-  const handleIrIndumentaria = (equipoId?: number) => {
-    setEquipoIndumentariaId(equipoId ?? null);
-    setSeccionActiva("indumentaria");
-  };
+  const navegar = useNavigate();
+  const [parametros] = useSearchParams();
+  const equipoId = idSeleccionado(parametros.get("equipo"));
+  const partidoId = idSeleccionado(parametros.get("partido"));
+  const rol = useSesion()?.usuario.rol;
+  const puedeProgramar = rol === "ADMIN" || rol === "DT";
+  const pestanas = [
+    { ruta: EQUIPOS, titulo: "Equipos" },
+    { ruta: "/deportivo/plantel", titulo: "Plantel" },
+    { ruta: CALENDARIO, titulo: "Calendario" },
+    ...(puedeProgramar ? [{ ruta: "/deportivo/competiciones", titulo: "Competiciones" }] : []),
+  ];
 
   return (
-    <div
-      className="deportivo-pagina"
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        gap: 22,
-        width: "100%",
-        maxWidth: 1160,
-        margin: "0 auto",
-        padding: "36px 28px 80px",
-      }}
-    >
-      {/* Cabecera del Módulo Deportivo */}
-      <header className="page-head" style={{ marginBottom: 0 }}>
-        <span className="kicker">P2 · GESTIÓN DEPORTIVA (CU-09 … CU-17)</span>
-        <h2 style={{ margin: "4px 0 6px" }}>Equipos, Indumentaria, Plantel y Calendario</h2>
-        <p
-          style={{
-            margin: 0,
-            color: "var(--text-2)",
-            fontSize: 13.5,
-            maxWidth: 740,
-          }}
-        >
-          Administra de forma organizada las divisiones y planteles del club (<strong>CU-09</strong>
-          ), registra y valida ópticamente la indumentaria oficial en espacio HSV (
-          <strong>CU-10</strong>) y gestiona las fichas antropométricas de los futbolistas (
-          <strong>CU-11, CU-12</strong>).
-        </p>
+    <main className="area-pagina">
+      <header className="area-titulo">
+        <h1>Gestión deportiva</h1>
       </header>
-
-      {/* Navegación de Secciones del Módulo Deportivo */}
-      <div
-        style={{
-          display: "flex",
-          gap: 6,
-          borderBottom: "1px solid var(--line)",
-          paddingBottom: 0,
-          overflowX: "auto",
-        }}
-      >
-        {(
-          [
-            {
-              id: "equipos",
-              label: "Gestionar Equipos",
-              cu: "CU-09",
-            },
-            {
-              id: "indumentaria",
-              label: "Indumentaria de Equipo",
-              cu: "CU-10",
-            },
-            {
-              id: "jugadores",
-              label: "Plantel de Jugadores",
-              cu: "CU-11, CU-12",
-            },
-            {
-              id: "partidos",
-              label: "Competiciones y Calendario",
-              cu: "CU-13 … CU-16",
-            },
-            {
-              id: "alineacion",
-              label: "Alineaciones y Pizarra",
-              cu: "CU-17",
-            },
-          ] as const
-        ).map((tab) => {
-          const activa = seccionActiva === tab.id;
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => {
-                if (tab.id !== "indumentaria") {
-                  setEquipoIndumentariaId(null);
-                }
-                setSeccionActiva(tab.id);
-              }}
-              style={{
-                all: "unset",
-                cursor: "pointer",
-                padding: "10px 16px",
-                borderBottom: activa ? "2.5px solid var(--pitch)" : "2.5px solid transparent",
-                color: activa ? "var(--text)" : "var(--text-3)",
-                fontWeight: activa ? 700 : 500,
-                fontSize: 13.5,
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 8,
-                whiteSpace: "nowrap",
-                transition: "color 0.15s ease, border-color 0.15s ease",
-              }}
-            >
-              <span>{tab.label}</span>
-              <span
-                style={{
-                  fontSize: 10.5,
-                  fontFamily: "var(--font-mono)",
-                  padding: "2px 6px",
-                  borderRadius: 4,
-                  background: activa ? "rgba(13, 148, 136, 0.14)" : "var(--ground)",
-                  color: activa ? "var(--pitch)" : "var(--text-3)",
-                }}
-              >
-                {tab.cu}
-              </span>
-            </button>
-          );
-        })}
+      <Pestanas titulo="Gestión deportiva" enlaces={pestanas} />
+      <div className="area-contenido">
+        <Routes>
+          <Route index element={<Navigate to={EQUIPOS} replace />} />
+          <Route
+            path="equipos"
+            element={
+              <>
+                <div className="area-subvista">
+                  <h2>Equipos del club</h2>
+                  <Link to={INDUMENTARIA}>Indumentaria →</Link>
+                </div>
+                <EquiposView
+                  onIrIndumentaria={(id) =>
+                    navegar(id ? `${INDUMENTARIA}?equipo=${id}` : INDUMENTARIA)
+                  }
+                />
+              </>
+            }
+          />
+          <Route
+            path="equipos/indumentaria"
+            element={
+              <>
+                <div className="area-subvista">
+                  <h2>Indumentaria</h2>
+                  <Link to={EQUIPOS}>← Volver a equipos</Link>
+                </div>
+                <IndumentariaView equipoInicialId={equipoId} />
+              </>
+            }
+          />
+          <Route
+            path="plantel"
+            element={<JugadoresView key={equipoId} equipoInicialId={equipoId} />}
+          />
+          <Route
+            path="calendario"
+            element={
+              <PartidosView onVerAlineacion={(id) => navegar(`${ALINEACION}?partido=${id}`)} />
+            }
+          />
+          <Route
+            path="calendario/programar"
+            element={
+              puedeProgramar ? (
+                <PartidosView key="programar" vista="programar" />
+              ) : (
+                <Navigate to={CALENDARIO} replace />
+              )
+            }
+          />
+          <Route
+            path="calendario/alineacion"
+            element={
+              <>
+                <div className="area-subvista">
+                  <h2>Alineación</h2>
+                  <Link to={CALENDARIO}>← Volver al calendario</Link>
+                </div>
+                <AlineacionView key={partidoId ?? "sin"} partidoInicialId={partidoId} />
+              </>
+            }
+          />
+          <Route
+            path="competiciones"
+            element={
+              puedeProgramar ? (
+                <PartidosView key="competiciones" vista="competiciones" />
+              ) : (
+                <Navigate to={CALENDARIO} replace />
+              )
+            }
+          />
+          <Route path="*" element={<Navigate to={EQUIPOS} replace />} />
+        </Routes>
       </div>
-
-      {/* Renderizado de la Sección Activa */}
-      {seccionActiva === "equipos" && <EquiposView onIrIndumentaria={handleIrIndumentaria} />}
-      {seccionActiva === "indumentaria" && (
-        <IndumentariaView equipoInicialId={equipoIndumentariaId} />
-      )}
-      {seccionActiva === "jugadores" && <JugadoresView />}
-
-      {seccionActiva === "partidos" && <PartidosView onVerAlineacion={handleVerAlineacion} />}
-
-      {seccionActiva === "alineacion" && (
-        <AlineacionView key={partidoAlineacionId ?? "sin"} partidoInicialId={partidoAlineacionId} />
-      )}
-    </div>
+    </main>
   );
 }

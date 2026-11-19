@@ -9,16 +9,8 @@ import { AVISO_ESTADO_ADR, DATOS_RECOMENDADOS, REFERENCIA_TAMANOS } from "../gui
 
 export function GuiaMontajePage() {
   return (
-    <main className="guia">
-      <Link to="/vision" className="volver">
-        ← Visión por computadora
-      </Link>
-      <p className="kicker">P3 · CU-18</p>
-      <h1>Guía de montaje de cámara</h1>
-      <p className="guia-intro">
-        Esta guía te explica cómo dejar la cámara bien puesta antes de calibrar el sistema. Léela de
-        arriba abajo y, al final, marca cada punto de la lista cuando lo hayas comprobado.
-      </p>
+    <section className="guia">
+      <h2>Montaje de cámara</h2>
 
       {AVISO_ESTADO_ADR && (
         <p className="guia-aviso" role="note">
@@ -74,9 +66,9 @@ export function GuiaMontajePage() {
           Ir a calibrar
         </Link>
         <p id="guia-calibrar-nota" className="guia-texto-suave">
-          Abre la pantalla para cargar un cuadro congelado y marcar los puntos de la cancha (CU-19).
+          Configura la fuente de video y toma una referencia de la cancha.
         </p>
       </section>
-    </main>
+    </section>
   );
 }
