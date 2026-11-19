@@ -8,9 +8,11 @@ Proyecto de Ingeniería de Software · Scrum · Equipo de 6.
 
 ---
 
-## Arrancar en un comando
+## Arrancar el entorno
 
-```bash
+```powershell
+Copy-Item .env.example .env
+# Completar las claves de .env
 docker compose up --build
 ```
 
@@ -22,10 +24,25 @@ docker compose up --build
 | Redis | localhost:6379 | |
 
 En el primer arranque se aplican las migraciones y se crea un club ficticio de
-desarrollo. Se puede iniciar sesión con `admin@club-demo.example.com` y la clave
-`Demo-Area-Tecnica-2026`. Para cambiarla sin editar archivos, define
-`DEMO_ADMIN_PASSWORD` antes de levantar Compose. El seed solo funciona con
-`APP_ENV=development` y no duplica registros en arranques posteriores.
+desarrollo. Se puede iniciar sesión con `admin@club-demo.example.com` y el valor
+de `DEMO_ADMIN_PASSWORD` definido en `.env`. El seed solo funciona con
+`APP_ENV=development`, repara cargas parciales y no duplica registros.
+
+### Demostración del Sprint 4
+
+Con los servicios levantados y la misma `DEMO_ADMIN_PASSWORD` disponible en la
+terminal:
+
+```powershell
+cd backend
+python -m scripts.demo_sprint4 verificar
+python -m scripts.demo_sprint4 preparar --duracion 12
+```
+
+El primer comando es de solo lectura. El segundo prepara en localhost un partido
+con calibración sintética, evento manual, telemetría y una recomendación crítica
+idempotente. El recorrido completo y sus limitaciones están en
+[docs/DEMO-SPRINT4.md](docs/DEMO-SPRINT4.md).
 
 Para comprobar y detener el entorno sin borrar los datos:
 
@@ -73,7 +90,7 @@ mock, cambiá el puerto a `4010`.
 ## El contrato de la API
 
 [`docs/api/openapi.json`](docs/api/openapi.json) es el **contrato congelado**:
-55 rutas, 71 operaciones y 84 esquemas cubriendo los 6 paquetes. De ahí sale el
+79 rutas, 99 operaciones y 113 esquemas cubriendo los 6 paquetes. De ahí sale el
 mock, y del mock sale que Web y Móvil **nunca esperen al backend**.
 
 Los endpoints que todavía no están implementados devuelven **501** con el caso
