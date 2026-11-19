@@ -11,6 +11,7 @@ from fastapi import APIRouter, Query, Response, status
 
 from app.asistencia import service
 from app.asistencia.schemas import (
+    DispositivoRegistrar,
     FormatoExportacion,
     Informe,
     PruebaRegla,
@@ -86,11 +87,11 @@ async def alertas(partido_id: int, usuario: Actual, db: Db) -> list[Recomendacio
 # ---------------- CU-53 · Notificaciones ----------------
 
 @router.post("/dispositivos", status_code=status.HTTP_204_NO_CONTENT,
-             responses=RESPUESTA_501,
              summary="CU-53 · Registrar el token del dispositivo para recibir push")
-async def registrar_dispositivo(token: str, usuario: Actual, db: Db) -> None:
-    # Regla: solo las recomendaciones de prioridad CRITICA generan notificacion.
-    pendiente("CU-53", "Sprint 4", "Araceli")
+async def registrar_dispositivo(
+    datos: DispositivoRegistrar, usuario: Actual, db: Db
+) -> None:
+    await service.registrar_dispositivo(db, usuario, datos)
 
 
 # ---------------- CU-55, CU-56 · Informes ----------------

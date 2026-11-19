@@ -3248,7 +3248,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/MensajeWorker"
+                  "$ref": "#/components/schemas/MensajeWorker-Output"
                 }
               }
             }
@@ -3316,7 +3316,7 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/MensajeWorker"
+                    "$ref": "#/components/schemas/MensajeWorker-Output"
                   },
                   "title": "Response Obtener Muestras Video Api Vision Videos  Video Id  Muestras Get"
                 }
@@ -5745,35 +5745,19 @@
         ],
         "summary": "CU-53 · Registrar el token del dispositivo para recibir push",
         "operationId": "registrar_dispositivo_api_asistencia_dispositivos_post",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "token",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Token"
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DispositivoRegistrar"
+              }
             }
-          }
-        ],
+          },
+          "required": true
+        },
         "responses": {
           "204": {
             "description": "Successful Response"
-          },
-          "501": {
-            "description": "Declarado en el contrato, pendiente de implementacion",
-            "content": {
-              "application/json": {
-                "example": {
-                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
-                }
-              }
-            }
           },
           "422": {
             "description": "Validation Error",
@@ -5785,7 +5769,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/asistencia/partidos/{partido_id}/informe": {
@@ -6937,6 +6926,34 @@
           "DER"
         ],
         "title": "Direccion"
+      },
+      "DispositivoRegistrar": {
+        "properties": {
+          "instalacion_id": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 8,
+            "title": "Instalacion Id"
+          },
+          "token": {
+            "type": "string",
+            "maxLength": 4096,
+            "minLength": 16,
+            "title": "Token"
+          },
+          "plataforma": {
+            "$ref": "#/components/schemas/PlataformaPush"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "instalacion_id",
+          "token",
+          "plataforma"
+        ],
+        "title": "DispositivoRegistrar",
+        "description": "Instalacion de la app asociada siempre al usuario autenticado."
       },
       "Equipo": {
         "properties": {
@@ -8628,7 +8645,93 @@
         ],
         "title": "Mensaje"
       },
-      "MensajeWorker": {
+      "MensajeWorker-Input": {
+        "properties": {
+          "partido": {
+            "type": "integer",
+            "title": "Partido"
+          },
+          "t": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "T",
+            "description": "Segundos desde el inicio del partido"
+          },
+          "jugadores": {
+            "items": {
+              "$ref": "#/components/schemas/PosicionDetectada"
+            },
+            "type": "array",
+            "title": "Jugadores"
+          },
+          "detecciones": {
+            "items": {
+              "$ref": "#/components/schemas/DeteccionImagen"
+            },
+            "type": "array",
+            "maxItems": 300,
+            "title": "Detecciones"
+          },
+          "balon": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PosicionDetectada"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "calidad": {
+            "$ref": "#/components/schemas/IndicadorCalidad"
+          }
+        },
+        "type": "object",
+        "required": [
+          "partido",
+          "t",
+          "jugadores",
+          "calidad"
+        ],
+        "title": "MensajeWorker",
+        "description": "Lo que el worker de vision envia al backend cinco veces por segundo.\n\nUnos 23 puntos por mensaje, entre 5 y 10 KB/s. El video nunca sale de la\ncancha: solo viajan estas coordenadas.",
+        "example": {
+          "balon": {
+            "conf": 0.62,
+            "equipo": "DESCONOCIDO",
+            "tid": 0,
+            "x": 55.1,
+            "y": 33.0
+          },
+          "calidad": {
+            "balon_visible": true,
+            "degradado": false,
+            "fps": 5.0,
+            "jugadores_detectados": 21,
+            "retraso_s": 0.4,
+            "worker_conectado": true
+          },
+          "jugadores": [
+            {
+              "conf": 0.91,
+              "equipo": "LOCAL",
+              "tid": 7,
+              "x": 52.3,
+              "y": 31.8
+            },
+            {
+              "conf": 0.88,
+              "equipo": "VISITANTE",
+              "tid": 12,
+              "x": 61.0,
+              "y": 44.2
+            }
+          ],
+          "partido": 42,
+          "t": 1873.4
+        }
+      },
+      "MensajeWorker-Output": {
         "properties": {
           "partido": {
             "type": "integer",
@@ -9681,6 +9784,15 @@
         ],
         "title": "Pie"
       },
+      "PlataformaPush": {
+        "type": "string",
+        "enum": [
+          "ANDROID",
+          "IOS",
+          "WEB"
+        ],
+        "title": "PlataformaPush"
+      },
       "Posicion": {
         "type": "string",
         "enum": [
@@ -9813,7 +9925,7 @@
           },
           "muestras": {
             "items": {
-              "$ref": "#/components/schemas/MensajeWorker"
+              "$ref": "#/components/schemas/MensajeWorker-Output"
             },
             "type": "array",
             "title": "Muestras"
@@ -10455,7 +10567,7 @@
           },
           "muestras": {
             "items": {
-              "$ref": "#/components/schemas/MensajeWorker"
+              "$ref": "#/components/schemas/MensajeWorker-Input"
             },
             "type": "array",
             "maxItems": 500,

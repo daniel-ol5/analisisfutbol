@@ -83,6 +83,8 @@ services:
       REDIS_URL: redis://redis:6379/0
       SECRET_KEY: ${SECRET_KEY:?Define SECRET_KEY en .env (python -c "import secrets; print(secrets.token_urlsafe(48))")}
       CORS_ORIGINS: http://localhost:5173,http://localhost:4010
+      FIREBASE_PUSH_HABILITADO: ${FIREBASE_PUSH_HABILITADO:-false}
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-}
       SEED_DEMO_DATA: "true"
       DEMO_ADMIN_EMAIL: admin@club-demo.example.com
       DEMO_ADMIN_PASSWORD: ${DEMO_ADMIN_PASSWORD:?Define DEMO_ADMIN_PASSWORD en .env}

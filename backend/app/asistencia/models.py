@@ -1,6 +1,6 @@
 """Reglas configurables y recomendaciones persistidas de un partido (CU-49)."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 from sqlalchemy import (
     JSON,
@@ -8,13 +8,15 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    Index,
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.asistencia.schemas import EstadoRecomendacion, Prioridad
+from app.asistencia.schemas import EstadoEnvioPush, EstadoRecomendacion, Prioridad
 from app.core.database import Base
 
 
@@ -54,3 +56,58 @@ class Recomendacion(Base):
     util: Mapped[bool | None]
     comentario: Mapped[str | None] = mapped_column(String(400))
     vista_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class DispositivoPush(Base):
+    """Instalacion movil autorizada a recibir notificaciones de un usuario."""
+
+    __tablename__ = "dispositivo_push"
+    __table_args__ = (
+        Index(
+            "ux_dispositivo_push_token_activo",
+            "token",
+            unique=True,
+            postgresql_where=text("activo"),
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    club_id: Mapped[int] = mapped_column(ForeignKey("club.id"), index=True)
+    usuario_id: Mapped[int] = mapped_column(ForeignKey("usuario.id"), index=True)
+    instalacion_id: Mapped[str] = mapped_column(String(128), unique=True)
+    token: Mapped[str] = mapped_column(String(4096))
+    plataforma: Mapped[str] = mapped_column(String(12))
+    activo: Mapped[bool] = mapped_column(default=True)
+    ultimo_error: Mapped[str | None] = mapped_column(String(400))
+    creado_en: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+    actualizado_en: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+
+
+class EnvioPush(Base):
+    """Outbox e historial: una recomendacion se envia una vez a cada instalacion."""
+
+    __tablename__ = "envio_push"
+    __table_args__ = (
+        UniqueConstraint(
+            "recomendacion_id",
+            "dispositivo_id",
+            name="uq_envio_push_recomendacion_dispositivo",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    recomendacion_id: Mapped[int] = mapped_column(
+        ForeignKey("recomendacion.id", ondelete="CASCADE"), index=True
+    )
+    dispositivo_id: Mapped[int] = mapped_column(ForeignKey("dispositivo_push.id"), index=True)
+    estado: Mapped[str] = mapped_column(String(12), default=EstadoEnvioPush.PENDIENTE.value)
+    proveedor_id: Mapped[str | None] = mapped_column(String(300))
+    error: Mapped[str | None] = mapped_column(String(400))
+    creado_en: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+    enviado_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

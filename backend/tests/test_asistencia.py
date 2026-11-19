@@ -23,6 +23,7 @@ from app.analisis.vivo import AnalisisEnVivo, reiniciar_analisis_en_vivo
 from app.asistencia import models, service
 from app.asistencia.contexto import EstadoTactico
 from app.asistencia.motor import ReglaInvalida, evaluar_regla
+from app.asistencia.push import MensajePush, ResultadoPush
 from app.asistencia.schemas import Regla
 from app.core.deps import UsuarioActual
 from app.core.security import token_acceso, token_ingesta
@@ -378,3 +379,220 @@ async def test_prioridad_limite_tres_desempate_e_historial_completo():
         "Media",
         "Baja",
     }
+
+
+class ProveedorPushPrueba:
+    def __init__(
+        self,
+        resultados: list[ResultadoPush] | None = None,
+        error: Exception | None = None,
+    ) -> None:
+        self.resultados = resultados
+        self.error = error
+        self.llamadas: list[tuple[list[str], MensajePush]] = []
+
+    async def enviar(
+        self, tokens: list[str], mensaje_push: MensajePush
+    ) -> list[ResultadoPush]:
+        self.llamadas.append((tokens, mensaje_push))
+        if self.error is not None:
+            raise self.error
+        return self.resultados or [
+            ResultadoPush(enviado=True, proveedor_id=f"fcm-{i}")
+            for i in range(len(tokens))
+        ]
+
+
+@pytest.fixture
+async def usuarios_para_push():
+    await sembrar_partidos()
+
+
+def test_registro_dispositivo_autenticado_idempotente_y_actualizable(usuarios_para_push):
+    url = "/api/asistencia/dispositivos"
+    inicial = {
+        "instalacion_id": "instalacion-android-1",
+        "token": "token-fcm-inicial-123456",
+        "plataforma": "ANDROID",
+    }
+    actualizado = {**inicial, "token": "token-fcm-actualizado-789"}
+
+    async def dispositivos():
+        async with SesionesPrueba() as db:
+            return list((await db.scalars(select(models.DispositivoPush))).all())
+
+    with TestClient(app) as cliente:
+        assert cliente.post(url, json=inicial).status_code == 401
+        assert cliente.post(
+            url,
+            headers=_auth(),
+            json={**inicial, "usuario_id": CLUB_B},
+        ).status_code == 422
+        assert cliente.post(url, headers=_auth(), json=inicial).status_code == 204
+        assert cliente.post(url, headers=_auth(), json=inicial).status_code == 204
+        assert cliente.post(url, headers=_auth(), json=actualizado).status_code == 204
+        filas = cliente.portal.call(dispositivos)
+
+    assert len(filas) == 1
+    assert filas[0].usuario_id == CLUB_A
+    assert filas[0].club_id == CLUB_A
+    assert filas[0].token == actualizado["token"]
+    assert filas[0].activo
+
+
+@pytest.mark.asyncio
+async def test_solo_critica_notifica_al_club_correcto_sin_duplicar_y_con_navegacion():
+    await _preparar_partidos_para_evaluar(
+        _regla_prueba("Urgente", "CRITICA"),
+        _regla_prueba("Ordinaria", "MEDIA"),
+    )
+    async with SesionesPrueba() as db:
+        db.add_all([
+            models.DispositivoPush(
+                club_id=CLUB_A,
+                usuario_id=CLUB_A,
+                instalacion_id="instalacion-club-a",
+                token="token-club-a-123456789",
+                plataforma="ANDROID",
+            ),
+            models.DispositivoPush(
+                club_id=CLUB_B,
+                usuario_id=CLUB_B,
+                instalacion_id="instalacion-club-b",
+                token="token-club-b-123456789",
+                plataforma="ANDROID",
+            ),
+        ])
+        await db.commit()
+
+    proveedor = ProveedorPushPrueba()
+    async with SesionesPrueba() as db:
+        assert await service.evaluar_en_vivo(
+            db,
+            PARTIDO_A,
+            CLUB_A,
+            100,
+            {"senal": 1},
+            proveedor,
+        )
+        recomendaciones = list((await db.scalars(
+            select(models.Recomendacion).order_by(models.Recomendacion.id)
+        )).all())
+        assert await service.notificar_recomendaciones(
+            db, [r.id for r in recomendaciones], proveedor
+        ) == 0
+        envios = list((await db.scalars(select(models.EnvioPush))).all())
+
+    assert len(recomendaciones) == 2
+    assert len(envios) == 1
+    assert envios[0].estado == "ENVIADO"
+    assert len(proveedor.llamadas) == 1
+    tokens, mensaje_push = proveedor.llamadas[0]
+    critica = next(r for r in recomendaciones if r.prioridad == "CRITICA")
+    assert tokens == ["token-club-a-123456789"]
+    assert mensaje_push.datos == {
+        "tipo": "recomendacion_tactica",
+        "recomendacion_id": str(critica.id),
+        "partido_id": str(PARTIDO_A),
+        "prioridad": "CRITICA",
+        "ruta": (
+            f"/asistencia?partido_id={PARTIDO_A}"
+            f"&recomendacion_id={critica.id}"
+        ),
+    }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("proveedor", "token_activo", "error_esperado"),
+    [
+        (
+            ProveedorPushPrueba([
+                ResultadoPush(
+                    enviado=False,
+                    error="Token no registrado",
+                    token_invalido=True,
+                )
+            ]),
+            False,
+            "Token no registrado",
+        ),
+        (ProveedorPushPrueba(error=RuntimeError("FCM no disponible")), True, "FCM no disponible"),
+    ],
+    ids=("token-invalido", "error-proveedor"),
+)
+async def test_error_push_se_registra_y_solo_invalida_el_token_correspondiente(
+    proveedor: ProveedorPushPrueba,
+    token_activo: bool,
+    error_esperado: str,
+):
+    await _preparar_partidos_para_evaluar(_regla_prueba("Urgente", "CRITICA"))
+    async with SesionesPrueba() as db:
+        db.add(models.DispositivoPush(
+            club_id=CLUB_A,
+            usuario_id=CLUB_A,
+            instalacion_id="instalacion-error",
+            token="token-error-123456789",
+            plataforma="ANDROID",
+        ))
+        await db.commit()
+        assert await service.evaluar_en_vivo(
+            db,
+            PARTIDO_A,
+            CLUB_A,
+            100,
+            {"senal": 1},
+            proveedor,
+        )
+        dispositivo = await db.scalar(select(models.DispositivoPush))
+        envio = await db.scalar(select(models.EnvioPush))
+
+    assert dispositivo is not None and dispositivo.activo is token_activo
+    assert envio is not None and envio.estado == "ERROR"
+    assert error_esperado in (envio.error or "")
+
+
+@pytest.mark.asyncio
+async def test_notificacion_concurrente_se_envia_una_sola_vez():
+    await _preparar_partidos_para_evaluar(_regla_prueba("Urgente", "CRITICA"))
+    async with SesionesPrueba() as db:
+        regla_id = await db.scalar(select(models.ReglaTactica.id))
+        assert regla_id is not None
+        recomendacion = models.Recomendacion(
+            partido_id=PARTIDO_A,
+            regla_id=regla_id,
+            t=100,
+            minuto=1,
+            mensaje="Urgente",
+            justificacion="Prueba",
+            prioridad="CRITICA",
+            datos_soporte=[],
+        )
+        db.add_all([
+            recomendacion,
+            models.DispositivoPush(
+                club_id=CLUB_A,
+                usuario_id=CLUB_A,
+                instalacion_id="instalacion-concurrente",
+                token="token-concurrente-123456789",
+                plataforma="ANDROID",
+            ),
+        ])
+        await db.commit()
+        recomendacion_id = recomendacion.id
+
+    proveedor = ProveedorPushPrueba()
+
+    async def notificar() -> int:
+        async with SesionesPrueba() as db:
+            return await service.notificar_recomendaciones(
+                db, [recomendacion_id], proveedor
+            )
+
+    resultados = await asyncio.gather(notificar(), notificar(), notificar())
+    async with SesionesPrueba() as db:
+        envios = list((await db.scalars(select(models.EnvioPush))).all())
+
+    assert sum(resultados) == 1
+    assert len(proveedor.llamadas) == 1
+    assert len(envios) == 1
