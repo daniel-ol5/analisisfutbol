@@ -20,7 +20,8 @@ test("subir un video, procesarlo y verlo como procesado", async ({ page, request
 
   await iniciarSesion(page, d);
   await page.goto(`/vision/videos?partidoId=${partido}`);
-  await page.getByLabel("Partido").selectOption(String(partido));
+  // Exacto y como combobox: el menú del rediseño (#45) tiene el link "Control de partido".
+  await page.getByRole("combobox", { name: "Partido", exact: true }).selectOption(String(partido));
 
   // Subida desde la interfaz (el selector de archivos está oculto detrás del botón).
   const [selector] = await Promise.all([

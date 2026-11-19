@@ -14,7 +14,8 @@ test("calibrar la cámara de un partido y ver el plano 2D", async ({ page }) => 
 
   // Calibración con cámara en directo y reconocimiento automático.
   await page.goto(`/vision/calibracion?partidoId=${d.partidos.calibracion}`);
-  await expect(page.getByRole("heading", { name: "Calibración y seguimiento de cancha" })).toBeVisible();
+  // Título del rediseño (#45).
+  await expect(page.getByRole("heading", { name: "Calibrar cámara" })).toBeVisible();
   await page.getByRole("combobox", { name: "Partido", exact: true }).selectOption(String(d.partidos.calibracion));
   await page.getByRole("combobox", { name: "Fuente", exact: true }).selectOption("DIRECTO");
   await page.getByRole("button", { name: "Reconocimiento automático" }).click();
