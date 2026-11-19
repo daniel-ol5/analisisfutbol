@@ -7,6 +7,7 @@ a mano y un backend falso que registra lo que recibiría.
 import io
 import json
 import urllib.error
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -93,6 +94,30 @@ def test_un_solo_jugador_sin_color_rival():
     assert equipos_de(cuadro, [_det(1, CAJAS[1][0])], _ctx(color_rival=None)) == [
         EquipoDetectado.LOCAL
     ]
+
+
+def test_ambos_equipos_de_azul_se_distinguen_por_la_claridad_de_la_camiseta():
+    equipo_celeste = "#6CABDD"
+    equipo_azul = "#034694"
+    caja_celeste = CAJAS[1][0]
+    caja_azul = CAJAS[2][0]
+    cuadro = _cuadro([(caja_celeste, equipo_celeste), (caja_azul, equipo_azul)])
+    contexto = replace(_ctx(), color_propio=equipo_celeste, color_rival=equipo_azul)
+    assert equipos_de(cuadro, [_det(1, caja_celeste), _det(2, caja_azul)], contexto) == [
+        EquipoDetectado.LOCAL, EquipoDetectado.VISITANTE,
+    ]
+
+
+def test_arquero_conserva_el_rol_y_el_lado_depende_de_ambos_equipos():
+    cuadro, detecciones = _escena()
+    detecciones += [_det(5, CAJAS[1][0]), _det(6, CAJAS[4][0])]
+    detecciones.append(_det(7, (20, 80, 40, 120), clase=Clase.PORTERO))
+    xs = [75, 80, 25, 30, 85, 35, 10]
+    equipos = equipos_de(cuadro, detecciones, _ctx(), posiciones_m=[(x, 30) for x in xs])
+    assert equipos[-1] == EquipoDetectado.VISITANTE
+    mensaje = armar_mensaje(_ctx(), 0, cuadro, [detecciones[-1]])
+    assert mensaje["detecciones"][0]["clase"] == "PORTERO"
+    assert mensaje["jugadores"][0]["equipo"] == "DESCONOCIDO"
 
 
 def test_mensaje_con_el_contrato_del_worker_en_vivo():

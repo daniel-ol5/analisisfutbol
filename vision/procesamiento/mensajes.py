@@ -37,6 +37,7 @@ from seguimiento.color import (
     agrupar_equipos,
     clasificar_equipos,
     color_dominante,
+    es_prototipo_verde,
     recortar_torso,
 )
 from seguimiento.gmc import CompensadorMovimientoCamara, TransformacionCamara
@@ -68,13 +69,19 @@ class EstadoPipeline:
 
     gmc: CompensadorMovimientoCamara = field(default_factory=CompensadorMovimientoCamara)
     balon: RastreadorBalon = field(default_factory=RastreadorBalon)
-    clasificador_temporal: ClasificadorTemporalEquipos = field(default_factory=ClasificadorTemporalEquipos)
+    clasificador_temporal: ClasificadorTemporalEquipos = field(
+        default_factory=lambda: ClasificadorTemporalEquipos(ventana=25, olvido_cuadros=120)
+    )
     calibrador_equipos: CalibradorEquiposPartido | None = None
     rastreador_homografia: RastreadorHomografiaDinamica | None = None
     dispositivo: str = "cpu"
     largo_m: float = 105.0
     ancho_m: float = 68.0
     habilitar_reconocimiento: bool = False
+    porteros_tids: dict[int, int] = field(default_factory=dict)
+    arbitros_tids: dict[int, int] = field(default_factory=dict)
+    votos_local_izq: int = 0
+    votos_local_der: int = 0
 
     def __post_init__(self) -> None:
         if self.rastreador_homografia is None:
@@ -92,7 +99,7 @@ def _vector_de_hex(color_hex: str) -> np.ndarray:
     """Mismo espacio CIELAB normalizado [L, a, b] que `color_dominante`."""
     hex_limpio = color_hex.strip().lstrip("#")
     r, g, b = (int(hex_limpio[i : i + 2], 16) for i in (0, 2, 4))
-    return color_dominante(np.array([[[b, g, r]]], dtype=np.uint8))
+    return color_dominante(np.array([[[b, g, r]]], dtype=np.uint8), excluir_cesped=False)
 
 
 def _equipo_propio(ctx: Contexto) -> EquipoDetectado:
@@ -121,6 +128,83 @@ def _por_cercania_al_propio(colores: Sequence[np.ndarray], ctx: Contexto) -> lis
     return [_equipo_propio(ctx) if e == grupo_propio else _equipo_rival(ctx) for e in etiquetas]
 
 
+def _excluir_cesped_para(
+    ctx: Contexto, calibrador_equipos: CalibradorEquiposPartido | None
+) -> bool:
+    if calibrador_equipos is not None:
+        return calibrador_equipos.excluir_cesped
+    if es_prototipo_verde(_vector_de_hex(ctx.color_propio)):
+        return False
+    if ctx.color_rival and es_prototipo_verde(_vector_de_hex(ctx.color_rival)):
+        return False
+    return True
+
+
+def _detectar_porteros_inferidos(
+    personas: Sequence[Deteccion],
+    posiciones_m: Sequence[tuple[float, float]] | None,
+    colores_por_idx: dict[int, np.ndarray],
+    ctx: Contexto,
+    calibrador_equipos: CalibradorEquiposPartido | None,
+    estado: EstadoPipeline | None,
+) -> set[int]:
+    """Detecta porteros incluso con modelos de 3 clases (sin clase PORTERO explícita).
+
+    Un portero es el jugador más cercano a cada línea de fondo dentro del área
+    cuyo color de camiseta es atípico respecto a ambos equipos de campo, o que ya
+    fue confirmado como portero por su `tid` en cuadros previos.
+    """
+    indices_portero = {i for i, d in enumerate(personas) if d.clase == Clase.PORTERO}
+    if not posiciones_m:
+        return indices_portero
+
+    zona_y_min = max(4.0, ctx.ancho_m * 0.14)
+    zona_y_max = min(ctx.ancho_m - 4.0, ctx.ancho_m * 0.86)
+
+    for lado_izq in (True, False):
+        candidatos: list[tuple[float, int]] = []
+        for i, (d, (x, y)) in enumerate(zip(personas, posiciones_m, strict=True)):
+            if d.clase != Clase.JUGADOR or i in indices_portero:
+                continue
+            if not (zona_y_min <= y <= zona_y_max):
+                continue
+            if lado_izq and x <= 22.0:
+                candidatos.append((x, i))
+            elif not lado_izq and x >= ctx.largo_m - 22.0:
+                candidatos.append((ctx.largo_m - x, i))
+        if not candidatos:
+            continue
+        candidatos.sort(key=lambda item: item[0])
+        _, idx_mas_cerca = candidatos[0]
+        d = personas[idx_mas_cerca]
+        confirmado_previo = (
+            estado is not None and d.tid > 0 and estado.porteros_tids.get(d.tid, 0) >= 3
+        )
+        color = colores_por_idx.get(idx_mas_cerca)
+        atipico = (
+            color is not None
+            and calibrador_equipos is not None
+            and calibrador_equipos.es_color_atipico(color)
+        )
+        if confirmado_previo or atipico:
+            indices_portero.add(idx_mas_cerca)
+            if estado is not None and d.tid > 0:
+                estado.porteros_tids[d.tid] = estado.porteros_tids.get(d.tid, 0) + 1
+
+    # Mantener el rol de portero si un tid ya confirmado sale momentáneamente hasta 24 m.
+    if estado is not None:
+        for i, (d, (x, _y)) in enumerate(zip(personas, posiciones_m, strict=True)):
+            if (
+                d.clase == Clase.JUGADOR
+                and d.tid > 0
+                and estado.porteros_tids.get(d.tid, 0) >= 4
+                and (x <= 24.0 or x >= ctx.largo_m - 24.0)
+            ):
+                indices_portero.add(i)
+
+    return indices_portero
+
+
 def equipos_de(
     cuadro: np.ndarray,
     personas: Sequence[Deteccion],
@@ -128,37 +212,49 @@ def equipos_de(
     clasificador_temporal: ClasificadorTemporalEquipos | None = None,
     calibrador_equipos: CalibradorEquiposPartido | None = None,
     posiciones_m: Sequence[tuple[float, float]] | None = None,
+    estado: EstadoPipeline | None = None,
+    porteros_detectados: set[int] | None = None,
 ) -> list[EquipoDetectado]:
     """Equipo de cada persona detectada, en el mismo orden (CU-25 / Fase F4)."""
     equipos: list[EquipoDetectado | None] = [None] * len(personas)
-    colores: list[np.ndarray] = []
-    indices: list[int] = []
+    colores_por_idx: dict[int, np.ndarray] = {}
     confs: list[float] = [float(d.conf) for d in personas]
+    excluir_cesped = _excluir_cesped_para(ctx, calibrador_equipos)
 
     for i, d in enumerate(personas):
         if d.clase == Clase.ARBITRO:
             equipos[i] = EquipoDetectado.ARBITRO
+            if estado is not None and d.tid > 0:
+                estado.arbitros_tids[d.tid] = estado.arbitros_tids.get(d.tid, 0) + 1
+            continue
+        if d.clase == Clase.PORTERO:
+            if estado is not None and d.tid > 0:
+                estado.porteros_tids[d.tid] = estado.porteros_tids.get(d.tid, 0) + 1
             continue
         try:
-            colores.append(color_dominante(recortar_torso(cuadro, d.caja)))
-            indices.append(i)
+            colores_por_idx[i] = color_dominante(
+                recortar_torso(cuadro, d.caja), excluir_cesped=excluir_cesped
+            )
         except RecorteVacio:
             equipos[i] = EquipoDetectado.DESCONOCIDO
 
+    indices_portero = _detectar_porteros_inferidos(
+        personas, posiciones_m, colores_por_idx, ctx, calibrador_equipos, estado
+    )
+    if porteros_detectados is not None:
+        porteros_detectados.update(personas[i].tid for i in indices_portero)
+
+    indices = [i for i in colores_por_idx if i not in indices_portero]
+    colores = [colores_por_idx[i] for i in indices]
+
     if colores:
         if calibrador_equipos is not None:
-            # 1. Acumular muestras de jugadores de campo en el calibrador
             for idx, col in zip(indices, colores, strict=True):
-                d = personas[idx]
-                es_port = (d.clase == Clase.PORTERO)
-                calibrador_equipos.acumular_muestra(col, tid=d.tid, es_portero=es_port)
+                calibrador_equipos.acumular_muestra(col, tid=personas[idx].tid)
 
             # 2. Clasificar cada jugador contra los centroides empíricos
             for idx, col in zip(indices, colores, strict=True):
-                d = personas[idx]
-                pos_m = posiciones_m[idx] if posiciones_m and idx < len(posiciones_m) else None
-                es_port = (d.clase == Clase.PORTERO)
-                res = calibrador_equipos.clasificar_jugador(col, posicion_m=pos_m, es_portero=es_port)
+                res = calibrador_equipos.clasificar_jugador(col)
                 equipos[idx] = res.equipo
                 confs[idx] = res.confianza
         elif ctx.color_rival:
@@ -175,15 +271,60 @@ def equipos_de(
             for idx, eq in zip(indices, clasificados, strict=True):
                 equipos[idx] = eq
 
+    # Actualizar y consultar qué lado de la cancha defiende cada equipo
+    local_defiende_izq: bool | None = None
+    if posiciones_m:
+        xs_local = [xy[0] for xy, eq in zip(posiciones_m, equipos, strict=True)
+                    if eq == EquipoDetectado.LOCAL]
+        xs_rival = [xy[0] for xy, eq in zip(posiciones_m, equipos, strict=True)
+                    if eq == EquipoDetectado.VISITANTE]
+        if len(xs_local) >= 3 and len(xs_rival) >= 3:
+            centro_local, centro_rival = float(np.median(xs_local)), float(np.median(xs_rival))
+            if abs(centro_local - centro_rival) >= 8.0:
+                local_defiende_izq = centro_local < centro_rival
+                if estado is not None:
+                    if local_defiende_izq:
+                        estado.votos_local_izq += 1
+                    else:
+                        estado.votos_local_der += 1
+        if (
+            local_defiende_izq is None
+            and estado is not None
+            and abs(estado.votos_local_izq - estado.votos_local_der) >= 3
+        ):
+            local_defiende_izq = estado.votos_local_izq > estado.votos_local_der
+
+        if indices_portero and local_defiende_izq is not None:
+            izquierda, derecha = (
+                (EquipoDetectado.LOCAL, EquipoDetectado.VISITANTE)
+                if local_defiende_izq
+                else (EquipoDetectado.VISITANTE, EquipoDetectado.LOCAL)
+            )
+            for i in indices_portero:
+                x = posiciones_m[i][0]
+                if x <= 22.0:
+                    equipos[i] = izquierda
+                elif x >= ctx.largo_m - 22.0:
+                    equipos[i] = derecha
+
     resultado = [e or EquipoDetectado.DESCONOCIDO for e in equipos]
 
     # Suavizado temporal si se dispone del clasificador
     if clasificador_temporal is not None:
         suavizados = []
-        for d, eq, conf in zip(personas, resultado, confs, strict=True):
+        for i, (d, eq, conf) in enumerate(zip(personas, resultado, confs, strict=True)):
             if d.tid > 0:
-                eq_suave, _ = clasificador_temporal.registrar_y_suavizar(d.tid, eq, conf)
-                suavizados.append(eq_suave)
+                if d.clase == Clase.ARBITRO:
+                    eq_suave, _ = clasificador_temporal.registrar_y_suavizar(
+                        d.tid, EquipoDetectado.ARBITRO, conf, peso=2
+                    )
+                    suavizados.append(eq_suave)
+                elif i in indices_portero and eq != EquipoDetectado.DESCONOCIDO:
+                    eq_suave, _ = clasificador_temporal.registrar_y_suavizar(d.tid, eq, 0.95)
+                    suavizados.append(eq_suave)
+                else:
+                    eq_suave, _ = clasificador_temporal.registrar_y_suavizar(d.tid, eq, conf)
+                    suavizados.append(eq_suave)
             else:
                 suavizados.append(eq)
         clasificador_temporal.avanzar_cuadro()
@@ -312,6 +453,7 @@ def armar_mensaje(
 
     # 4. Clasificación de equipos con persistencia temporal y centroides empíricos
     clasif_temp = estado.clasificador_temporal if estado is not None else None
+    porteros_detectados: set[int] = set()
     equipos = equipos_de(
         cuadro,
         [d for d, _ in proy_personas],
@@ -319,16 +461,32 @@ def armar_mensaje(
         clasificador_temporal=clasif_temp,
         calibrador_equipos=calibrador,
         posiciones_m=[xy for _, xy in proy_personas],
+        estado=estado,
+        porteros_detectados=porteros_detectados,
     )
 
     # 5. Estructuración de jugadores
     mapa_jugadores: dict[int, dict[str, Any]] = {}
+    arbitros_tids: set[int] = set()
     for (d, xy), equipo in zip(proy_personas, equipos, strict=True):
         pt = _punto(d, equipo, xy, ancho, alto)
         tid = pt["tid"]
+        if equipo == EquipoDetectado.ARBITRO:
+            arbitros_tids.add(tid)
         if tid not in mapa_jugadores or pt["conf"] > mapa_jugadores[tid]["conf"]:
             mapa_jugadores[tid] = pt
     jugadores = list(mapa_jugadores.values())
+
+    # Reflejar en `detecciones` los roles inferidos (arqueros y árbitros) para el visor.
+    if detecciones_imagen and (porteros_detectados or arbitros_tids):
+        for det in detecciones_imagen:
+            if det["clase"] == Clase.BALON.value:
+                continue
+            tid = det["tid"]
+            if tid in porteros_detectados:
+                det["clase"] = Clase.PORTERO.value
+            elif tid in arbitros_tids:
+                det["clase"] = Clase.ARBITRO.value
 
     # 4. Seguimiento cinemático y oclusiones del balón
     balon = None

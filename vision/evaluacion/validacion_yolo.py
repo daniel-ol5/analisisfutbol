@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import argparse
+import json
 from pathlib import Path
 
-from deteccion.modelo import ModeloDeteccion
+from deteccion.modelo import CLASES_COCO, CLASES_FUTBOL, CLASES_PROPIO, ConfigModelo, ModeloDeteccion
 from seguimiento.tipos import Clase, Deteccion
 
 from .mapa import EvaluacionInvalida, calcular_map50
@@ -63,3 +65,31 @@ def validar(
             ap50 = None
         metricas[clase.value.lower()] = None if ap50 is None else round(ap50, 4)
     return metricas
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("dataset", type=Path, help="Carpeta con images/val y labels/val")
+    parser.add_argument("--modelo", nargs=2, action="append", required=True,
+                        metavar=("CLASES", "PESOS"), help="Repite para cada modelo. Clases: coco, propio, futbol")
+    parser.add_argument("--etiquetas", choices=("propio", "futbol"), default="propio")
+    parser.add_argument("--imgsz", type=int, default=960)
+    parser.add_argument("--device", default="cuda:0")
+    args = parser.parse_args()
+    mapas = {"coco": CLASES_COCO, "propio": CLASES_PROPIO, "futbol": CLASES_FUTBOL}
+    imagenes = sorted(p for p in (args.dataset / "images" / "val").iterdir()
+                      if p.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp"})
+    resultados = []
+    for claves, pesos in args.modelo:
+        if claves not in mapas:
+            parser.error(f"Mapa de clases desconocido: {claves}")
+        config = ConfigModelo(ruta_pesos=pesos, tamano_img=args.imgsz,
+                             dispositivo=args.device, clases=mapas[claves])
+        metricas = validar(ModeloDeteccion(config), imagenes, args.dataset / "labels" / "val",
+                          mapas[args.etiquetas])
+        resultados.append({"pesos": pesos, "ap50": metricas})
+    print(json.dumps({"imagenes": len(imagenes), "imgsz": args.imgsz, "modelos": resultados}, indent=2))
+
+
+if __name__ == "__main__":
+    main()

@@ -11,6 +11,35 @@ from calibracion.dinamica import (
 from seguimiento.gmc import CompensadorMovimientoCamara, TransformacionCamara
 
 
+def test_mediocampo_requiere_circulo_y_ambas_bandas():
+    from calibracion.terreno import ajustar_mediocampo
+
+    marcas = generar_keypoints_campo()
+    mundo = np.float64([marcas[i] for i in (13, 14, 15, 16, 30, 31)])
+    camara = np.float64([[11, 1, -131.5], [0, -4, 376], [0, 0, 1]])
+
+    def proyectar(puntos):
+        return cv2.perspectiveTransform(np.float64(puntos).reshape(-1, 1, 2), camara).reshape(-1, 2)
+
+    pixeles = proyectar(mundo)
+    cuadro = np.full((480, 960, 3), (35, 110, 40), np.uint8)
+    for a, b in [((0, 0), (105, 0)), ((0, 68), (105, 68)), ((52.5, 0), (52.5, 68))]:
+        p, q = proyectar([a, b]).round().astype(int)
+        cv2.line(cuadro, p, q, (235, 235, 235), 2)
+    assert ajustar_mediocampo(cuadro, pixeles, mundo, 105, 68)[0] is None
+
+    angulos = np.linspace(0, 2 * np.pi, 160)
+    arco = np.c_[52.5 + 9.15 * np.cos(angulos), 34 + 9.15 * np.sin(angulos)]
+    cv2.polylines(cuadro, [proyectar(arco).round().astype(np.int32)], True, (235, 235, 235), 2)
+    h, _ = ajustar_mediocampo(cuadro, pixeles, mundo, 105, 68)
+    assert h is not None
+    controles = np.float64([[42, 12], [55, 38], [70, 55]])
+    radar = cv2.perspectiveTransform(proyectar(controles).reshape(-1, 1, 2), h).reshape(-1, 2)
+    assert np.max(np.linalg.norm(radar - controles, axis=1)) < .6
+    cuadro[99:110] = (35, 110, 40)
+    assert ajustar_mediocampo(cuadro, pixeles, mundo, 105, 68)[0] is None
+
+
 def test_generar_keypoints_campo_estandar():
     kpts = generar_keypoints_campo(105.0, 68.0)
     assert len(kpts) == 32

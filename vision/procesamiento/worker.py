@@ -186,7 +186,7 @@ def abrir_con_yolo(dispositivo: str, clases: str, carpeta: Path, vid_stride: int
         from procesamiento.fuente import datos_del_video, seguir_con_cuadros
 
         modelo = trabajo.get("modelo")
-        futbol_local = clases == "futbol" and _PESOS_FUTBOL.is_file()
+        futbol_local = clases in ("futbol", "auto") and _PESOS_FUTBOL.is_file()
         pesos_coco = _PESOS_FUTBOL.with_name("yolo11n.pt")
         pesos = str(pesos_coco) if pesos_coco.is_file() else "yolo11n.pt"
         if modelo:
@@ -200,16 +200,22 @@ def abrir_con_yolo(dispositivo: str, clases: str, carpeta: Path, vid_stride: int
         elif clases == "futbol":
             log.warning("No hay pesos especializados; se usará COCO con sus clases correctas")
 
+        auto_clases = clases == "auto"
         clases_map = (
-            CLASES_FUTBOL
-            if clases == "futbol" and (pesos_locales is not None or modelo or futbol_local)
-            else (CLASES_PROPIO if clases == "propio" else CLASES_COCO)
+            {}
+            if auto_clases
+            else (
+                CLASES_FUTBOL
+                if clases == "futbol" and (pesos_locales is not None or modelo or futbol_local)
+                else (CLASES_PROPIO if clases == "propio" else CLASES_COCO)
+            )
         )
         config = ConfigModelo(
             ruta_pesos=pesos,
             dispositivo=dispositivo,
             clases=dict(clases_map),
             tamano_img=tamano_img,
+            auto_clases=auto_clases,
         )
         fps, total = datos_del_video(ruta)
         referencia = trabajo.get("referencia") or {}
@@ -241,8 +247,8 @@ def argumentos(argv: list[str] | None = None) -> argparse.Namespace:
                    help="O la variable VISION_PASSWORD")
     p.add_argument("--dispositivo", default="cuda:0", help="cuda:0, o cpu (mucho más lento)")
     p.add_argument("--pesos", type=Path, help="Archivo .pt local para trabajos sin modelo registrado")
-    p.add_argument("--clases", choices=["coco", "propio", "futbol"], default="futbol",
-                   help="futbol: YOLO especializado en fútbol (4 clases); coco: genérico; propio: modelo de 3 clases")
+    p.add_argument("--clases", choices=["auto", "coco", "propio", "futbol"], default="auto",
+                   help="auto: detecta el mapa desde los pesos; futbol (4 clases); propio (3 clases); coco")
     p.add_argument("--espera", type=float, default=10.0, help="Segundos entre consultas sin trabajo")
     p.add_argument("--stride", type=int, default=None,
                    help="Paso de cuadros para el tracker (1 en GPU para máxima continuidad, 6 en CPU)")

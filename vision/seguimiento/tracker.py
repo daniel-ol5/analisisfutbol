@@ -89,7 +89,7 @@ def _adaptar(resultado: Any, config: ConfigModelo) -> list[Deteccion]:
             if clase == Clase.BALON:
                 if not _tamano_balon_valido(w, h):
                     continue
-            elif not (3.0 <= w <= 140.0 and 6.0 <= h <= 220.0 and h / w >= 0.6):
+            elif not (3.0 <= w <= 180.0 and 6.0 <= h <= 320.0 and h / w >= 0.45):
                 continue
 
             tid_int = int(tid)
@@ -98,17 +98,27 @@ def _adaptar(resultado: Any, config: ConfigModelo) -> list[Deteccion]:
             vistos_tid.add(tid_int)
             detecciones.append(Deteccion.desde_caja(tid_int, clase, (x1, y1, x2, y2), float(conf)))
 
-    # El balón tiene su propio seguimiento. Una caja de YOLO es candidata aunque
-    # el tracker de personas todavía no le haya asignado un identificador.
+    # El balón tiene su propio seguimiento. Rescatar todas las cajas de balón previas
+    # al tracker (evitando duplicar las que ya salieron trackeadas) para que un falso
+    # positivo de BoT-SORT no bloquee detecciones reales del balón.
     originales = getattr(resultado, "cajas_antes_del_tracker", None)
-    if originales is not None and not any(d.clase == Clase.BALON for d in detecciones):
+    if originales is not None:
+        balones_existentes = [d.caja for d in detecciones if d.clase == Clase.BALON]
         for i, (caja, clase_id, conf) in enumerate(zip(
             originales.xyxy.tolist(), originales.cls.tolist(), originales.conf.tolist(), strict=True
         ), start=1):
             if config.clases.get(int(clase_id)) != Clase.BALON or conf < config.confianza_min:
                 continue
             x1, y1, x2, y2 = caja
-            if _tamano_balon_valido(x2 - x1, y2 - y1):
+            if not _tamano_balon_valido(x2 - x1, y2 - y1):
+                continue
+            cx, cy = (x1 + x2) / 2.0, (y1 + y2) / 2.0
+            duplicado = any(
+                abs(cx - (bx1 + bx2) / 2.0) <= 12.0 and abs(cy - (by1 + by2) / 2.0) <= 12.0
+                for bx1, by1, bx2, by2 in balones_existentes
+            )
+            if not duplicado:
+                balones_existentes.append((x1, y1, x2, y2))
                 detecciones.append(Deteccion.desde_caja(-i, Clase.BALON, (x1, y1, x2, y2), float(conf)))
 
     return detecciones

@@ -42,6 +42,7 @@ from app.vision.schemas import (
     CalibracionGuardar,
     CalibracionIntrinseca,
     ErrorCalibracion,
+    EstadoVideo,
     FinTrabajo,
     LanzarProceso,
     MensajeWorker,
@@ -514,12 +515,19 @@ async def analizar_cuadro_en_vivo(
 
 @router.get("/videos/{video_id}/muestras", response_model=list[MensajeWorker],
             summary="CU-24, CU-40, CU-41 · Descargar telemetría persistida del video para sincronización directa")
-async def obtener_muestras_video(video_id: int, usuario: Actual, db: Db) -> list[MensajeWorker]:
+async def obtener_muestras_video(
+    video_id: int, usuario: Actual, db: Db,
+    despues_de: Annotated[float | None, Query(ge=0)] = None,
+) -> list[MensajeWorker]:
     vid = await videos.ver_video(db, usuario, video_id)
-    muestras = procesamiento.cargar_muestras_video(video_id)
-    if not muestras and vid.partido_id:
-        muestras = procesamiento.cargar_muestras_partido(vid.partido_id)
-    return muestras
+    if vid.estado in {EstadoVideo.CARGANDO, EstadoVideo.SUBIDO} or (
+        vid.estado == EstadoVideo.PROCESANDO and vid.iniciado_en is None
+    ):
+        return []
+    return await run_in_threadpool(
+        procesamiento.cargar_muestras_video, video_id,
+        desde=vid.iniciado_en, despues_de=despues_de,
+    )
 
 
 @router.post("/videos/{video_id}/resultados", response_model=Video,

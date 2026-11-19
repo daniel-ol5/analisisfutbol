@@ -4,6 +4,7 @@ from unittest.mock import MagicMock
 import cv2
 import numpy as np
 import pytest
+from calibracion.dinamica import RastreadorHomografiaDinamica
 from calibracion.referencias import BancoReferencias
 from procesamiento.mensajes import EstadoPipeline, armar_mensaje
 from procesamiento.worker import contexto
@@ -54,6 +55,22 @@ def test_la_referencia_expira_sin_verificacion_absoluta():
     assert mensaje["calidad"]["estado_calibracion"] == "PERDIDA"
     assert mensaje["jugadores"] == []
     assert mensaje["detecciones"]
+
+
+def test_buscar_una_referencia_guardada_no_pospone_el_anclaje_periodico():
+    imagen, _ = _escena()
+    estimador = MagicMock()
+    estimador.estimar.return_value.es_valida = False
+    rastreador = RastreadorHomografiaDinamica(estimador_pitch=estimador, recalibrar_cada_n_cuadros=3)
+    rastreador.gmc.estimar = MagicMock(side_effect=lambda *args, **kw: rastreador.gmc._transformacion_identidad())
+    rastreador.banco = MagicMock()
+    rastreador.banco.recuperar.return_value = None
+
+    for t in (0, 0.2, 0.4):
+        rastreador.actualizar(imagen, np.eye(3), t_s=t)
+
+    rastreador.banco.recuperar.assert_called_once()
+    estimador.estimar.assert_called_once()
 
 
 def test_cambio_de_resolucion_invalida_la_continuidad():

@@ -325,3 +325,60 @@ def test_calibrador_clasifica_con_precision_superior_a_95_por_ciento():
 
     assert aciertos / total >= 0.95
 
+
+def test_calibrador_separa_celeste_de_azul_marino():
+    """Man City celeste (#6CABDD) vs Chelsea azul marino (#034694): mismo tono azul, distinta L*."""
+    from seguimiento.color import CalibradorEquiposPartido, ColoresEquipo
+
+    colores = ColoresEquipo(color_local="#6CABDD", color_visitante="#034694")
+    calibrador = CalibradorEquiposPartido(colores_equipo=colores, min_muestras_calibracion=20)
+
+    # BGR realistas con sombra/desaturación broadcast
+    celestes = [color_dominante(_recorte_sintetico((210, 165, 110), ruido=10)) for _ in range(30)]
+    azules = [color_dominante(_recorte_sintetico((135, 65, 18), ruido=10)) for _ in range(30)]
+
+    for c, a in zip(celestes[:15], azules[:15], strict=True):
+        calibrador.acumular_muestra(c)
+        calibrador.acumular_muestra(a)
+
+    assert calibrador.calibrado is True
+    aciertos_city = sum(
+        calibrador.clasificar_jugador(c).equipo == EquipoDetectado.LOCAL for c in celestes[15:]
+    )
+    aciertos_chelsea = sum(
+        calibrador.clasificar_jugador(a).equipo == EquipoDetectado.VISITANTE for a in azules[15:]
+    )
+    assert (aciertos_city + aciertos_chelsea) / 30 >= 0.95
+
+
+def test_calibrador_separa_naranja_y_camiseta_verde_sobre_cesped():
+    """Países Bajos naranja (#FF6B00) vs Camerún verde (#007A3D): no debe descartar el verde."""
+    from seguimiento.color import CalibradorEquiposPartido, ColoresEquipo
+
+    colores = ColoresEquipo(color_local="#FF6B00", color_visitante="#007A3D")
+    calibrador = CalibradorEquiposPartido(colores_equipo=colores, min_muestras_calibracion=20)
+    assert calibrador.excluir_cesped is False
+
+    naranjas = [
+        color_dominante(_recorte_sintetico((20, 110, 235), ruido=10), excluir_cesped=calibrador.excluir_cesped)
+        for _ in range(30)
+    ]
+    verdes = [
+        color_dominante(_recorte_sintetico((55, 125, 25), ruido=10), excluir_cesped=calibrador.excluir_cesped)
+        for _ in range(30)
+    ]
+
+    for n, v in zip(naranjas[:15], verdes[:15], strict=True):
+        calibrador.acumular_muestra(n)
+        calibrador.acumular_muestra(v)
+
+    assert calibrador.calibrado is True
+    aciertos_ned = sum(
+        calibrador.clasificar_jugador(n).equipo == EquipoDetectado.LOCAL for n in naranjas[15:]
+    )
+    aciertos_cam = sum(
+        calibrador.clasificar_jugador(v).equipo == EquipoDetectado.VISITANTE for v in verdes[15:]
+    )
+    assert (aciertos_ned + aciertos_cam) / 30 >= 0.95
+
+

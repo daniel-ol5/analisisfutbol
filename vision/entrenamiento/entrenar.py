@@ -1,32 +1,9 @@
-"""Entrenamiento del modelo propio YOLO11 de 3 clases  —  CU-29.
-
-No se puede ejecutar todavia: requiere el dataset anotado descrito en
-`dataset.yaml` (jugador/arbitro/balon, formato YOLO), que no existe en este
-repositorio ni en esta maquina — anotar un clip real de un partido es
-trabajo humano, no de codigo (misma categoria de gap que T-055 a T-058 en
-`vision/README.md`). Este archivo es el andamiaje listo para correr en la
-maquina con GPU el dia que ese dataset exista, para no reinventar la
-configuracion de entrenamiento en ese momento.
-
-El import de `ultralytics` es perezoso (igual que en `deteccion/modelo.py`):
-este modulo se puede importar y probar sin GPU ni ultralytics instalados.
-
-Uso, una vez el dataset este anotado:
-
-    python -m entrenamiento.entrenar --epochs 100 --imgsz 960 --device 0
-
-Los pesos resultantes (`<proyecto>/weights/best.pt`) se suben a un storage
-propio con URL https y se registran con `POST /vision/modelos`
-(`ModeloCrear.archivo_url` exige https — ver `backend/app/vision/schemas.py`)
-junto con las metricas de `vision/evaluacion/` (map50 por clase, idf1) sobre
-el set de validacion.
-"""
+"""Afina YOLO11 con un dataset de fútbol anotado en formato YOLO."""
 
 from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from typing import Any
 
 _AQUI = Path(__file__).parent
 DATASET_YAML = _AQUI / "dataset.yaml"
@@ -44,8 +21,9 @@ def entrenar(
     device: str = "0",
     pesos_base: str = PESOS_BASE,
     dataset_yaml: Path = DATASET_YAML,
+    proyecto: Path | None = None,
 ) -> Path:
-    """Afina YOLO11 sobre `dataset_yaml` (3 clases: jugador, arbitro, balon).
+    """Afina YOLO11 sobre las clases indicadas en `dataset_yaml`.
 
     `batch=-1`: tamano de batch automatico de ultralytics segun la memoria
     de GPU disponible. `imgsz=960`: mayor que el default (640) porque el
@@ -55,15 +33,22 @@ def entrenar(
     """
     from ultralytics import YOLO
 
+    datos = dataset_yaml.resolve(strict=True)
+    if not (batch == -1 or 0 < batch < 1 or batch >= 1 and float(batch).is_integer()):
+        raise ValueError("El batch debe ser -1, una fracción de la VRAM o un entero positivo")
+    if batch >= 1:
+        batch = int(batch)
     modelo = YOLO(pesos_base)
-    resultado: Any = modelo.train(
-        data=str(dataset_yaml),
+    opciones = {"project": str(proyecto.resolve()), "name": datos.stem} if proyecto else {}
+    modelo.train(
+        data=str(datos),
         epochs=epochs,
         imgsz=imgsz,
         batch=batch,
         device=device,
+        **opciones,
     )
-    return Path(resultado.save_dir) / "weights" / "best.pt"
+    return Path(modelo.trainer.best)
 
 
 def _cli() -> None:
@@ -71,10 +56,12 @@ def _cli() -> None:
     parser.add_argument("--epochs", type=int, default=100)
     parser.add_argument("--imgsz", type=int, default=960)
     parser.add_argument(
-        "--batch", type=float, default=-1, help="-1 para tamano automatico de ultralytics"
+        "--batch", type=float, default=-1, help="-1, fracción de VRAM o tamaño entero"
     )
     parser.add_argument("--device", default="0", help="indice de GPU (ej. '0') o 'cpu'")
     parser.add_argument("--pesos-base", default=PESOS_BASE)
+    parser.add_argument("--dataset", type=Path, default=DATASET_YAML, help="YAML del dataset anotado")
+    parser.add_argument("--proyecto", type=Path, help="Carpeta para guardar las corridas")
     args = parser.parse_args()
 
     pesos = entrenar(
@@ -83,6 +70,8 @@ def _cli() -> None:
         batch=args.batch,
         device=args.device,
         pesos_base=args.pesos_base,
+        dataset_yaml=args.dataset,
+        proyecto=args.proyecto,
     )
     print(f"Pesos entrenados en: {pesos}")
 

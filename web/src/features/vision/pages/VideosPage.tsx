@@ -403,7 +403,7 @@ function TarjetaVideo(p: PropsTarjeta) {
       >
         {legible && (
           <Button variante="secundario" onClick={p.onAnalizar}>
-            Analizar en panel en vivo
+            {v.estado === "PROCESANDO" ? "Ver análisis en curso" : "Ver análisis"}
           </Button>
         )}
         {p.puedeSubir && (
@@ -520,16 +520,20 @@ function FormularioProceso({ video: v, onProcesar, procesando, errorProcesar }: 
 
   const presetsPropio = [
     { nombre: "Celeste (MCI)", hex: "#6CABDD" },
-    { nombre: "Verde (Betis)", hex: "#008855" },
-    { nombre: "Azul", hex: "#1E5AA8" },
-    { nombre: "Blanco", hex: "#FFFFFF" },
+    { nombre: "Naranja (NED)", hex: "#FF6B00" },
+    { nombre: "Verde (CAM/Betis)", hex: "#007A3D" },
+    { nombre: "Azul Marino (CHE)", hex: "#034694" },
     { nombre: "Rojo", hex: "#C8102E" },
+    { nombre: "Blanco", hex: "#FFFFFF" },
   ];
 
   const presetsRival = [
+    { nombre: "Azul Marino (CHE)", hex: "#034694" },
+    { nombre: "Verde (CAM)", hex: "#007A3D" },
     { nombre: "Blanco (TOT)", hex: "#FFFFFF" },
+    { nombre: "Celeste (MCI)", hex: "#6CABDD" },
+    { nombre: "Naranja (NED)", hex: "#FF6B00" },
     { nombre: "Rojo", hex: "#C8102E" },
-    { nombre: "Celeste", hex: "#6CABDD" },
     { nombre: "Negro", hex: "#1E1E1E" },
     { nombre: "Amarillo", hex: "#FACC15" },
   ];
