@@ -5304,6 +5304,7 @@
           "P6 · Asistencia y Reportes"
         ],
         "summary": "CU-54 · Listar el catalogo de reglas del club mas las globales",
+        "description": "`activa` es la activacion PARA EL CLUB del usuario: una regla global puede estar desactivada solo para su club. `activas` filtra por ese valor.",
         "operationId": "listar_reglas_api_asistencia_reglas_get",
         "security": [
           {
@@ -5387,25 +5388,11 @@
               }
             }
           },
-          "501": {
-            "description": "Declarado en el contrato, pendiente de implementacion",
-            "content": {
-              "application/json": {
-                "example": {
-                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
-                }
-              }
-            }
+          "403": {
+            "description": "Solo ADMIN o DT"
           },
           "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
+            "description": "Condicion o plantilla invalida, o metrica desconocida"
           }
         }
       }
@@ -5416,6 +5403,7 @@
           "P6 · Asistencia y Reportes"
         ],
         "summary": "CU-54 · Editar, activar o desactivar una regla",
+        "description": "T-092: activar o desactivar surte efecto en la siguiente evaluacion del motor, sin desplegar. En una regla global vale solo para el club del usuario.",
         "operationId": "editar_regla_api_asistencia_reglas__regla_id__patch",
         "security": [
           {
@@ -5454,25 +5442,14 @@
               }
             }
           },
-          "501": {
-            "description": "Declarado en el contrato, pendiente de implementacion",
-            "content": {
-              "application/json": {
-                "example": {
-                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
-                }
-              }
-            }
+          "403": {
+            "description": "Solo ADMIN o DT; de una regla global solo se puede cambiar `activa`"
+          },
+          "404": {
+            "description": "Regla inexistente o de otro club"
           },
           "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
+            "description": "Condicion o plantilla invalida, o metrica desconocida"
           }
         }
       }
@@ -5483,6 +5460,7 @@
           "P6 · Asistencia y Reportes"
         ],
         "summary": "CU-54 · Probar una regla contra un partido ya registrado",
+        "description": "Reproduce las posiciones guardadas del partido con el mismo motor y la misma cadencia que en vivo (una evaluacion cada 5 s), respetando el cooldown. Se puede probar una regla desactivada. No guarda nada.",
         "operationId": "probar_regla_api_asistencia_reglas__regla_id__probar_post",
         "security": [
           {
@@ -5521,15 +5499,11 @@
               }
             }
           },
-          "501": {
-            "description": "Declarado en el contrato, pendiente de implementacion",
-            "content": {
-              "application/json": {
-                "example": {
-                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
-                }
-              }
-            }
+          "403": {
+            "description": "Solo ADMIN o DT"
+          },
+          "404": {
+            "description": "Regla o partido inexistente, o de otro club"
           },
           "422": {
             "description": "Validation Error",
@@ -5799,35 +5773,19 @@
         ],
         "summary": "CU-53 · Registrar el token del dispositivo para recibir push",
         "operationId": "registrar_dispositivo_api_asistencia_dispositivos_post",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "token",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Token"
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DispositivoRegistrar"
+              }
             }
-          }
-        ],
+          },
+          "required": true
+        },
         "responses": {
           "204": {
             "description": "Successful Response"
-          },
-          "501": {
-            "description": "Declarado en el contrato, pendiente de implementacion",
-            "content": {
-              "application/json": {
-                "example": {
-                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
-                }
-              }
-            }
           },
           "422": {
             "description": "Validation Error",
@@ -5839,7 +5797,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/api/asistencia/partidos/{partido_id}/informe": {
@@ -6991,6 +6954,34 @@
           "DER"
         ],
         "title": "Direccion"
+      },
+      "DispositivoRegistrar": {
+        "properties": {
+          "instalacion_id": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 8,
+            "title": "Instalacion Id"
+          },
+          "token": {
+            "type": "string",
+            "maxLength": 4096,
+            "minLength": 16,
+            "title": "Token"
+          },
+          "plataforma": {
+            "$ref": "#/components/schemas/PlataformaPush"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "instalacion_id",
+          "token",
+          "plataforma"
+        ],
+        "title": "DispositivoRegistrar",
+        "description": "Instalacion de la app asociada siempre al usuario autenticado."
       },
       "Equipo": {
         "properties": {
@@ -9735,6 +9726,15 @@
         ],
         "title": "Pie"
       },
+      "PlataformaPush": {
+        "type": "string",
+        "enum": [
+          "ANDROID",
+          "IOS",
+          "WEB"
+        ],
+        "title": "PlataformaPush"
+      },
       "Posicion": {
         "type": "string",
         "enum": [
@@ -10266,6 +10266,7 @@
           "nombre": {
             "type": "string",
             "maxLength": 120,
+            "minLength": 1,
             "title": "Nombre",
             "examples": [
               "Linea defensiva demasiado baja"
@@ -10303,6 +10304,7 @@
           },
           "plantilla_mensaje": {
             "type": "string",
+            "minLength": 1,
             "title": "Plantilla Mensaje",
             "examples": [
               "Pide a la defensa ganar metros cuando el balón salga de nuestra zona."
@@ -10334,20 +10336,24 @@
             "default": true
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "nombre",
           "condicion",
           "plantilla_mensaje"
         ],
-        "title": "ReglaCrear"
+        "title": "ReglaCrear",
+        "description": "CU-54: regla propia del club. Las métricas de la condición y de las\nplantillas deben ser de las que el motor produce (422 si no)."
       },
       "ReglaEditar": {
         "properties": {
           "nombre": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 120,
+                "minLength": 1
               },
               {
                 "type": "null"
@@ -10370,7 +10376,8 @@
           "plantilla_mensaje": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "minLength": 1
               },
               {
                 "type": "null"
@@ -10402,7 +10409,9 @@
           "cooldown_s": {
             "anyOf": [
               {
-                "type": "integer"
+                "type": "integer",
+                "maximum": 3600.0,
+                "minimum": 30.0
               },
               {
                 "type": "null"
@@ -10422,8 +10431,10 @@
             "title": "Activa"
           }
         },
+        "additionalProperties": false,
         "type": "object",
-        "title": "ReglaEditar"
+        "title": "ReglaEditar",
+        "description": "CU-54. Solo se cambia lo que se envía. De una regla global solo se puede\ncambiar `activa`, y el cambio vale únicamente para el club de quien la edita."
       },
       "RestablecerPassword": {
         "properties": {
@@ -10481,14 +10492,22 @@
         "properties": {
           "disparos": {
             "type": "integer",
-            "title": "Disparos"
+            "title": "Disparos",
+            "description": "Recomendaciones que habría generado, respetando el cooldown"
           },
           "minutos": {
             "items": {
               "type": "integer"
             },
             "type": "array",
-            "title": "Minutos"
+            "title": "Minutos",
+            "description": "Minuto de partido de cada disparo, en orden"
+          },
+          "evaluaciones": {
+            "type": "integer",
+            "title": "Evaluaciones",
+            "description": "Cuántas veces se evaluó (una cada 5 s de partido con posiciones guardadas). 0 significa que el partido no tiene datos: 0 disparos no prueba nada en ese caso",
+            "default": 0
           }
         },
         "type": "object",

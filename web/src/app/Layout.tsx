@@ -121,6 +121,9 @@ const GRUPOS_NAV: GrupoNav[] = [
             <path d="M7.2 9.5h5.6M7.2 12.8h3.8" strokeLinecap="round" />
           </svg>
         ),
+        hijos: [
+          { ruta: "/asistencia/reglas", permiso: "/asistencia", nombre: "Catálogo de reglas" },
+        ],
       },
     ],
   },
@@ -171,6 +174,7 @@ function obtenerSeccionActual(pathname: string): string {
   if (pathname.startsWith("/vision/videos")) return "Visión · Video del Partido";
   if (pathname.startsWith("/vision")) return "Visión por Computadora";
   if (pathname.startsWith("/analisis")) return "Análisis Táctico";
+  if (pathname.startsWith("/asistencia/reglas")) return "Asistencia · Catálogo de Reglas";
   if (pathname.startsWith("/asistencia")) return "Asistencia y Reportes";
   if (pathname.startsWith("/seguridad/usuarios")) return "Administración · Usuarios";
   if (pathname.startsWith("/seguridad")) return "Administración · Mi Perfil";

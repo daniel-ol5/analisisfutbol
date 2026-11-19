@@ -48,6 +48,7 @@ from app.asistencia.models import Recomendacion as RecomendacionModelo
 from app.asistencia.motor import ORDEN_PRIORIDAD
 from app.asistencia.schemas import Prioridad
 from app.asistencia.schemas import Recomendacion as RecomendacionEsquema
+from app.asistencia.contexto import INTERVALO_EVALUACION_S, EstadoTactico
 from app.core.config import settings
 from app.core.realtime import Hub, canal_partido, obtener_hub
 from app.deportivo.models import Partido
@@ -75,7 +76,8 @@ class _Vivo:
 
 class AnalisisEnVivo:
     REVISION_ESTADO_S = 5.0
-    INTERVALO_REGLAS_S = 5.0
+    # Compartido con CU-54 (probar una regla contra un partido ya jugado).
+    INTERVALO_REGLAS_S = INTERVALO_EVALUACION_S
 
     def __init__(self, sesiones: async_sessionmaker[AsyncSession] | None = None,
                  hub: Hub | None = None,

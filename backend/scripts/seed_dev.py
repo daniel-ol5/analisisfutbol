@@ -7,14 +7,21 @@ permite sembrar datos cuando APP_ENV no es ``development``.
 import asyncio
 import os
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import SessionLocal
 from app.core.security import hashear
-from app.deportivo.models import Alineacion, AlineacionJugador, Equipo, Jugador, Partido
+from app.deportivo.models import (
+    Alineacion,
+    AlineacionJugador,
+    Competicion,
+    Equipo,
+    Jugador,
+    Partido,
+)
 from app.seguridad.models import Club, Rol, Usuario
 
 VALORES_VERDADEROS = {"1", "true", "yes", "si", "sí"}
@@ -74,6 +81,7 @@ async def sembrar_datos_demo(db: AsyncSession, config: ConfiguracionDemo) -> boo
 # que permite probar la alineación (CU-17) a mano en web y móvil.
 
 EQUIPO_DEMO = "Primera Demo"
+COMPETICION_DEMO = "Torneo Demostracion"
 
 # (nombre, apellido, dorsal, posicion): 2 arqueros, 6 DEF, 6 MED, 4 DEL.
 PLANTEL_DEMO = [
@@ -100,20 +108,48 @@ CAPITAN_DEMO = 9
 
 
 async def sembrar_deportivo_demo(db: AsyncSession, club_id: int) -> bool:
-    """Crea equipo, plantel, partidos y una alineación de ejemplo, una sola vez."""
-    existe = await db.scalar(
+    """Asegura el escenario deportivo demo sin duplicar ni borrar datos.
+
+    Si una ejecución anterior quedó parcial, crea únicamente las piezas que
+    falten. Así un entorno de desarrollo existente se puede actualizar sin
+    eliminar su volumen de PostgreSQL.
+    """
+    cambios = False
+
+    competicion = await db.scalar(select(Competicion).where(
+        Competicion.club_id == club_id,
+        Competicion.nombre == COMPETICION_DEMO,
+        Competicion.temporada == "2026",
+    ))
+    if competicion is None:
+        competicion = Competicion(
+            club_id=club_id,
+            nombre=COMPETICION_DEMO,
+            temporada="2026",
+            fecha_inicio=date(2026, 1, 1),
+            fecha_fin=date(2026, 12, 31),
+        )
+        db.add(competicion)
+        await db.flush()
+        cambios = True
+
+    equipo = await db.scalar(
         select(Equipo).where(Equipo.club_id == club_id, Equipo.nombre == EQUIPO_DEMO)
     )
-    if existe is not None:
-        return False
+    if equipo is None:
+        equipo = Equipo(club_id=club_id, nombre=EQUIPO_DEMO, categoria="Primera",
+                        temporada="2026")
+        db.add(equipo)
+        await db.flush()
+        cambios = True
 
-    equipo = Equipo(club_id=club_id, nombre=EQUIPO_DEMO, categoria="Primera",
-                    temporada="2026")
-    db.add(equipo)
-    await db.flush()
-
-    jugadores = {}
+    existentes = (await db.scalars(
+        select(Jugador).where(Jugador.club_id == club_id, Jugador.equipo_id == equipo.id)
+    )).all()
+    jugadores = {jugador.dorsal: jugador for jugador in existentes}
     for nombre, apellido, dorsal, posicion in PLANTEL_DEMO:
+        if dorsal in jugadores:
+            continue
         jugador = Jugador(
             club_id=club_id, equipo_id=equipo.id, nombre=nombre, apellido=apellido,
             dorsal=dorsal, posicion=posicion,
@@ -121,37 +157,95 @@ async def sembrar_deportivo_demo(db: AsyncSession, club_id: int) -> bool:
         )
         db.add(jugador)
         jugadores[dorsal] = jugador
-
-    ahora = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
-    proximo = Partido(club_id=club_id, equipo_id=equipo.id, rival="Club Rival Uno",
-                      fecha_hora=ahora + timedelta(days=3), sede="Estadio Demo")
-    sin_alineacion = Partido(club_id=club_id, equipo_id=equipo.id,
-                             rival="Club Rival Dos", es_local=False,
-                             fecha_hora=ahora + timedelta(days=10), sede="Cancha visitante")
-    # Terminado: sirve para comprobar que su alineación ya no se puede cambiar.
-    jugado = Partido(club_id=club_id, equipo_id=equipo.id, rival="Club Rival Tres",
-                     fecha_hora=ahora - timedelta(days=7), sede="Estadio Demo",
-                     estado="FINALIZADO", goles_favor=2, goles_contra=1)
-    db.add_all([proximo, sin_alineacion, jugado])
+        cambios = True
     await db.flush()
 
-    db.add(Alineacion(
-        club_id=club_id,
-        partido_id=proximo.id,
-        formacion="4-3-3",
-        jugadores_alineados=[
-            AlineacionJugador(
-                jugador_id=jugador.id,
-                es_titular=dorsal in TITULARES_DEMO,
-                es_capitan=dorsal == CAPITAN_DEMO,
-                pos_x=TITULARES_DEMO.get(dorsal, (0, 0))[0],
-                pos_y=TITULARES_DEMO.get(dorsal, (0, 0))[1],
+    ahora = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
+
+    async def asegurar_partido(
+        rival: str,
+        fecha_hora: datetime,
+        sede: str,
+        *,
+        es_local: bool = True,
+        estado: str = "PROGRAMADO",
+        goles_favor: int = 0,
+        goles_contra: int = 0,
+    ) -> Partido:
+        nonlocal cambios
+        partido = (await db.scalars(
+            select(Partido)
+            .where(
+                Partido.club_id == club_id,
+                Partido.equipo_id == equipo.id,
+                Partido.rival == rival,
             )
-            for dorsal, jugador in jugadores.items()
-        ],
-    ))
-    await db.commit()
-    return True
+            .order_by(Partido.id)
+        )).first()
+        if partido is None:
+            partido = Partido(
+                club_id=club_id,
+                equipo_id=equipo.id,
+                competicion_id=competicion.id,
+                rival=rival,
+                es_local=es_local,
+                fecha_hora=fecha_hora,
+                sede=sede,
+                estado=estado,
+                goles_favor=goles_favor,
+                goles_contra=goles_contra,
+            )
+            db.add(partido)
+            await db.flush()
+            cambios = True
+        elif partido.competicion_id is None:
+            partido.competicion_id = competicion.id
+            cambios = True
+        return partido
+
+    proximo = await asegurar_partido(
+        "Club Rival Uno", ahora + timedelta(days=3), "Estadio Demo"
+    )
+    await asegurar_partido(
+        "Club Rival Dos",
+        ahora + timedelta(days=10),
+        "Cancha visitante",
+        es_local=False,
+    )
+    # Terminado: sirve para comprobar que su alineación ya no se puede cambiar.
+    await asegurar_partido(
+        "Club Rival Tres",
+        ahora - timedelta(days=7),
+        "Estadio Demo",
+        estado="FINALIZADO",
+        goles_favor=2,
+        goles_contra=1,
+    )
+
+    alineacion = await db.scalar(
+        select(Alineacion).where(Alineacion.partido_id == proximo.id)
+    )
+    if alineacion is None:
+        db.add(Alineacion(
+            club_id=club_id,
+            partido_id=proximo.id,
+            formacion="4-3-3",
+            jugadores_alineados=[
+                AlineacionJugador(
+                    jugador_id=jugador.id,
+                    es_titular=dorsal in TITULARES_DEMO,
+                    es_capitan=dorsal == CAPITAN_DEMO,
+                    pos_x=TITULARES_DEMO.get(dorsal, (0, 0))[0],
+                    pos_y=TITULARES_DEMO.get(dorsal, (0, 0))[1],
+                )
+                for dorsal, jugador in sorted(jugadores.items())
+            ],
+        ))
+        cambios = True
+
+    if cambios:
+        await db.commit()
+    return cambios
 
 
 async def ejecutar() -> None:
