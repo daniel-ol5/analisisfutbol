@@ -62,16 +62,26 @@ class ReglaBase(BaseModel):
 
 
 class ReglaCrear(ReglaBase):
-    pass
+    """CU-54: regla propia del club. Las métricas de la condición y de las
+    plantillas deben ser de las que el motor produce (422 si no)."""
+
+    model_config = ConfigDict(extra="forbid")
+    nombre: str = Field(min_length=1, max_length=120, examples=["Linea defensiva demasiado baja"])
+    plantilla_mensaje: str = Field(min_length=1,
+        examples=["Pide a la defensa ganar metros cuando el balón salga de nuestra zona."])
 
 
 class ReglaEditar(BaseModel):
-    nombre: str | None = None
+    """CU-54. Solo se cambia lo que se envía. De una regla global solo se puede
+    cambiar `activa`, y el cambio vale únicamente para el club de quien la edita."""
+
+    model_config = ConfigDict(extra="forbid")
+    nombre: str | None = Field(default=None, min_length=1, max_length=120)
     condicion: dict | None = None
-    plantilla_mensaje: str | None = None
+    plantilla_mensaje: str | None = Field(default=None, min_length=1)
     plantilla_justificacion: str | None = None
     prioridad: Prioridad | None = None
-    cooldown_s: int | None = None
+    cooldown_s: int | None = Field(default=None, ge=30, le=3600)
     activa: bool | None = None
 
 
@@ -88,8 +98,11 @@ class PruebaRegla(BaseModel):
 
 
 class ResultadoPrueba(BaseModel):
-    disparos: int
-    minutos: list[int]
+    disparos: int = Field(description="Recomendaciones que habría generado, respetando el cooldown")
+    minutos: list[int] = Field(description="Minuto de partido de cada disparo, en orden")
+    evaluaciones: int = Field(default=0, description=(
+        "Cuántas veces se evaluó (una cada 5 s de partido con posiciones guardadas). "
+        "0 significa que el partido no tiene datos: 0 disparos no prueba nada en ese caso"))
 
 
 # ---------- CU-50, CU-51, CU-52 Recomendaciones ----------

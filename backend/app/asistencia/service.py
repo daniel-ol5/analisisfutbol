@@ -4,20 +4,36 @@ import logging
 from collections.abc import Mapping
 from datetime import UTC, datetime
 
+from fastapi import HTTPException, status
 from pydantic import ValidationError
 from sqlalchemy import func, or_, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.analisis import persistencia
+from app.analisis.motor.motor import MotorPartido
+from app.analisis.parametros import PARAMETROS
 from app.asistencia import models
-from app.asistencia.motor import ORDEN_PRIORIDAD, ReglaInvalida, evaluar_regla
+from app.asistencia.contexto import INTERVALO_EVALUACION_S, EstadoTactico, campo_suficiente
+from app.asistencia.motor import (
+    ORDEN_PRIORIDAD,
+    MetricaNoDisponible,
+    ReglaInvalida,
+    evaluar_regla,
+    validar_regla,
+)
 from app.asistencia.push import MensajePush, ProveedorPush, ResultadoPush, obtener_proveedor_push
 from app.asistencia.schemas import (
     DispositivoRegistrar,
     EstadoEnvioPush,
     EstadoRecomendacion,
     Prioridad,
+    PruebaRegla,
     Recomendacion,
     Regla,
+    ReglaCrear,
+    ReglaEditar,
+    ResultadoPrueba,
 )
 from app.core.deps import UsuarioActual
 from app.core.tenancy import verificar_pertenencia
@@ -33,30 +49,176 @@ MAX_RECOMENDACIONES_ACTIVAS = 3
 
 async def _reglas_disponibles(
     db: AsyncSession, club_id: int, activas: bool | None
-) -> list[models.ReglaTactica]:
-    tabla = models.ReglaTactica
-    stmt = select(tabla).where(or_(tabla.club_id.is_(None), tabla.club_id == club_id))
+) -> list[tuple[models.ReglaTactica, bool]]:
+    """Reglas globales y propias del club, con su activación EFECTIVA para ese club.
+
+    Una regla global puede estar desactivada solo para este club (`regla_club`).
+    La activación se devuelve aparte a propósito: escribirla sobre la fila de
+    `regla_tactica` la cambiaría para todos los clubes al hacer commit.
+    """
+    tabla, por_club = models.ReglaTactica, models.ReglaClub
+    efectiva = func.coalesce(por_club.activa, tabla.activa)
+    stmt = (
+        select(tabla, efectiva)
+        .outerjoin(por_club, (por_club.regla_id == tabla.id) & (por_club.club_id == club_id))
+        .where(or_(tabla.club_id.is_(None), tabla.club_id == club_id))
+    )
     if activas is not None:
-        stmt = stmt.where(tabla.activa.is_(activas))
-    return list((await db.scalars(stmt.order_by(tabla.id))).all())
+        stmt = stmt.where(efectiva == activas)
+    return [(fila, bool(activa)) for fila, activa in (await db.execute(stmt.order_by(tabla.id))).all()]
+
+
+def _a_regla(registro: models.ReglaTactica, activa: bool) -> Regla:
+    return Regla.model_validate(registro).model_copy(update={"activa": activa})
 
 
 async def listar_reglas(db: AsyncSession, usuario: UsuarioActual, activas: bool | None) -> list[Regla]:
-    return [Regla.model_validate(r) for r in await _reglas_disponibles(db, usuario.club_id, activas)]
+    return [_a_regla(r, a) for r, a in await _reglas_disponibles(db, usuario.club_id, activas)]
+
+
+# ---------------- CU-54 · Catálogo de reglas (T-092) ----------------
+
+def _validar(condicion: dict, plantilla_mensaje: str, plantilla_justificacion: str) -> None:
+    try:
+        validar_regla(condicion, plantilla_mensaje, plantilla_justificacion)
+    except (ReglaInvalida, MetricaNoDisponible) as e:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, f"Regla inválida: {e}") from None
+
+
+async def crear_regla(db: AsyncSession, usuario: UsuarioActual, datos: ReglaCrear) -> Regla:
+    _validar(datos.condicion, datos.plantilla_mensaje, datos.plantilla_justificacion)
+    registro = models.ReglaTactica(club_id=usuario.club_id, **datos.model_dump(mode="json"))
+    db.add(registro)
+    await db.commit()
+    return _a_regla(registro, registro.activa)
+
+
+async def _regla_visible(
+    db: AsyncSession, usuario: UsuarioActual, regla_id: int
+) -> models.ReglaTactica:
+    """Una regla global o del club del usuario; 404 si no existe o es de otro club."""
+    registro = await db.get(models.ReglaTactica, regla_id)
+    if registro is None or registro.club_id not in (None, usuario.club_id):
+        # 404 y no 403 para no revelar reglas de otro club (igual que verificar_pertenencia).
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Regla no encontrada")
+    return registro
+
+
+async def probar_regla(
+    db: AsyncSession, usuario: UsuarioActual, regla_id: int, datos: PruebaRegla
+) -> ResultadoPrueba:
+    """Cuántas veces se habría disparado la regla en un partido ya registrado.
+
+    Reproduce las posiciones guardadas con el mismo estado táctico y la misma
+    cadencia que en vivo, y respeta el cooldown de la regla. La regla se prueba
+    aunque esté desactivada: es justamente para decidir si conviene activarla.
+    No guarda nada.
+    """
+    registro = await _regla_visible(db, usuario, regla_id)
+    partido = verificar_pertenencia(await db.get(Partido, datos.partido_id), usuario)
+    regla = _a_regla(registro, activa=True)
+
+    tarjetas = await _tarjetas_propias(db, partido)
+    equipos = persistencia.equipos_de(await persistencia.tramos_de(db, partido))
+    analisis = MotorPartido(await persistencia.contexto_de(db, partido), PARAMETROS,
+                            await persistencia.arqueros_de(db, partido))
+    tactica = EstadoTactico()
+    ultima_evaluacion = ultimo_disparo = float("-inf")
+    evaluaciones, minutos = 0, []
+    async for muestra in persistencia.muestras_de(db, partido.id, equipos):
+        if not tactica.observar_muestra(muestra, analisis, campo_suficiente(muestra)):
+            continue
+        t = muestra.t
+        if t - ultima_evaluacion < INTERVALO_EVALUACION_S:
+            continue
+        ultima_evaluacion, evaluaciones = t, evaluaciones + 1
+        minuto = int(t // 60)
+        metricas = {**tactica.metricas(), **contar_disciplina(tarjetas, minuto), "minuto": minuto}
+        try:
+            disparo = evaluar_regla(regla, metricas)
+        except ReglaInvalida as e:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, f"Regla inválida: {e}") from None
+        if disparo is not None and t - ultimo_disparo >= regla.cooldown_s:
+            ultimo_disparo = t
+            minutos.append(minuto)
+    return ResultadoPrueba(disparos=len(minutos), minutos=minutos, evaluaciones=evaluaciones)
+
+
+async def editar_regla(
+    db: AsyncSession, usuario: UsuarioActual, regla_id: int, datos: ReglaEditar
+) -> Regla:
+    """Edita una regla propia, o activa/desactiva una global solo para este club."""
+    registro = await _regla_visible(db, usuario, regla_id)
+    # Un campo enviado como null cuenta como "no cambiar".
+    cambios = {k: v for k, v in datos.model_dump(mode="json", exclude_unset=True).items()
+               if v is not None}
+    if registro.club_id is None:
+        await _activar_global_para_club(db, usuario.club_id, regla_id, cambios)
+    elif cambios:
+        await _editar_propia(db, registro, cambios)
+
+    activa = next(a for r, a in await _reglas_disponibles(db, usuario.club_id, None)
+                  if r.id == regla_id)
+    return _a_regla(registro, activa)
+
+
+async def _activar_global_para_club(
+    db: AsyncSession, club_id: int, regla_id: int, cambios: dict
+) -> None:
+    if set(cambios) - {"activa"}:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Las reglas globales solo se pueden activar o desactivar para tu club. "
+            "Para cambiar su contenido, crea una regla propia.",
+        )
+    if "activa" not in cambios:
+        return
+    await db.execute(
+        pg_insert(models.ReglaClub)
+        .values(club_id=club_id, regla_id=regla_id, activa=cambios["activa"])
+        .on_conflict_do_update(constraint="uq_regla_club", set_={"activa": cambios["activa"]})
+    )
+    await db.commit()
+
+
+async def _editar_propia(db: AsyncSession, registro: models.ReglaTactica, cambios: dict) -> None:
+    _validar(
+        cambios.get("condicion", registro.condicion),
+        cambios.get("plantilla_mensaje", registro.plantilla_mensaje),
+        cambios.get("plantilla_justificacion", registro.plantilla_justificacion),
+    )
+    for campo, valor in cambios.items():
+        setattr(registro, campo, valor)
+    await db.commit()
+
+
+async def _tarjetas_propias(db: AsyncSession, partido: Partido) -> list[tuple[str, int]]:
+    """(tipo, minuto) de las tarjetas propias registradas y no anuladas del partido."""
+    equipo = Lado.LOCAL.value if partido.es_local else Lado.VISITANTE.value
+    e = EventoManual
+    filas = await db.execute(
+        select(e.tipo, e.minuto).where(
+            e.club_id == partido.club_id, e.partido_id == partido.id, e.equipo == equipo,
+            e.anulado_en.is_(None),
+            e.tipo.in_((TipoEventoManual.AMARILLA.value, TipoEventoManual.ROJA.value)),
+        )
+    )
+    return [(tipo, minuto) for tipo, minuto in filas.all()]
+
+
+def contar_disciplina(tarjetas: list[tuple[str, int]], minuto: int) -> dict[str, float]:
+    """Amarillas de los últimos 10 minutos y rojas hasta `minuto`, incluido."""
+    vigentes = [(tipo, m) for tipo, m in tarjetas if m <= minuto]
+    return {
+        "amarillas_propias_10min": sum(1 for tipo, m in vigentes
+                                       if tipo == TipoEventoManual.AMARILLA.value and m >= minuto - 9),
+        "rojas_propias": sum(1 for tipo, _ in vigentes if tipo == TipoEventoManual.ROJA.value),
+    }
 
 
 async def _disciplina(db: AsyncSession, partido: Partido, minuto: int) -> dict[str, float]:
     """Cuenta tarjetas propias registradas y vigentes, incluida una segunda amarilla como roja."""
-    equipo = Lado.LOCAL.value if partido.es_local else Lado.VISITANTE.value
-    e = EventoManual
-    conteos = (await db.execute(
-        select(
-            func.count().filter(e.tipo == TipoEventoManual.AMARILLA.value, e.minuto >= minuto - 9),
-            func.count().filter(e.tipo == TipoEventoManual.ROJA.value),
-        ).where(e.club_id == partido.club_id, e.partido_id == partido.id, e.equipo == equipo,
-                e.anulado_en.is_(None), e.minuto <= minuto)
-    )).one()
-    return {"amarillas_propias_10min": conteos[0], "rojas_propias": conteos[1]}
+    return contar_disciplina(await _tarjetas_propias(db, partido), minuto)
 
 
 async def registrar_dispositivo(
@@ -225,9 +387,9 @@ async def evaluar_en_vivo(
     minuto = int(t // 60)
     metricas = {**observadas, **await _disciplina(db, partido, minuto), "minuto": minuto}
     pendientes: list[models.Recomendacion] = []
-    for registro in reglas:
+    for registro, activa in reglas:
         try:
-            regla = Regla.model_validate(registro)
+            regla = _a_regla(registro, activa)
             disparo = evaluar_regla(regla, metricas)
         except (ReglaInvalida, ValidationError) as exc:
             log.warning("Regla táctica %s inválida: %s", registro.id, exc)
@@ -242,7 +404,7 @@ async def evaluar_en_vivo(
 
     if pendientes:
         r = models.Recomendacion
-        cooldown = {regla.id: regla.cooldown_s for regla in reglas}
+        cooldown = {registro.id: registro.cooldown_s for registro, _ in reglas}
         filas = (await db.execute(
             select(r.regla_id, func.max(r.t)).where(
                 r.partido_id == partido.id, r.regla_id.in_([p.regla_id for p in pendientes]),
@@ -271,7 +433,9 @@ async def listar_recomendaciones(
     r = models.Recomendacion
     stmt = select(r).where(r.partido_id == partido_id).order_by(r.t.desc(), r.id.desc())
     if solo_activas:
-        ids_activas = select(models.ReglaTactica.id).where(models.ReglaTactica.activa.is_(True))
+        # Activas PARA ESTE CLUB: una global desactivada por el club deja de mostrarse.
+        ids_activas = [regla.id for regla, _ in
+                       await _reglas_disponibles(db, usuario.club_id, activas=True)]
         stmt = stmt.where(r.regla_id.in_(ids_activas))
     filas = (await db.scalars(stmt)).all()
     if not solo_activas:
