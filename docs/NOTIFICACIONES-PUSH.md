@@ -41,9 +41,41 @@ FCM recibe una notificacion visible y los siguientes datos, todos como texto:
 }
 ```
 
-T-096 debe usar `ruta` al tocar la notificacion y aplicar el mismo comportamiento
-cuando la app se encuentre en primer plano, segundo plano o cerrada. La pantalla
-movil de recomendaciones aun debe ser implementada por Araceli.
+`ruta` es la de la web. La app movil (T-096) arma la suya con `partido_id` y
+`recomendacion_id`: abre `/partidos/{partido_id}/recomendaciones` con esa
+recomendacion resaltada, con la app abierta, en segundo plano o cerrada.
+
+## App movil (T-096)
+
+Codigo en `movil/lib/features/asistencia/push.dart`. Solo Android.
+
+- **Sin `google-services.json` en el repositorio.** Firebase se configura con
+  cuatro valores al compilar. Sin ellos el push queda apagado y el resto de la
+  app funciona igual (CI, web y quien no tenga Firebase):
+
+  ```sh
+  flutter build apk --release \
+    --dart-define=API_URL=https://<servidor>/api \
+    --dart-define=FIREBASE_API_KEY=<apiKey> \
+    --dart-define=FIREBASE_APP_ID=<appId de la app Android> \
+    --dart-define=FIREBASE_MESSAGING_SENDER_ID=<senderId> \
+    --dart-define=FIREBASE_PROJECT_ID=<projectId>
+  ```
+
+  Los cuatro valores salen de la consola de Firebase: *Configuracion del
+  proyecto → General → Tus apps → app Android* (`com.areatecnica.areatecnica`).
+- **Registro:** con sesion iniciada, la app pide permiso de notificaciones y
+  registra el token en `POST /asistencia/dispositivos`; si Firebase rota el
+  token, lo vuelve a registrar.
+- **Token FCM clasico** (`getToken`/`onTokenRefresh`, marcados como deprecados
+  en `firebase_messaging` 17): el backend envia con `MulticastMessage(tokens=...)`
+  de Firebase Admin, que espera ese token y no el ID de instalacion de
+  `register()`/`onRegistered`.
+- **Con la app abierta**, Android no muestra la notificacion: la app muestra un
+  aviso arriba con el boton "Ver".
+
+La entrega real se prueba en dispositivos en T-097 (casos F1 a F5 de
+`docs/validacion/PLAN-PRUEBAS-DISPOSITIVOS-T097.md`).
 
 ## Configuracion del servidor
 
