@@ -23,9 +23,13 @@ class RecomendacionesPagina extends StatefulWidget {
     this.api = const RecomendacionesApi(),
     this.crearFuente,
     this.ahora,
+    this.destacarId,
   });
 
   final int partidoId;
+
+  /// T-096: la recomendación que llegó por push; se resalta.
+  final int? destacarId;
   final bool integrada;
   final RecomendacionesApi api;
   final FuenteVivo Function()? crearFuente;
@@ -136,15 +140,35 @@ class _RecomendacionesPaginaState extends State<RecomendacionesPagina> {
         ),
       );
     }
+    // T-096: si se llegó desde una notificación y esa ya no está activa, se avisa.
+    final destacar = widget.destacarId;
+    final yaNoEsta = destacar != null && !e.activas.any((r) => r.id == destacar);
+    final aviso = yaNoEsta
+        ? Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Text(
+              'La recomendación de la notificación ya no está activa: se valoró o '
+              'la reemplazó otra más reciente.',
+              key: const Key('destacada-no-activa'),
+              style: texto.copyWith(fontSize: 16),
+            ),
+          )
+        : null;
     if (e.activas.isEmpty) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
-          child: Text(
-            'Sin recomendaciones activas por ahora.',
-            key: const Key('recomendaciones-vacio'),
-            textAlign: TextAlign.center,
-            style: texto,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ?aviso,
+              Text(
+                'Sin recomendaciones activas por ahora.',
+                key: const Key('recomendaciones-vacio'),
+                textAlign: TextAlign.center,
+                style: texto,
+              ),
+            ],
           ),
         ),
       );
@@ -152,11 +176,13 @@ class _RecomendacionesPaginaState extends State<RecomendacionesPagina> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
       children: [
+        ?aviso,
         for (final r in e.activas)
           Padding(
             padding: const EdgeInsets.only(bottom: 12),
             child: _Tarjeta(
               recomendacion: r,
+              destacada: r.id == destacar,
               // T-095: valorar con un toque.
               valoracion: e.valoradas[r.id] ?? r.valoracion,
               enviando: e.valorando == r.id,
@@ -225,9 +251,13 @@ class _Tarjeta extends StatelessWidget {
     this.enviando = false,
     this.bloqueado = false,
     this.error,
+    this.destacada = false,
   });
 
   final Recomendacion recomendacion;
+
+  /// T-096: es la que abrió la notificación.
+  final bool destacada;
 
   /// T-095: valoración elegida (en esta pantalla o ya guardada en el servidor).
   final OpcionValoracion? valoracion;
@@ -258,7 +288,9 @@ class _Tarjeta extends StatelessWidget {
         clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
           color: esquema.surface,
-          border: Border.all(color: esquema.outline, width: 2),
+          border: destacada
+              ? Border.all(color: esquema.primary, width: 5)
+              : Border.all(color: esquema.outline, width: 2),
           borderRadius: BorderRadius.circular(10),
         ),
         child: IntrinsicHeight(

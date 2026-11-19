@@ -45,6 +45,8 @@ final router = GoRouter(
       path: '/partidos/:id/recomendaciones',
       builder: (_, estado) => RecomendacionesPagina(
         partidoId: int.parse(estado.pathParameters['id']!),
+        // T-096: la recomendación que llegó por push, para resaltarla.
+        destacarId: int.tryParse(estado.uri.queryParameters['recomendacion'] ?? ''),
       ),
     ),
     GoRoute(
