@@ -1,20 +1,30 @@
 """CU-49: reglas del catálogo y generación desde la ingesta real del backend."""
 
+import asyncio
 import json
 from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 from escenarios_analisis import BASE_LOCAL, BASE_VISITANTE, mensaje, punto
-from partidos_prueba import CLUB_A, CLUB_B, PARTIDO_A, SesionesPrueba, sembrar_partidos
+from partidos_prueba import (
+    CLUB_A,
+    CLUB_B,
+    PARTIDO_A,
+    PARTIDO_B,
+    SesionesPrueba,
+    sembrar_partidos,
+)
+from sqlalchemy import select
 from starlette.testclient import TestClient
 
 from app.analisis.motor.motor import ContextoPartido, MotorPartido
 from app.analisis.vivo import AnalisisEnVivo, reiniciar_analisis_en_vivo
-from app.asistencia import models
+from app.asistencia import models, service
 from app.asistencia.contexto import EstadoTactico
 from app.asistencia.motor import ReglaInvalida, evaluar_regla
 from app.asistencia.schemas import Regla
+from app.core.deps import UsuarioActual
 from app.core.security import token_acceso, token_ingesta
 from app.deportivo.models import Partido, Posicion
 from app.main import app
@@ -206,3 +216,165 @@ def test_ingesta_calidad_cooldown_clubes_y_consulta(partido_con_reglas):
         assert [r for r in despues if r["regla_id"] != propia] == [
             r for r in historico if r["regla_id"] != propia
         ]
+
+
+def _regla_prueba(
+    nombre: str,
+    prioridad: str = "MEDIA",
+    cooldown_s: int = 30,
+    club_id: int | None = None,
+) -> models.ReglaTactica:
+    return models.ReglaTactica(
+        club_id=club_id,
+        nombre=nombre,
+        condicion={">=": ["senal", 1]},
+        plantilla_mensaje=nombre,
+        plantilla_justificacion="Senal {senal:.0f}",
+        prioridad=prioridad,
+        cooldown_s=cooldown_s,
+        activa=True,
+    )
+
+
+async def _preparar_partidos_para_evaluar(*reglas: models.ReglaTactica) -> None:
+    await sembrar_partidos()
+    ahora = datetime.now(UTC)
+    async with SesionesPrueba() as db:
+        for partido_id, club_id in ((PARTIDO_A, CLUB_A), (PARTIDO_B, CLUB_B)):
+            partido = await db.get(Partido, partido_id)
+            assert partido is not None
+            partido.es_local = True
+            partido.ataca_hacia = "DER"
+            db.add(
+                RelojPartido(
+                    club_id=club_id,
+                    partido_id=partido_id,
+                    parte=1,
+                    en_curso=True,
+                    inicio_utc=ahora,
+                )
+            )
+        db.add_all(reglas)
+        await db.commit()
+
+
+async def _evaluar(partido_id: int, club_id: int, t: float) -> bool:
+    async with SesionesPrueba() as db:
+        return await service.evaluar_en_vivo(db, partido_id, club_id, t, {"senal": 1})
+
+
+@pytest.mark.asyncio
+async def test_cooldown_en_limite_y_aislado_por_regla_partido_y_club():
+    await _preparar_partidos_para_evaluar(
+        _regla_prueba("Global 30", cooldown_s=30),
+        _regla_prueba("Global 60", cooldown_s=60),
+        _regla_prueba("Solo A", club_id=CLUB_A),
+        _regla_prueba("Solo B", club_id=CLUB_B),
+    )
+
+    assert await _evaluar(PARTIDO_A, CLUB_A, 100)
+    assert await _evaluar(PARTIDO_A, CLUB_A, 129.999)
+    assert await _evaluar(PARTIDO_A, CLUB_A, 130)
+    assert await _evaluar(PARTIDO_B, CLUB_B, 105)
+
+    async with SesionesPrueba() as db:
+        filas = (
+            await db.execute(
+                select(
+                    models.Recomendacion.partido_id,
+                    models.ReglaTactica.nombre,
+                    models.Recomendacion.t,
+                )
+                .join(models.ReglaTactica)
+                .order_by(
+                    models.Recomendacion.partido_id,
+                    models.ReglaTactica.nombre,
+                    models.Recomendacion.t,
+                )
+            )
+        ).all()
+
+    assert filas == [
+        (PARTIDO_A, "Global 30", 100),
+        (PARTIDO_A, "Global 30", 130),
+        (PARTIDO_A, "Global 60", 100),
+        (PARTIDO_A, "Solo A", 100),
+        (PARTIDO_A, "Solo A", 130),
+        (PARTIDO_B, "Global 30", 105),
+        (PARTIDO_B, "Global 60", 105),
+        (PARTIDO_B, "Solo B", 105),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_evaluaciones_concurrentes_no_duplican_recomendaciones():
+    await _preparar_partidos_para_evaluar(_regla_prueba("Concurrente"))
+
+    assert all(
+        await asyncio.gather(*(_evaluar(PARTIDO_A, CLUB_A, 100) for _ in range(4)))
+    )
+
+    async with SesionesPrueba() as db:
+        recomendaciones = list((await db.scalars(select(models.Recomendacion))).all())
+    assert len(recomendaciones) == 1
+
+
+@pytest.mark.asyncio
+async def test_prioridad_limite_tres_desempate_e_historial_completo():
+    await sembrar_partidos()
+    reglas = [
+        _regla_prueba("Critica antigua", "CRITICA"),
+        _regla_prueba("Critica reciente", "CRITICA"),
+        _regla_prueba("Alta", "ALTA"),
+        _regla_prueba("Media", "MEDIA"),
+        _regla_prueba("Baja", "BAJA"),
+    ]
+    async with SesionesPrueba() as db:
+        db.add_all(reglas)
+        await db.flush()
+        tiempos = (10, 20, 30, 40, 50)
+        db.add_all(
+            models.Recomendacion(
+                partido_id=PARTIDO_A,
+                regla_id=regla.id,
+                t=t,
+                minuto=int(t // 60),
+                mensaje=regla.nombre,
+                justificacion="Prueba",
+                prioridad=regla.prioridad,
+                datos_soporte=[],
+            )
+            for regla, t in zip(reglas, tiempos, strict=True)
+        )
+        # La consulta activa conserva solo la ultima instancia de cada regla,
+        # mientras que el historial mantiene tambien esta instancia anterior.
+        db.add(
+            models.Recomendacion(
+                partido_id=PARTIDO_A,
+                regla_id=reglas[2].id,
+                t=5,
+                minuto=0,
+                mensaje="Alta anterior",
+                justificacion="Prueba",
+                prioridad="ALTA",
+                datos_soporte=[],
+            )
+        )
+        await db.commit()
+
+        usuario = UsuarioActual(id=1, club_id=CLUB_A, rol="DT")
+        activas = await service.listar_recomendaciones(db, usuario, PARTIDO_A, True)
+        historico = await service.listar_recomendaciones(db, usuario, PARTIDO_A, False)
+
+    assert [r.mensaje for r in activas] == ["Critica reciente", "Critica antigua", "Alta"]
+    assert [r.prioridad.value for r in activas] == ["CRITICA", "CRITICA", "ALTA"]
+    assert len(activas) == 3
+    assert len(historico) == 6
+    assert {r.mensaje for r in historico} == {
+        "Critica antigua",
+        "Critica reciente",
+        "Alta",
+        "Alta anterior",
+        "Media",
+        "Baja",
+    }
