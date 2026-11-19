@@ -24,6 +24,18 @@ class EstadoRecomendacion(StrEnum):
     DESCARTADA = "DESCARTADA"
 
 
+class PlataformaPush(StrEnum):
+    ANDROID = "ANDROID"
+    IOS = "IOS"
+    WEB = "WEB"
+
+
+class EstadoEnvioPush(StrEnum):
+    PENDIENTE = "PENDIENTE"
+    ENVIADO = "ENVIADO"
+    ERROR = "ERROR"
+
+
 class EstadoInforme(StrEnum):
     GENERANDO = "GENERANDO"
     LISTO = "LISTO"
@@ -111,6 +123,19 @@ class Valoracion(BaseModel):
     util: bool | None = Field(default=None, description="null cuando solo se marca como aplicada")
     aplicada: bool = False
     comentario: str = Field(default="", max_length=400)
+
+
+# ---------- CU-53 Notificaciones push ----------
+
+
+class DispositivoRegistrar(BaseModel):
+    """Instalacion de la app asociada siempre al usuario autenticado."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    instalacion_id: str = Field(min_length=8, max_length=128)
+    token: str = Field(min_length=16, max_length=4096)
+    plataforma: PlataformaPush
 
 
 # ---------- CU-55, CU-56 Informes ----------

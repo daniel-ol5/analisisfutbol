@@ -48,6 +48,11 @@ class Settings(BaseSettings):
     smtp_tls: bool = True
     smtp_usuario: str = ""
     smtp_password: str = ""
+
+    # CU-53: Firebase usa Application Default Credentials. La ruta de la clave,
+    # cuando haga falta fuera de Google Cloud, va solo en GOOGLE_APPLICATION_CREDENTIALS.
+    firebase_push_habilitado: bool = False
+    firebase_project_id: str = ""
     smtp_remitente: str = "Área Técnica <no-responder@areatecnica.local>"
 
     # T-060: carga de video por partes. Disco local detrás de AlmacenVideos
