@@ -170,7 +170,7 @@ def atender_uno(
 
 
 def abrir_con_yolo(dispositivo: str, clases: str, carpeta: Path, vid_stride: int = VID_STRIDE,
-                   tamano_img: int = 1280):
+                   tamano_img: int = 1280, pesos_locales: Path | None = None):
     """Fábrica de `abrir_video` con el modelo real. Importa ultralytics solo al usarse."""
 
     def abrir(trabajo: dict[str, Any], ruta: Path) -> tuple[Cuadros, float, int]:
@@ -191,6 +191,8 @@ def abrir_con_yolo(dispositivo: str, clases: str, carpeta: Path, vid_stride: int
         pesos = str(pesos_coco) if pesos_coco.is_file() else "yolo11n.pt"
         if modelo:
             pesos = str(_bajar_pesos(modelo["archivo_url"], carpeta / "modelos"))
+        elif pesos_locales is not None:
+            pesos = str(pesos_locales)
         elif clases == "propio":
             raise ValueError("Para --clases propio debes registrar y seleccionar un modelo entrenado")
         elif futbol_local:
@@ -200,7 +202,7 @@ def abrir_con_yolo(dispositivo: str, clases: str, carpeta: Path, vid_stride: int
 
         clases_map = (
             CLASES_FUTBOL
-            if clases == "futbol" and (modelo or futbol_local)
+            if clases == "futbol" and (pesos_locales is not None or modelo or futbol_local)
             else (CLASES_PROPIO if clases == "propio" else CLASES_COCO)
         )
         config = ConfigModelo(
@@ -238,6 +240,7 @@ def argumentos(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--password", default=os.environ.get("VISION_PASSWORD"),
                    help="O la variable VISION_PASSWORD")
     p.add_argument("--dispositivo", default="cuda:0", help="cuda:0, o cpu (mucho más lento)")
+    p.add_argument("--pesos", type=Path, help="Archivo .pt local para trabajos sin modelo registrado")
     p.add_argument("--clases", choices=["coco", "propio", "futbol"], default="futbol",
                    help="futbol: YOLO especializado en fútbol (4 clases); coco: genérico; propio: modelo de 3 clases")
     p.add_argument("--espera", type=float, default=10.0, help="Segundos entre consultas sin trabajo")
@@ -246,6 +249,8 @@ def argumentos(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--tamano-img", type=int, default=1280, help="Tamaño de inferencia; no redimensiona el archivo")
     p.add_argument("--una-vez", action="store_true", help="Procesar como mucho un video y salir")
     args = p.parse_args(argv)
+    if args.pesos is not None and not args.pesos.is_file():
+        p.error(f"No se encuentra el archivo de pesos: {args.pesos}")
     if not args.token and args.email and not args.password:
         args.password = getpass.getpass("Contraseña del analista: ")
     if not args.token and not (args.email and args.password):
@@ -274,7 +279,7 @@ def main(argv: list[str] | None = None) -> int:
     stride = args.stride if args.stride is not None else (1 if "cuda" in args.dispositivo else VID_STRIDE)
     log.info("Iniciando worker en %s (dispositivo: %s, stride: %d)...", args.api, args.dispositivo, stride)
     abrir = abrir_con_yolo(args.dispositivo, args.clases, carpeta, vid_stride=stride,
-                          tamano_img=args.tamano_img)
+                          tamano_img=args.tamano_img, pesos_locales=args.pesos)
     log.info("Esperando videos en %s", args.api)
     while True:
         atendio = atender_uno(backend, abrir, carpeta, vid_stride=stride, dispositivo=args.dispositivo)

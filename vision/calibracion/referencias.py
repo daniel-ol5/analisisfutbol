@@ -62,15 +62,20 @@ class BancoReferencias:
                 continue
             validos = mask.ravel() == 1
             cantidad = int(validos.sum())
-            cobertura = cv2.contourArea(cv2.convexHull(dst[validos])) / (cuadro.shape[0] * cuadro.shape[1])
-            extension = np.ptp(dst[validos], axis=0) / [cuadro.shape[1], cuadro.shape[0]]
-            if (cantidad < 20 or cantidad / len(buenas) < .45 or cobertura < .08
-                    or extension[0] < .4 or extension[1] < .3):
+            if cantidad < 20 or cantidad / len(buenas) < .45:
+                continue
+            dst_validos = dst[validos]
+            contorno = cv2.convexHull(dst_validos)
+            if contorno is None or len(contorno) < 3:
+                continue
+            cobertura = cv2.contourArea(contorno) / (cuadro.shape[0] * cuadro.shape[1])
+            extension = np.ptp(dst_validos, axis=0) / [cuadro.shape[1], cuadro.shape[0]]
+            if cobertura < .08 or extension[0] < .4 or extension[1] < .3:
                 continue
             try:
                 efectiva = referencia.homografia @ np.linalg.inv(h)
                 controles = cv2.perspectiveTransform(src[validos].reshape(-1, 1, 2), h).reshape(-1, 2)
-                error = float(np.median(np.linalg.norm(controles - dst[validos], axis=1)))
+                error = float(np.median(np.linalg.norm(controles - dst_validos, axis=1)))
                 if error < 1.5 and (mejor is None or cantidad > mejor[1]):
                     mejor = (efectiva, cantidad, error)
             except np.linalg.LinAlgError:

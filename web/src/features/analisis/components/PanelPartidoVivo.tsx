@@ -2,6 +2,7 @@ import { useCallback, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { listarEquipos, listarPartidos } from "@/features/deportivo/api";
 import { RecomendacionesEnVivo } from "@/features/asistencia/components/RecomendacionesEnVivo"; // T-090 (Alejandra)
+import type { Video } from "@/features/vision/types";
 import { api } from "@/shared/api/client";
 import { obtenerMetricasMinuto } from "../api";
 import { usePartidoEnVivo } from "../hooks/usePartidoEnVivo";
@@ -21,8 +22,14 @@ export function PanelPartidoVivo() {
   const equipo = equipos.data?.find((e) => e.id === partido?.equipo_id);
   const nombreLocal = partido?.es_local ? (equipo?.nombre ?? "Local") : (partido?.rival ?? "Local");
   const nombreVisitante = partido?.es_local ? partido.rival : (equipo?.nombre ?? "Visitante");
-  const [colorLocal, setColorLocal] = useState("#c8102e");
-  const [colorVisitante, setColorVisitante] = useState("#1e293b");
+  const [grabacion, setGrabacion] = useState<Video | null>(null);
+  const [paleta, setPaleta] = useState<{ partidoId: number | null; local?: string; visitante?: string }>();
+  const videoActual = grabacion?.partido_id === id ? grabacion : null;
+  const colorPropio = videoActual?.color_propio ?? (partido?.es_local ? equipo?.color_local : equipo?.color_visitante);
+  const colorRival = videoActual?.color_rival;
+  const coloresElegidos = paleta?.partidoId === id ? paleta : undefined;
+  const colorLocal = coloresElegidos?.local ?? (partido?.es_local ? colorPropio : colorRival) ?? "#c8102e";
+  const colorVisitante = coloresElegidos?.visitante ?? (partido?.es_local ? colorRival : colorPropio) ?? "#1e293b";
   const [directo, setDirecto] = useState(false);
   const [muestra, setMuestra] = useState<MensajeWorker | null>(null);
   const [salto, setSalto] = useState<{ t: number; n: number } | null>(null);
@@ -135,7 +142,7 @@ export function PanelPartidoVivo() {
               <input
                 type="color"
                 value={colorLocal}
-                onChange={(e) => setColorLocal(e.target.value)}
+                onChange={(e) => setPaleta({ ...coloresElegidos, partidoId: id, local: e.target.value })}
               />
             </label>
             <label>
@@ -143,7 +150,7 @@ export function PanelPartidoVivo() {
               <input
                 type="color"
                 value={colorVisitante}
-                onChange={(e) => setColorVisitante(e.target.value)}
+                onChange={(e) => setPaleta({ ...coloresElegidos, partidoId: id, visitante: e.target.value })}
               />
             </label>
             <small>
@@ -205,6 +212,7 @@ export function PanelPartidoVivo() {
               onCambiarModoDisposicion={setModo}
               onMuestraSincronizada={recibirMuestra}
               onCambiarFuente={cambiarFuente}
+              onElegirVideo={setGrabacion}
             />
             <section className="analisis-radar" aria-label="Posiciones sobre la cancha">
               <div className="analisis-radar-cabecera">

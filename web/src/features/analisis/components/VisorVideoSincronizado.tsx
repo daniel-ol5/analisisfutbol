@@ -13,13 +13,14 @@ interface Props {
   onCambiarModoDisposicion: (modo: ModoDisposicionVivo) => void;
   onMuestraSincronizada: (m: MensajeWorker | null) => void;
   onCambiarFuente: (directo: boolean) => void;
+  onElegirVideo?: (video: Video | null) => void;
   muestra?: MensajeWorker | null;
   /** CU-47: pide llevar el video (y con él el plano 2D) a un instante; `n` distingue pedidos repetidos. */
   saltarA?: { t: number; n: number } | null;
 }
 
 export function VisorVideoSincronizado({ partidoId, videoInicialId, jugadores, balon, colorLocal, colorVisitante,
-  workerTransmitiendo, modoDisposicion, onCambiarModoDisposicion, onMuestraSincronizada, onCambiarFuente, muestra, saltarA }: Props) {
+  workerTransmitiendo, modoDisposicion, onCambiarModoDisposicion, onMuestraSincronizada, onCambiarFuente, onElegirVideo, muestra, saltarA }: Props) {
   const [fuente, setFuente] = useState("servidor");
   const [videos, setVideos] = useState<Video[]>([]);
   const [videoId, setVideoId] = useState<number | null>(null);
@@ -52,6 +53,9 @@ export function VisorVideoSincronizado({ partidoId, videoInicialId, jugadores, b
     return () => { vigente = false; };
   }, [partidoId, videoInicialId]);
   const videoElegido = videos.find(v => v.id === videoId);
+  useEffect(() => {
+    onElegirVideo?.(fuente === "servidor" ? videoElegido ?? null : null);
+  }, [fuente, onElegirVideo, videoElegido]);
   useEffect(() => {
     limpiar(); setUrl(null); setMuestras([]); onMuestraSincronizada(null); setError(null);
     setAvance(null); setErrorCarga(null);
@@ -119,8 +123,16 @@ export function VisorVideoSincronizado({ partidoId, videoInicialId, jugadores, b
     } catch { setError("No se pudo abrir la vista previa de la cámara."); }
   };
   const detecciones = muestra?.detecciones ?? [];
-  const jugadoresProyectados = detecciones.length ? [] : jugadores;
-  const balonDeSeguimiento = balon && !detecciones.some(p => p.clase === "BALON") ? [balon] : [];
+  const posiciones = new Map(jugadores.map(p => [p.tid, p]));
+  const personas = detecciones.filter(p => p.clase !== "BALON" &&
+    (muestra?.calidad.calibracion_valida !== true || posiciones.has(p.tid)));
+  const posicionesSinCaja = jugadores.filter(p => !personas.some(d => d.tid === p.tid));
+  const puntosDibujados = balon ? [...posicionesSinCaja, balon] : posicionesSinCaja;
+  const colorEquipo = (equipo?: PosicionDetectada["equipo"]) => {
+    if (equipo === "LOCAL") return colorLocal;
+    if (equipo === "VISITANTE") return colorVisitante;
+    return equipo === "ARBITRO" ? "#eab308" : "#94a3b8";
+  };
   return <section className="analisis-video" aria-label="Video del partido">
     <div className="analisis-video-barra">
       <div role="group" aria-label="Fuente">
@@ -152,13 +164,18 @@ export function VisorVideoSincronizado({ partidoId, videoInicialId, jugadores, b
       {lineas && fuente === "servidor" && <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-label="Líneas de cancha estimadas" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none" }}>
         {muestra?.calidad.lineas_imagen?.map((p, i) => <polyline key={i} points={p.map(x => x.join(",")).join(" ")} fill="none" stroke="#5fffe1" strokeWidth={.25} />)}
       </svg>}
-      {cajas && fuente === "servidor" && detecciones.map((p, i) => <div key={`raw-${i}`} className="analisis-caja" style={{
-        left: `${p.bbox[0]}%`, top: `${p.bbox[1]}%`, width: `${p.bbox[2] - p.bbox[0]}%`, height: `${p.bbox[3] - p.bbox[1]}%`, borderColor: p.clase === "BALON" ? "white" : "#f9d65c",
-      }}><span>{p.clase === "BALON" ? "Balón" : `${p.clase} ${p.tid}`}</span></div>)}
-      {cajas && fuente === "servidor" && [...jugadoresProyectados, ...balonDeSeguimiento].map(p => p.bbox && <div key={p.tid} className="analisis-caja" style={{
+      {cajas && fuente === "servidor" && personas.map((p, i) => {
+        const equipo = p.clase === "ARBITRO" ? "ARBITRO" : posiciones.get(p.tid)?.equipo;
+        const rol = ({ PORTERO: "Arquero", ARBITRO: "Árbitro" } as Record<string, string>)[p.clase]
+          ?? (equipo === "LOCAL" || equipo === "VISITANTE" ? "Jugador" : "Persona");
+        return <div key={`raw-${i}`} className="analisis-caja" style={{
+          left: `${p.bbox[0]}%`, top: `${p.bbox[1]}%`, width: `${p.bbox[2] - p.bbox[0]}%`, height: `${p.bbox[3] - p.bbox[1]}%`, borderColor: colorEquipo(equipo),
+        }}><span>{equipo === "ARBITRO" ? "Árbitro" : rol} {p.tid}</span></div>;
+      })}
+      {cajas && fuente === "servidor" && puntosDibujados.map(p => p.bbox && <div key={p === balon ? "balon" : p.tid} className="analisis-caja" style={{
         left: `${p.bbox[0]}%`, top: `${p.bbox[1]}%`, width: `${p.bbox[2] - p.bbox[0]}%`, height: `${p.bbox[3] - p.bbox[1]}%`,
-        borderColor: p === balon ? "white" : p.equipo === "LOCAL" ? colorLocal : colorVisitante,
-      }}><span>{p === balon ? "Balón (seguimiento)" : p.dorsal ?? p.tid}</span></div>)}
+        borderColor: p === balon ? "white" : colorEquipo(p.equipo),
+      }}><span>{p === balon ? "Balón" : p.dorsal ?? p.tid}</span></div>)}
     </div>
     <div className="analisis-video-pie">
       {fuente === "servidor" && <><label><input type="checkbox" checked={cajas} onChange={e => setCajas(e.target.checked)} /> Mostrar detecciones</label>
