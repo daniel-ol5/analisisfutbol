@@ -52,6 +52,7 @@ class PartidoPagina extends StatefulWidget {
     this.ahoraMonotonoMs,
     this.intervaloSondeo = intervaloSondeoEstado,
     this.intervaloTick = intervaloTickReloj,
+    this.barraSuperior,
   });
 
   /// Identificador del partido si se navega a `/partido/:id` o
@@ -76,6 +77,11 @@ class PartidoPagina extends StatefulWidget {
   final int Function()? ahoraMonotonoMs;
   final Duration intervaloSondeo;
   final Duration intervaloTick;
+
+  /// T-095: aviso destacado arriba del cronómetro mientras el partido está en
+  /// curso (las alertas de Asistencia). Lo inyecta el router, porque las
+  /// features no se importan entre sí; sin él la pantalla queda igual.
+  final Widget Function(int partidoId)? barraSuperior;
 
   @override
   State<PartidoPagina> createState() => _PartidoPaginaState();
@@ -817,6 +823,8 @@ class _PartidoPaginaState extends State<PartidoPagina>
               const SizedBox(height: 12),
             ],
             if (estado != null && !_noEncontrado) ...[
+              if (estado.enCurso && widget.barraSuperior != null)
+                widget.barraSuperior!(estado.partidoId),
               _TarjetaCronometro(
                 fase: fase,
                 textoCronometro: textoReloj,
