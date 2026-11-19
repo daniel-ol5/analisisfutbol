@@ -31,6 +31,12 @@ test("con el partido en vivo, una expulsión propia llega como recomendación cr
   await iniciarSesion(page, d);
   await page.goto("/asistencia");
   await page.getByTestId("asistencia-partido").selectOption(String(partido));
+  const pestanas = page.getByRole("navigation", { name: "Asistencia y reportes" });
+  await pestanas.getByRole("link", { name: "Reglas tácticas" }).click();
+  await expect(page.getByRole("region", { name: "Catálogo de reglas" })).toBeVisible();
+  await expect(page.getByRole("switch").first()).toBeVisible();
+  await pestanas.getByRole("link", { name: "Recomendaciones" }).click();
+  await expect(page.getByTestId("asistencia-partido")).toHaveValue(String(partido));
   const lista = page.getByTestId("recomendaciones");
   await expect(lista.getByText("Sin recomendaciones activas por ahora.")).toBeVisible();
 

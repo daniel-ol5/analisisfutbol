@@ -109,14 +109,3 @@
   margin: 0;
   font-weight: var(--fw-semibold);
 }
-
-.rec-pagina {
-  display: grid;
-  gap: var(--sp-4);
-  max-width: 760px;
-}
-
-.rec-pagina h1 {
-  margin: 0;
-  font-size: var(--fs-xl);
-}

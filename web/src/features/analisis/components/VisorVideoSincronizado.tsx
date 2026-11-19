@@ -8,6 +8,7 @@ import { muestraEnTiempo } from "../reproduccion";
 export type ModoDisposicionVivo = "apilado" | "paralelo" | "solo-radar";
 interface Props {
   partidoId: number; jugadores: PosicionDetectada[]; balon?: PosicionDetectada | null;
+  videoInicialId?: number | null;
   colorLocal?: string; colorVisitante?: string; workerTransmitiendo: boolean; modoDisposicion: ModoDisposicionVivo;
   onCambiarModoDisposicion: (modo: ModoDisposicionVivo) => void;
   onMuestraSincronizada: (m: MensajeWorker | null) => void;
@@ -17,7 +18,7 @@ interface Props {
   saltarA?: { t: number; n: number } | null;
 }
 
-export function VisorVideoSincronizado({ partidoId, jugadores, balon, colorLocal, colorVisitante,
+export function VisorVideoSincronizado({ partidoId, videoInicialId, jugadores, balon, colorLocal, colorVisitante,
   workerTransmitiendo, modoDisposicion, onCambiarModoDisposicion, onMuestraSincronizada, onCambiarFuente, muestra, saltarA }: Props) {
   const [fuente, setFuente] = useState("servidor");
   const [videos, setVideos] = useState<Video[]>([]);
@@ -45,10 +46,11 @@ export function VisorVideoSincronizado({ partidoId, jugadores, balon, colorLocal
     listarVideos(partidoId).then(lista => {
       if (!vigente) return;
       const disponibles = lista.filter(v => v.estado !== "CARGANDO" && v.duracion_s !== null);
-      setVideos(disponibles); setVideoId(disponibles[0]?.id ?? null);
+      const inicial = disponibles.find(v => v.id === videoInicialId) ?? disponibles[0];
+      setVideos(disponibles); setVideoId(inicial?.id ?? null);
     }).catch(() => { if (vigente) setError("No se pudo consultar la lista de videos."); });
     return () => { vigente = false; };
-  }, [partidoId]);
+  }, [partidoId, videoInicialId]);
   const videoElegido = videos.find(v => v.id === videoId);
   useEffect(() => {
     limpiar(); setUrl(null); setMuestras([]); onMuestraSincronizada(null); setError(null);

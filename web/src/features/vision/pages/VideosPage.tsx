@@ -8,7 +8,7 @@
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
 import { useSesion } from "@/features/seguridad";
 import { estadoHttp, mensajeDeError } from "@/shared/lib/errors";
@@ -80,8 +80,9 @@ export function VideosPage() {
 
   const partidos = useQuery({ queryKey: ["vision", "partidos"], queryFn: listarPartidos });
   const opciones = useMemo(() => partidosParaVideo(partidos.data ?? []), [partidos.data]);
-  const [elegido, setElegido] = useState<number | null>(null);
-  const partidoId = elegido ?? opciones[0]?.id ?? null;
+  const [parametros, cambiarParametros] = useSearchParams();
+  const elegido = Number(parametros.get("partidoId"));
+  const partidoId = (opciones.find((partido) => partido.id === elegido) ?? opciones[0])?.id ?? null;
 
   const clave = ["vision", "videos", partidoId] as const;
   const videos = useQuery({
@@ -237,7 +238,7 @@ export function VideosPage() {
             etiqueta="Partido"
             value={partidoId ?? ""}
             disabled={subiendo}
-            onChange={(e) => setElegido(Number(e.currentTarget.value))}
+            onChange={(e) => cambiarParametros({ partidoId: e.currentTarget.value })}
           >
             {opciones.map((p) => (
               <option key={p.id} value={p.id}>

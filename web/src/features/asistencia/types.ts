@@ -1,22 +1,33 @@
-export type Prioridad = "CRITICA" | "ALTA" | "MEDIA" | "BAJA";
-
-export interface Recomendacion {
-  id: number;
-  minuto: number;
-  mensaje: string;
-  justificacion: string;
-  prioridad: Prioridad;
-}
-
-export interface ReglaTactica {
-  id: number;
-  nombre: string;
-  prioridad: Prioridad;
-  activa: boolean;
-}
 // ---------- CU-49, CU-54 Reglas tácticas ----------
 
 export type Prioridad = "CRITICA" | "ALTA" | "MEDIA" | "BAJA";
+
+/** Comparación o grupo de comparaciones que evalúa el motor de reglas. */
+export type Condicion = Record<string, unknown[]>;
+
+export interface ReglaCrear {
+  nombre: string;
+  condicion: Condicion;
+  plantilla_mensaje: string;
+  plantilla_justificacion: string;
+  prioridad: Prioridad;
+  cooldown_s: number;
+  activa: boolean;
+}
+
+export interface Regla extends ReglaCrear {
+  id: number;
+  /** Las reglas globales tienen club_id nulo. */
+  club_id: number | null;
+}
+
+export type ReglaEditar = Partial<ReglaCrear>;
+
+export interface ResultadoPrueba {
+  disparos: number;
+  minutos: number[];
+  evaluaciones: number;
+}
 
 export type EstadoRecomendacion = "PENDIENTE" | "VISTA" | "APLICADA" | "DESCARTADA";
 

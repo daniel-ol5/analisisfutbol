@@ -43,12 +43,11 @@ from app.analisis.motor.motor import MotorPartido, Salida, minutos_de, porcentaj
 from app.analisis.motor.muestras import muestra_de_mensaje
 from app.analisis.parametros import PARAMETROS
 from app.asistencia import service as asistencia
-from app.asistencia.contexto import EstadoTactico
+from app.asistencia.contexto import INTERVALO_EVALUACION_S, EstadoTactico
 from app.asistencia.models import Recomendacion as RecomendacionModelo
 from app.asistencia.motor import ORDEN_PRIORIDAD
 from app.asistencia.schemas import Prioridad
 from app.asistencia.schemas import Recomendacion as RecomendacionEsquema
-from app.asistencia.contexto import INTERVALO_EVALUACION_S, EstadoTactico
 from app.core.config import settings
 from app.core.realtime import Hub, canal_partido, obtener_hub
 from app.deportivo.models import Partido

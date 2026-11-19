@@ -15,7 +15,7 @@ import { VisorVideoSincronizado, type ModoDisposicionVivo } from "./VisorVideoSi
 export function PanelPartidoVivo() {
   const equipos = useQuery({ queryKey: ["equipos"], queryFn: () => listarEquipos() });
   const partidos = useQuery({ queryKey: ["partidos"], queryFn: () => listarPartidos() });
-  const { partidoId: seleccionado, elegir } = usePartidoUrl();
+  const { partidoId: seleccionado, videoId, elegir } = usePartidoUrl();
   const id = seleccionado ?? partidos.data?.[0]?.id ?? null;
   const partido = partidos.data?.find((p) => p.id === id);
   const equipo = equipos.data?.find((e) => e.id === partido?.equipo_id);
@@ -193,6 +193,7 @@ export function PanelPartidoVivo() {
             <VisorVideoSincronizado
               key={id}
               partidoId={id}
+              videoInicialId={videoId}
               jugadores={activo?.jugadores ?? []}
               balon={activo?.balon}
               muestra={activo}
