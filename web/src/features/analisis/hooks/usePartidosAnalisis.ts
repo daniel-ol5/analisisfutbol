@@ -5,14 +5,20 @@ import { listarEquipos, listarPartidos } from "@/features/deportivo/api";
 export function usePartidoUrl() {
   const [parametros, cambiarParametros] = useSearchParams();
   const id = Number(parametros.get("partidoId"));
+  const video = Number(parametros.get("videoId"));
   const elegir = (partidoId: number) => {
     cambiarParametros((actuales) => {
       const siguientes = new URLSearchParams(actuales);
       siguientes.set("partidoId", String(partidoId));
+      siguientes.delete("videoId");
       return siguientes;
     });
   };
-  return { partidoId: Number.isSafeInteger(id) && id > 0 ? id : null, elegir };
+  return {
+    partidoId: Number.isSafeInteger(id) && id > 0 ? id : null,
+    videoId: Number.isSafeInteger(video) && video > 0 ? video : null,
+    elegir,
+  };
 }
 
 /** Lista de partidos del club; el primero queda elegido si no hay selección (como el panel en vivo). */

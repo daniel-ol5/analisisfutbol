@@ -1,11 +1,16 @@
 """Pruebas del mapa de calor táctico  —  CU-44 · T-079."""
 
+import json
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.core.database import SessionLocal
-from app.deportivo.models import Partido
+from app.deportivo.models import Partido, Posicion
 from app.main import app
+from app.partido.models import AsignacionTrack
+from app.vision import procesamiento
+from app.vision.models import Video
 
 
 @pytest.fixture
@@ -76,6 +81,16 @@ async def datos_prueba():
         async with SessionLocal() as db:
             p = await db.get(Partido, partido_id1)
             p.ataca_hacia = "DER"
+            db.add_all([
+                AsignacionTrack(club_id=p.club_id, partido_id=p.id, track_id=21,
+                                equipo_detectado="LOCAL", jugador_id=jugador_id1),
+                AsignacionTrack(club_id=p.club_id, partido_id=p.id, track_id=22,
+                                equipo_detectado="VISITANTE"),
+                Posicion(partido_id=p.id, track_id=21, t=12, x_m=82, y_m=16),
+                Posicion(partido_id=p.id, track_id=21, t=2700, x_m=23, y_m=52),
+                Posicion(partido_id=p.id, track_id=22, t=12, x_m=25, y_m=30),
+                Posicion(partido_id=p.id, track_id=0, t=12, x_m=50, y_m=40, es_balon=True),
+            ])
             await db.commit()
 
         # Registrar Club 2 (para probar aislamiento multi-tenant)
@@ -115,13 +130,47 @@ async def test_mapa_calor_equipo_completo(datos_prueba):
         assert data["alcance"] == "equipo"
         assert data["largo_m"] == 105.0
         assert data["ancho_m"] == 68.0
-        assert len(data["celdas"]) > 0
+        assert data["celdas"] == [{"x": 82.5, "y": 17.0, "valor": 1.0}]
+
+        vacio = await c.get(
+            f"/api/analisis/partidos/{partido_id}/mapa-calor?desde_minuto=50&hasta_minuto=90",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert vacio.status_code == 200
+        assert vacio.json()["celdas"] == []
 
         # Verificar rango de valores [0, 1] y coordenadas
         for c_data in data["celdas"]:
             assert 0.0 <= c_data["valor"] <= 1.0
             assert 0.0 <= c_data["x"] <= 105.0
             assert 0.0 <= c_data["y"] <= 68.0
+
+
+@pytest.mark.asyncio
+async def test_mapa_de_grabacion_usa_solo_sus_muestras_validas(datos_prueba, tmp_path, monkeypatch):
+    partido_id = datos_prueba["partido_id"]
+    async with SessionLocal() as db:
+        partido = await db.get(Partido, partido_id)
+        db.add(Video(club_id=partido.club_id, partido_id=partido_id, archivo_url="clip.mp4",
+                     nombre="clip.mp4", tipo="video/mp4", tamano_bytes=100, estado="PROCESADO"))
+        await db.commit()
+
+    ruta = tmp_path / "muestras.json"
+    calidad = {"worker_conectado": True, "fps": 5, "jugadores_detectados": 1,
+               "balon_visible": False, "retraso_s": 0, "degradado": False}
+    ruta.write_text(json.dumps([
+        {"partido": partido_id, "t": t, "jugadores": [
+            {"tid": 21, "equipo": "LOCAL", "x": x, "y": 32, "conf": .9},
+        ], "calidad": {**calidad, "calibracion_valida": valida}}
+        for t, x, valida in [(0, 43, True), (1, 55, False)]
+    ]), encoding="utf-8")
+    monkeypatch.setattr(procesamiento, "_ruta_muestras_video", lambda _: ruta)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        res = await c.get(f"/api/analisis/partidos/{partido_id}/mapa-calor",
+                          headers={"Authorization": f"Bearer {datos_prueba['token1']}"})
+    assert res.status_code == 200, res.text
+    assert res.json()["celdas"] == [{"x": 42.5, "y": 31.57, "valor": 1.0}]
 
 
 @pytest.mark.asyncio
@@ -164,6 +213,7 @@ async def test_mapa_calor_linea_y_jugador(datos_prueba):
         )
         assert res_linea.status_code == 200
         assert res_linea.json()["alcance"] == "linea"
+        assert len(res_linea.json()["celdas"]) == 1
 
         # Por jugador delantero
         res_jugador = await c.get(
@@ -173,6 +223,7 @@ async def test_mapa_calor_linea_y_jugador(datos_prueba):
         assert res_jugador.status_code == 200
         assert res_jugador.json()["alcance"] == "jugador"
         assert res_jugador.json()["referencia_id"] == jugador_id
+        assert res_jugador.json()["celdas"] == res_linea.json()["celdas"]
 
 
 @pytest.mark.asyncio

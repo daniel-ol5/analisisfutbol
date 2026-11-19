@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../shared/ui/lista_consultable.dart';
 import '../deportivo/agenda/selector_partido.dart';
 import 'api.dart';
+import 'recomendaciones_pagina.dart';
 
 class AsistenciaPagina extends StatelessWidget {
   const AsistenciaPagina({super.key});
@@ -23,12 +24,8 @@ class AsistenciaPagina extends StatelessWidget {
       body: TabBarView(
         children: [
           SelectorPartido(
-            contenido: (partido) => ListaConsultable<Recomendacion>(
-              consultar: () => listarRecomendaciones(partido.id),
-              vacio: 'Este partido aún no tiene recomendaciones activas.',
-              tarjeta: (_, recomendacion) =>
-                  _TarjetaRecomendacion(recomendacion),
-            ),
+            contenido: (partido) =>
+                RecomendacionesPagina(partidoId: partido.id, integrada: true),
           ),
           ListaConsultable<Regla>(
             consultar: listarReglas,
@@ -50,42 +47,4 @@ class AsistenciaPagina extends StatelessWidget {
       ),
     ),
   );
-}
-
-class _TarjetaRecomendacion extends StatelessWidget {
-  const _TarjetaRecomendacion(this.recomendacion);
-  final Recomendacion recomendacion;
-
-  @override
-  Widget build(BuildContext context) {
-    final tema = Theme.of(context);
-    final prioridad = switch (recomendacion.prioridad) {
-      'CRITICA' => 'Crítica',
-      'ALTA' => 'Alta',
-      'MEDIA' => 'Media',
-      'BAJA' => 'Baja',
-      _ => recomendacion.prioridad,
-    };
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(recomendacion.mensaje, style: tema.textTheme.titleMedium),
-            const SizedBox(height: 4),
-            Text(recomendacion.justificacion),
-            const SizedBox(height: 8),
-            Text(
-              'Minuto ${recomendacion.minuto} · Prioridad $prioridad',
-              style: tema.textTheme.labelLarge?.copyWith(
-                color: tema.colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 }

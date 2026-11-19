@@ -76,3 +76,18 @@ def test_referencia_visual_recupera_un_paneo_y_rechaza_otra_escena():
     reconstruidos = cv2.perspectiveTransform(actuales, recuperada[0])
     assert np.max(np.linalg.norm(controles - reconstruidos, axis=2)) < 1
     assert banco.recuperar(rng.integers(0, 255, original.shape, dtype=np.uint8)) is None
+
+
+def test_referencia_visual_descarta_un_ajuste_sin_correspondencias_validas(monkeypatch):
+    cuadro = np.zeros((100, 160, 3), dtype=np.uint8)
+    puntos = np.float32([(x, y) for x in (10, 50, 100, 150) for y in (10, 25, 40, 55, 70, 85)])
+    descriptores = np.eye(len(puntos), dtype=np.float32)
+    banco = BancoReferencias()
+    monkeypatch.setattr(banco, "caracteristicas", lambda *_: (puntos, descriptores))
+    banco.agregar(cuadro, np.eye(3))
+
+    # Una matriz finita puede venir acompañada de una máscara sin inliers.
+    mascara = np.zeros((len(puntos), 1), dtype=np.uint8)
+    monkeypatch.setattr(cv2, "findHomography", lambda *_: (np.eye(3), mascara))
+
+    assert banco.recuperar(cuadro) is None

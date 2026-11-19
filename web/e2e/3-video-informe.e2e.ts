@@ -20,7 +20,7 @@ test("subir un video, procesarlo y verlo como procesado", async ({ page, request
 
   await iniciarSesion(page, d);
   await page.goto(`/vision/videos?partidoId=${partido}`);
-  await page.getByLabel("Partido").selectOption(String(partido));
+  await page.getByRole("combobox", { name: "Partido", exact: true }).selectOption(String(partido));
 
   // Subida desde la interfaz (el selector de archivos está oculto detrás del botón).
   const [selector] = await Promise.all([
@@ -37,7 +37,7 @@ test("subir un video, procesarlo y verlo como procesado", async ({ page, request
 
   // Lanzar el procesamiento.
   await tarjeta.getByRole("button", { name: "Procesar video" }).click();
-  await expect(tarjeta.getByText("Procesando")).toBeVisible();
+  await expect(tarjeta.getByText("En cola", { exact: true })).toBeVisible();
 
   // El worker toma el trabajo, manda un lote y termina (contrato de T-061).
   const trabajo = await request.post(`${API}/vision/trabajos/tomar`, { headers: auth(t) });
@@ -61,6 +61,13 @@ test("subir un video, procesarlo y verlo como procesado", async ({ page, request
 
   // La interfaz lo muestra como procesado (sondea el estado del video).
   await expect(tarjeta.getByText("Procesado", { exact: true })).toBeVisible({ timeout: 30_000 });
+  const bloque = page.waitForResponse((r) => r.url().includes(`/vision/videos/${videoId}/archivo/bloque?`));
+  await tarjeta.getByRole("button", { name: "Analizar en panel en vivo" }).click();
+  await expect(page.getByRole("combobox", { name: "Seleccionar video" })).toHaveValue(String(videoId));
+  const descarga = await bloque;
+  expect(descarga.ok()).toBe(true);
+  const { contenido_base64 } = await descarga.json() as { contenido_base64: string };
+  expect(Buffer.from(contenido_base64, "base64")).toEqual(readFileSync(d.video));
 });
 
 // Pendiente: depende de T-098 (informe post-partido en PDF) y T-100 (vista del

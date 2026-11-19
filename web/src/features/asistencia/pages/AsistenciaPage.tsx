@@ -1,117 +1,16 @@
 import { useQuery } from "@tanstack/react-query";
-import { Navigate, Route, Routes, useSearchParams } from "react-router-dom";
-
-import { listarPartidos } from "@/features/deportivo/api";
-import { Alert, Badge, Select } from "@/shared/ui";
-import { Pestanas } from "@/shared/ui/Pestanas";
-
-import { listarRecomendaciones, listarReglas } from "../api";
-import type { Prioridad } from "../types";
-import "../asistencia.css";
-
-const PRIORIDAD: Record<Prioridad, string> = {
-  CRITICA: "Crítica",
-  ALTA: "Alta",
-  MEDIA: "Media",
-  BAJA: "Baja",
-};
-
-function Recomendaciones() {
-  const [parametros, cambiarParametros] = useSearchParams();
-  const partidos = useQuery({ queryKey: ["partidos"], queryFn: () => listarPartidos() });
-  const partidoId = Number(parametros.get("partidoId"));
-  const partido = partidos.data?.find(({ id }) => id === partidoId) ?? partidos.data?.[0];
-  const recomendaciones = useQuery({
-    queryKey: ["recomendaciones", partido?.id],
-    queryFn: () => listarRecomendaciones(partido!.id),
-    enabled: Boolean(partido),
-    refetchInterval: partido?.estado === "EN_CURSO" ? 10_000 : false,
-  });
-  return (
-    <section className="asistencia-panel" aria-label="Recomendaciones del partido">
-      <Select
-        etiqueta="Partido"
-        value={partido?.id ?? ""}
-        onChange={(evento) => cambiarParametros({ partidoId: evento.currentTarget.value })}
-      >
-        {!partido && (
-          <option value="">{partidos.isPending ? "Cargando partidos…" : "Sin partidos"}</option>
-        )}
-        {partidos.data?.map(({ id, rival, fecha_hora }) => (
-          <option key={id} value={id}>
-            vs. {rival} · {new Date(fecha_hora).toLocaleDateString("es-BO")}
-          </option>
-        ))}
-      </Select>
-      {partidos.isError && <Alert tono="error">No se pudieron cargar los partidos.</Alert>}
-      {recomendaciones.isError && (
-        <Alert tono="error">No se pudieron cargar las recomendaciones.</Alert>
-      )}
-      {partido && recomendaciones.isPending && <p role="status">Cargando recomendaciones…</p>}
-      {recomendaciones.data?.length === 0 && (
-        <p>Este partido aún no tiene recomendaciones activas.</p>
-      )}
-      {!!recomendaciones.data?.length && (
-        <ul className="asistencia-lista">
-          {recomendaciones.data.map((recomendacion) => (
-            <li key={recomendacion.id}>
-              <div className="asistencia-fila">
-                <h2>{recomendacion.mensaje}</h2>
-                <Badge tono={recomendacion.prioridad === "CRITICA" ? "error" : "info"}>
-                  {PRIORIDAD[recomendacion.prioridad]}
-                </Badge>
-              </div>
-              <p>{recomendacion.justificacion}</p>
-              <small>Minuto {recomendacion.minuto}</small>
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
-  );
-}
-
-function Reglas() {
-  const reglas = useQuery({ queryKey: ["reglas-tacticas"], queryFn: listarReglas });
-  return (
-    <section className="asistencia-panel" aria-label="Reglas tácticas">
-      {reglas.isPending && <p role="status">Cargando reglas…</p>}
-      {reglas.isError && <Alert tono="error">No se pudieron cargar las reglas.</Alert>}
-      {reglas.data?.length === 0 && <p>El club aún no tiene reglas disponibles.</p>}
-      {!!reglas.data?.length && (
-        <ul className="asistencia-lista">
-          {reglas.data.map((regla) => (
-            <li key={regla.id} className="asistencia-fila">
-              <div>
-                <h2>{regla.nombre}</h2>
-                <small>Prioridad {PRIORIDAD[regla.prioridad].toLowerCase()}</small>
-              </div>
-              <Badge tono={regla.activa ? "ok" : "neutro"}>
-                {regla.activa ? "Activa" : "Inactiva"}
-              </Badge>
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
-/** Asistencia y Reportes  —  P6 · CU-49 … CU-58.
- *
- * T-090 y T-091: recomendaciones tácticas del partido elegido, en vivo, con su
- * valoración. El resto de los casos del paquete (alertas, push, catálogo,
- * informes) se suman aquí cuando estén.
- */
-import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { Navigate, Route, Routes, useLocation, useSearchParams } from "react-router-dom";
 
 import { listarPartidos } from "@/features/deportivo/api";
 import type { Partido } from "@/features/deportivo/types";
 import { mensajeDeError } from "@/shared/lib/errors";
 import { Alert, Select } from "@/shared/ui";
+import { Pestanas } from "@/shared/ui/Pestanas";
 
 import { RecomendacionesEnVivo } from "../components/RecomendacionesEnVivo";
-import "../components/recomendaciones.css";
+import { ReglasPage } from "./ReglasPage";
+import "../asistencia.css";
 
-/** Primero el partido en juego; después, los más recientes. */
 function ordenar(partidos: readonly Partido[]): Partido[] {
   return [...partidos].sort(
     (a, b) =>
@@ -120,7 +19,42 @@ function ordenar(partidos: readonly Partido[]): Partido[] {
   );
 }
 
+function Recomendaciones() {
+  const [parametros, cambiarParametros] = useSearchParams();
+  const partidos = useQuery({ queryKey: ["partidos"], queryFn: () => listarPartidos() });
+  const lista = ordenar(partidos.data ?? []);
+  const elegido = Number(parametros.get("partidoId"));
+  const partidoId = (lista.find((partido) => partido.id === elegido) ?? lista[0])?.id;
+
+  return (
+    <section className="asistencia-panel" aria-label="Recomendaciones del partido">
+      {partidos.isError && <Alert tono="error">{mensajeDeError(partidos.error)}</Alert>}
+      {partidos.isPending && <p role="status">Cargando partidos…</p>}
+      {partidos.isSuccess && lista.length === 0 && <p>No hay partidos registrados.</p>}
+      {partidoId !== undefined && (
+        <>
+          <Select
+            etiqueta="Partido"
+            value={partidoId}
+            onChange={(evento) => cambiarParametros({ partidoId: evento.currentTarget.value })}
+            data-testid="asistencia-partido"
+          >
+            {lista.map((partido) => (
+              <option key={partido.id} value={partido.id}>
+                vs. {partido.rival} · {new Date(partido.fecha_hora).toLocaleDateString("es-BO")}
+                {partido.estado === "EN_CURSO" ? " · en curso" : ""}
+              </option>
+            ))}
+          </Select>
+          <RecomendacionesEnVivo key={partidoId} partidoId={partidoId} />
+        </>
+      )}
+    </section>
+  );
+}
+
 export function AsistenciaPage() {
+  const { search } = useLocation();
   return (
     <main className="area-pagina">
       <header className="area-titulo">
@@ -129,44 +63,17 @@ export function AsistenciaPage() {
       <Pestanas
         titulo="Asistencia y reportes"
         enlaces={[
-          { ruta: "/asistencia", titulo: "Recomendaciones", exacta: true },
-          { ruta: "/asistencia/reglas", titulo: "Reglas tácticas" },
+          { ruta: `/asistencia${search}`, titulo: "Recomendaciones", exacta: true },
+          { ruta: `/asistencia/reglas${search}`, titulo: "Reglas tácticas" },
         ]}
       />
-      <Routes>
-        <Route index element={<Recomendaciones />} />
-        <Route path="reglas" element={<Reglas />} />
-        <Route path="*" element={<Navigate to="/asistencia" replace />} />
-      </Routes>
+      <div className="area-contenido">
+        <Routes>
+          <Route index element={<Recomendaciones />} />
+          <Route path="reglas" element={<ReglasPage />} />
+          <Route path="*" element={<Navigate to="/asistencia" replace />} />
+        </Routes>
+      </div>
     </main>
-  const partidos = useQuery({ queryKey: ["partidos"], queryFn: () => listarPartidos() });
-  const [elegido, setElegido] = useState<number | null>(null);
-  const lista = ordenar(partidos.data ?? []);
-  const partidoId = elegido ?? lista[0]?.id ?? null;
-
-  return (
-    <div className="rec-pagina">
-      <h1>Asistencia táctica</h1>
-      {partidos.isError && <Alert tono="error">{mensajeDeError(partidos.error)}</Alert>}
-      {lista.length > 0 && (
-        <Select
-          etiqueta="Partido"
-          value={partidoId ?? ""}
-          onChange={(e) => setElegido(Number(e.target.value))}
-          data-testid="asistencia-partido"
-        >
-          {lista.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.rival} · {new Date(p.fecha_hora).toLocaleDateString("es")}
-              {p.estado === "EN_CURSO" ? " · en curso" : ""}
-            </option>
-          ))}
-        </Select>
-      )}
-      {!partidos.isLoading && lista.length === 0 && !partidos.isError && (
-        <p>No hay partidos registrados.</p>
-      )}
-      {partidoId !== null && <RecomendacionesEnVivo key={partidoId} partidoId={partidoId} />}
-    </div>
   );
 }

@@ -4,13 +4,18 @@
  * Endpoints bajo /api/asistencia. Usar hooks de TanStack Query, no fetch suelto
  * dentro de los componentes.
  */
-import { api } from "@/shared/api/client";
-import type { Recomendacion, ReglaTactica } from "./types";
-
-import type { OpcionValoracion, Recomendacion, Valoracion } from "./types";
 import type { Partido } from "@/features/deportivo";
+import { api } from "@/shared/api/client";
 
-import type { Regla, ReglaCrear, ReglaEditar, ResultadoPrueba } from "./types";
+import type {
+  OpcionValoracion,
+  Recomendacion,
+  Regla,
+  ReglaCrear,
+  ReglaEditar,
+  ResultadoPrueba,
+  Valoracion,
+} from "./types";
 
 export async function ping() {
   const { data } = await api.get("/asistencia/ping");
@@ -53,6 +58,9 @@ export async function valorarRecomendacion(
     `/asistencia/recomendaciones/${recomendacionId}/valorar`,
     cuerpoValoracion(opcion, comentario),
   );
+  return data;
+}
+
 // ---------- CU-54 Catálogo de reglas (T-092) ----------
 
 /** Reglas globales y propias del club; `activa` es la activación para el club. */

@@ -19,12 +19,14 @@ class RecomendacionesPagina extends StatefulWidget {
   const RecomendacionesPagina({
     super.key,
     required this.partidoId,
+    this.integrada = false,
     this.api = const RecomendacionesApi(),
     this.crearFuente,
     this.ahora,
   });
 
   final int partidoId;
+  final bool integrada;
   final RecomendacionesApi api;
   final FuenteVivo Function()? crearFuente;
   final DateTime Function()? ahora;
@@ -67,6 +69,36 @@ class _RecomendacionesPaginaState extends State<RecomendacionesPagina> {
     builder: (context, _) {
       final e = _estado;
       final sinConexion = e.sinConexion;
+      final actualizar = IconButton(
+        tooltip: 'Actualizar',
+        icon: const Icon(Icons.refresh),
+        color: widget.integrada && sinConexion ? Colors.black : null,
+        onPressed: () => e.recargar(),
+      );
+      if (widget.integrada) {
+        return Column(
+          children: [
+            Material(
+              color: sinConexion ? ambar : Colors.transparent,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Row(
+                  children: [
+                    if (sinConexion)
+                      Expanded(
+                        child: _AvisoSinConexion(hora: e.ultimaActualizacion),
+                      )
+                    else
+                      const Spacer(),
+                    actualizar,
+                  ],
+                ),
+              ),
+            ),
+            Expanded(child: _cuerpo(context, e)),
+          ],
+        );
+      }
       return Scaffold(
         appBar: AppBar(
           backgroundColor: sinConexion ? ambar : null,
@@ -79,13 +111,7 @@ class _RecomendacionesPaginaState extends State<RecomendacionesPagina> {
           title: sinConexion
               ? _AvisoSinConexion(hora: e.ultimaActualizacion)
               : const Text('Recomendaciones'),
-          actions: [
-            IconButton(
-              tooltip: 'Actualizar',
-              icon: const Icon(Icons.refresh),
-              onPressed: () => e.recargar(),
-            ),
-          ],
+          actions: [actualizar],
         ),
         body: SafeArea(child: _cuerpo(context, e)),
       );

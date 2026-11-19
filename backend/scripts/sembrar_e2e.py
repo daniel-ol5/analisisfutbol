@@ -31,29 +31,29 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-import cv2  # noqa: E402
-import numpy as np  # noqa: E402
-from sqlalchemy import select  # noqa: E402
+import cv2
+import numpy as np
+from sqlalchemy import select
 
-from app.core.config import settings  # noqa: E402
-from app.core.database import SessionLocal  # noqa: E402
-from app.core.security import hashear  # noqa: E402
-from app.deportivo.models import (  # noqa: E402
+from app.core.config import settings
+from app.core.database import SessionLocal
+from app.core.security import hashear
+from app.deportivo.models import (
     Alineacion,
     AlineacionJugador,
     Equipo,
     Jugador,
     Partido,
 )
-from app.seguridad.models import Club, Rol, Usuario  # noqa: E402
-from app.vision.models import Calibracion  # noqa: E402
+from app.seguridad.models import Club, Rol, Usuario
+from app.vision.models import Calibracion
 
 NOMBRE_CLUB = "Club E2E"
 EMAIL = os.environ.get("E2E_EMAIL", "admin.e2e@clubprueba.com")
 # Cuenta de una base desechable de pruebas: no es una credencial real.
 PASSWORD = os.environ.get("E2E_PASSWORD", "solo-pruebas-e2e-2026")
 
-# Ocho referencias reales de una cancha de 105 × 68 y su imagen (homografía exacta).
+# Ocho referencias reales de una cancha de 105 por 68 y su imagen (homografía exacta).
 _CANCHA = [(0, 0), (105, 0), (105, 68), (0, 68), (52.5, 0), (52.5, 68), (16.5, 13.84), (88.5, 54.16)]
 
 
