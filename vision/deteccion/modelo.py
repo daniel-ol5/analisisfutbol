@@ -40,19 +40,42 @@ CLASES_PROPIO: dict[int, Clase] = {0: Clase.JUGADOR, 1: Clase.ARBITRO, 2: Clase.
 CLASES_FUTBOL: dict[int, Clase] = {0: Clase.BALON, 1: Clase.PORTERO, 2: Clase.JUGADOR, 3: Clase.ARBITRO}
 
 
+def _normalizar_etiqueta(texto: Any) -> str:
+    nombre = str(texto).lower().replace("_", " ").strip()
+    return "".join(c for c in unicodedata.normalize("NFD", nombre) if not unicodedata.combining(c))
+
+
+_ALIAS_CLASES: dict[Clase, set[str]] = {
+    Clase.JUGADOR: {"person", "player", "jugador"},
+    Clase.PORTERO: {"goalkeeper", "goalie", "portero", "arquero"},
+    Clase.ARBITRO: {"referee", "arbitro"},
+    Clase.BALON: {"ball", "sports ball", "balon", "pelota"},
+}
+
+
+def inferir_clases(nombres: dict[int, str] | list[str]) -> dict[int, Clase]:
+    """Deduce el mapa de clases del proyecto a partir de `modelo.names`."""
+    mapa_nombres = dict(enumerate(nombres)) if isinstance(nombres, list) else nombres
+    resultado: dict[int, Clase] = {}
+    for indice, etiqueta in mapa_nombres.items():
+        norm = _normalizar_etiqueta(etiqueta)
+        for clase, alias in _ALIAS_CLASES.items():
+            if norm in alias:
+                resultado[int(indice)] = clase
+                break
+    if Clase.JUGADOR not in resultado.values():
+        raise ValueError(
+            f"No se pudo inferir una clase de jugador desde las etiquetas del modelo: {mapa_nombres}"
+        )
+    return resultado
+
+
 def validar_clases(nombres: dict[int, str] | list[str], clases: dict[int, Clase]) -> None:
     """Impide interpretar etiquetas de otro checkpoint como jugadores o balón."""
-    alias = {
-        Clase.JUGADOR: {"person", "player", "jugador"},
-        Clase.PORTERO: {"goalkeeper", "goalie", "portero", "arquero"},
-        Clase.ARBITRO: {"referee", "arbitro"},
-        Clase.BALON: {"ball", "sports ball", "balon", "pelota"},
-    }
     nombres = dict(enumerate(nombres)) if isinstance(nombres, list) else nombres
     for indice, clase in clases.items():
-        nombre = str(nombres.get(indice, "")).lower().replace("_", " ").strip()
-        nombre = "".join(c for c in unicodedata.normalize("NFD", nombre) if not unicodedata.combining(c))
-        if nombre not in alias[clase]:
+        nombre = _normalizar_etiqueta(nombres.get(indice, ""))
+        if nombre not in _ALIAS_CLASES[clase]:
             raise ValueError(
                 f"Modelo incompatible: clase {indice} es {nombre!r}, se esperaba {clase.value}. "
                 "Selecciona el mapa de clases correspondiente a estos pesos."
@@ -68,9 +91,10 @@ class ConfigModelo:
     iou_nms: float = 0.45
     mitad_precision: bool = False
     clases: dict[int, Clase] = field(default_factory=dict)
+    auto_clases: bool = False
 
     def __post_init__(self) -> None:
-        if not self.clases:
+        if not self.clases and not self.auto_clases:
             if "futbol" in str(self.ruta_pesos).lower():
                 self.clases = dict(CLASES_FUTBOL)
             else:
@@ -128,6 +152,8 @@ class ModeloDeteccion:
         from ultralytics import YOLO  # importa torch: solo en la maquina con GPU
 
         modelo = YOLO(self.config.ruta_pesos)
+        if not self.config.clases:
+            self.config.clases = inferir_clases(modelo.names)
         validar_clases(modelo.names, self.config.clases)
         modelo.add_callback("on_predict_postprocess_end", self._guardar_resultado_previo)
         modelo.add_callback("on_predict_batch_end", self._adjuntar_cajas_originales)

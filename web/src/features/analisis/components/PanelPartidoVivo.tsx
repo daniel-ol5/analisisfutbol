@@ -218,14 +218,18 @@ export function PanelPartidoVivo() {
               <div className="analisis-radar-cabecera">
                 <h3>Plano de cancha</h3>
                 <span>
-                  {activo
+                  {calidad?.calibracion_valida === false
+                    ? "Buscando referencia de cancha"
+                    : activo
                     ? `${calidad?.jugadores_detectados ?? 0} jugadores visibles`
                     : "Esperando datos"}
                 </span>
               </div>
               <Plano2DCancha
-                jugadores={activo?.jugadores ?? []}
-                balon={activo?.balon}
+                jugadores={calidad?.calibracion_valida === false ? [] : activo?.jugadores ?? []}
+                balon={calidad?.calibracion_valida === false ? null : activo?.balon}
+                arqueros={activo?.detecciones?.filter(d => d.clase === "PORTERO" &&
+                  activo.jugadores.some(j => j.tid === d.tid)).map(d => d.tid)}
                 configuracion={config}
                 nombreLocal={nombreLocal}
                 nombreVisitante={nombreVisitante}

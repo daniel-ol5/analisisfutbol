@@ -224,6 +224,38 @@ async def test_flujo_completo_con_las_mismas_entidades_que_en_vivo(cliente, posi
     assert posiciones.vaciados == 2  # cada lote se guarda entero
 
 
+async def test_el_visor_recibe_lotes_del_video_actual_sin_cargar_otra_grabacion(
+    cliente, mp4, tmp_path, monkeypatch,
+):
+    monkeypatch.setattr(procesamiento.settings, "videos_dir", str(tmp_path / "videos"))
+    club = await _club(cliente, "previsualizacion")
+    video = await _video_subido(cliente, club, mp4)
+    ruta = f"/api/vision/videos/{video['id']}/muestras"
+    muestra_vieja = MensajeWorker.model_validate(_muestra(club["partido_id"], 1.8))
+    procesamiento.guardar_muestras_partido(club["partido_id"], [muestra_vieja])
+    assert (await _lanzar(cliente, club, video)).status_code == 200
+    assert (await cliente.get(ruta, headers=club["auth"])).json() == []
+    assert (await _tomar(cliente, club["auth"])).status_code == 200
+    assert (await cliente.get(ruta, headers=club["auth"])).json() == []
+
+    for t, progreso in ((0, 20), (0.2, 50)):
+        r = await _lote(cliente, club, video, progreso, [_muestra(club["partido_id"], t)])
+        assert r.status_code == 200, r.text
+    lote = await cliente.get(ruta, params={"despues_de": 0}, headers=club["auth"])
+    assert [m["t"] for m in lote.json()] == [0.2]
+
+    fin = await cliente.post(f"/api/vision/videos/{video['id']}/terminar",
+                             headers=club["auth"], json={"ok": True})
+    assert fin.status_code == 200, fin.text
+    assert (await _lanzar(cliente, club, video)).status_code == 200
+    assert (await _tomar(cliente, club["auth"])).status_code == 200
+    assert (await cliente.get(ruta, headers=club["auth"])).json() == []
+    r = await _lote(cliente, club, video, 10, [_muestra(club["partido_id"], 0)])
+    assert r.status_code == 200, r.text
+    assert [m["t"] for m in (await cliente.get(ruta, headers=club["auth"])).json()] == [0]
+
+
+
 async def test_la_ingesta_en_vivo_usa_el_mismo_almacen():
     # Si alguien cambia el almacén de la ingesta, el procesamiento debe cambiar con él.
     from app.partido import router as partido_router

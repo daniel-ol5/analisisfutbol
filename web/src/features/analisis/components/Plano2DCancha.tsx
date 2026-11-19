@@ -19,6 +19,7 @@ import type {
 
 interface Props {
   jugadores?: PosicionDetectada[];
+  arqueros?: number[];
   balon?: PosicionDetectada | null;
   estelaBalon?: PuntoTrayectoria[];
   configuracion?: Partial<ConfiguracionPlano2D>;
@@ -101,6 +102,7 @@ function obtenerColorEquipo(
 
 export const Plano2DCancha = memo(function Plano2DCancha({
   jugadores = [],
+  arqueros = [],
   balon = null,
   estelaBalon = [],
   configuracion = {},
@@ -262,6 +264,7 @@ export const Plano2DCancha = memo(function Plano2DCancha({
           const px = transformarX(j.x);
           const py = transformarY(j.y);
           const esSeleccionado = jugadorSeleccionado?.tid === j.tid;
+          const esArquero = j.equipo !== "ARBITRO" && arqueros.includes(j.tid);
 
           const etiqueta =
             mostrarEtiquetas === "dorsal"
@@ -298,15 +301,11 @@ export const Plano2DCancha = memo(function Plano2DCancha({
                 />
               )}
 
-              {/* Ficha circular del jugador (radio 1.55 m) */}
-              <circle
-                cx={0}
-                cy={0}
-                r="1.55"
-                fill={col.relleno}
-                stroke={col.borde}
-                strokeWidth={altoContraste ? "0.45" : "0.35"}
-              />
+              {esArquero
+                ? <rect x="-1.55" y="-1.55" width="3.1" height="3.1" rx=".35"
+                    fill={col.relleno} stroke={col.borde} strokeWidth=".45" />
+                : <circle r="1.55" fill={col.relleno} stroke={col.borde}
+                    strokeWidth={altoContraste ? "0.45" : "0.35"} />}
 
               {/* Etiqueta / Número */}
               {etiqueta && (
@@ -325,7 +324,7 @@ export const Plano2DCancha = memo(function Plano2DCancha({
               )}
 
               <title>
-                {`Jugador ${j.tid} (${j.equipo})\n` +
+                {`${esArquero ? "Arquero" : j.equipo === "ARBITRO" ? "Árbitro" : "Jugador"} ${j.tid} (${j.equipo})\n` +
                   `Dorsal: ${j.dorsal ?? "Sin asignar"}\n` +
                   `Posición: (${j.x.toFixed(1)} m, ${j.y.toFixed(1)} m)\n` +
                   `Confianza: ${(j.conf * 100).toFixed(0)}%`}
@@ -415,6 +414,10 @@ export const Plano2DCancha = memo(function Plano2DCancha({
             <span className="plano-leyenda-color plano-leyenda-balon" />
             Balón
           </span>
+          {arqueros.length > 0 && <span className="plano-leyenda-item">
+            <span className="plano-leyenda-color" style={{ borderRadius: 2, backgroundColor: "#64748b" }} />
+            Arquero
+          </span>}
         </div>
 
         <div className="plano-orientacion-nota">

@@ -127,8 +127,8 @@ export async function listarVideos(partidoId: number): Promise<Video[]> {
 }
 
 /** CU-27, CU-28 · Estado de la carga y del procesamiento. */
-export async function verVideo(videoId: number): Promise<Video> {
-  const { data } = await api.get<Video>(`/vision/videos/${videoId}`);
+export async function verVideo(videoId: number, signal?: AbortSignal): Promise<Video> {
+  const { data } = await api.get<Video>(`/vision/videos/${videoId}`, { signal });
   return data;
 }
 
@@ -259,8 +259,10 @@ export async function pausarTransmisionVivoPartido(
 }
 
 /** CU-24, CU-40, CU-41 · Descargar telemetría persistida del video para sincronización directa sin retardo. */
-export async function obtenerMuestrasVideo(videoId: number, signal?: AbortSignal): Promise<MensajeWorker[]> {
-  const { data } = await api.get<MensajeWorker[]>(`/vision/videos/${videoId}/muestras`, { signal });
+export async function obtenerMuestrasVideo(videoId: number, signal?: AbortSignal, despuesDe?: number): Promise<MensajeWorker[]> {
+  const { data } = await api.get<MensajeWorker[]>(`/vision/videos/${videoId}/muestras`, {
+    signal, params: { despues_de: despuesDe },
+  });
   return data;
 }
 

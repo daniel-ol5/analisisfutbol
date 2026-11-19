@@ -26,7 +26,7 @@ from seguimiento.gmc import CompensadorMovimientoCamara
 
 from calibracion.homografia import cargar_homografia
 from calibracion.referencias import BancoReferencias
-from calibracion.terreno import refinar_con_lineas
+from calibracion.terreno import ajustar_mediocampo, refinar_con_lineas
 
 log = logging.getLogger("calibracion.dinamica")
 
@@ -182,6 +182,28 @@ class EstimadorHomografiaPitch:
                 "Checkpoint de cancha incompatible: se requieren 32 marcas con el orden documentado"
             )
 
+        resultado = self._estimar_por_marcas(cuadro, kpts, confs, conf_minima, min_puntos,
+                                             umbral_ransac_m, max_error_admisible_m)
+        if resultado.es_valida:
+            return resultado
+        indices = [13, 14, 15, 16, 30, 31]
+        puntos = kpts[indices].astype(np.float64)
+        if (min_puntos > len(indices) or not np.isfinite(puntos).all() or not np.all(confs[indices] >= max(.8, conf_minima))
+                or np.any(puntos <= 0) or puntos[4, 0] >= puntos[5, 0]):
+            return resultado
+        campo = np.array([self.keypoints_metricos[i] for i in indices], dtype=np.float64)
+        h, error = ajustar_mediocampo(cuadro, puntos, campo, self.largo_m, self.ancho_m)
+        if h is None:
+            return resultado
+        proyectados = cv2.perspectiveTransform(puntos[:4].reshape(-1, 1, 2), h).reshape(-1, 2)
+        error_m = float(np.mean(np.linalg.norm(proyectados - campo[:4], axis=1)))
+        if error_m > max_error_admisible_m:
+            return resultado
+        self.error_lineas_px = error
+        return ResultadoEstimacion(h, 6, 4, error_m, True, puntos[:4].tolist(), campo[:4].tolist(), error)
+
+    def _estimar_por_marcas(self, cuadro, kpts, confs, conf_minima, min_puntos,
+                            umbral_ransac_m, max_error_admisible_m):
         src_pts: list[list[float]] = []
         dst_pts: list[tuple[float, float]] = []
 
@@ -273,6 +295,7 @@ class RastreadorHomografiaDinamica:
     max_sin_anclaje_s: float = 5.0
     _anterior_t: float | None = None
     _ultimo_intento_t: float = -100.0
+    _ultimo_intento_banco_t: float = -100.0
     banco: BancoReferencias = field(default_factory=BancoReferencias)
     metodo: str | None = None
 
@@ -284,6 +307,7 @@ class RastreadorHomografiaDinamica:
         self.estado = "VERIFICADA" if self.valida else "SIN_REFERENCIA"
         self.ultimo_anclaje_t = None
         self._anterior_t = None
+        self._ultimo_intento_t = self._ultimo_intento_banco_t = -100.0
         self.gmc.reiniciar()
         self.banco = BancoReferencias()
 
@@ -342,8 +366,8 @@ class RastreadorHomografiaDinamica:
             )
         ))
 
-        if t - self._ultimo_intento_t >= 1.0 and self.banco.referencias:
-            self._ultimo_intento_t = t
+        if t - self._ultimo_intento_banco_t >= 1.0 and self.banco.referencias:
+            self._ultimo_intento_banco_t = t
             recuperada = self.banco.recuperar(cuadro, cajas_excluidas or ())
             if recuperada is not None:
                 self._homografia_anclada = cargar_homografia(recuperada[0])

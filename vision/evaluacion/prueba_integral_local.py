@@ -37,7 +37,7 @@ def ejecutar(video: Path, salida: Path):
     # Aislar también los JSON de resultados de las rutas históricas de compatibilidad.
     procesamiento._ruta_muestras_video = lambda i: salida / "muestras" / f"video-{i}.json"
     procesamiento._ruta_muestras_partido = lambda i: salida / "muestras" / f"partido-{i}.json"
-    procesamiento.guardar_muestras_video = lambda i, m: procesamiento._guardar_muestras_archivo(procesamiento._ruta_muestras_video(i), m)
+    procesamiento.guardar_muestras_video = lambda i, m, **kw: procesamiento._guardar_muestras_archivo(procesamiento._ruta_muestras_video(i), m, **kw)
     procesamiento.guardar_muestras_partido = lambda i, m: procesamiento._guardar_muestras_archivo(procesamiento._ruta_muestras_partido(i), m)
     original = app.router.lifespan_context
 

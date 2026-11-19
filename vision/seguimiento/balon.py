@@ -45,7 +45,7 @@ class RastreadorBalon:
     def __init__(
         self,
         max_cuadros_perdido: int = 10,
-        distancia_max_asociacion_px: float = 120.0,
+        distancia_max_asociacion_px: float = 160.0,
         tamano_estela: int = 8,
     ) -> None:
         self.max_cuadros_perdido = max_cuadros_perdido
@@ -116,12 +116,20 @@ class RastreadorBalon:
             pred_x += vx
             pred_y += vy
 
-        # 3. Recopilar candidatos (YOLO + Detector morfológico de campo)
+        # 3. Recopilar candidatos (YOLO + apoyo morfológico acotado solo tras detección reciente)
         candidatos = self._extraer_candidatos_yolo(detecciones_yolo)
 
-        # Si no hay detección clara de YOLO, buscamos candidatos visuales en el campo
-        if not candidatos or max(c.confianza for c in candidatos) < 0.45:
-            candidatos_campo = self._extraer_candidatos_campo(cuadro_bgr, pred_x, pred_y)
+        # Solo buscar apoyo visual si YOLO no lo vio, ya tenemos trayectoria reciente (<= 3 cuadros)
+        # y sin engancharse nunca a medias/botines blancos de jugadores.
+        if (
+            not candidatos
+            and pred_x is not None
+            and pred_y is not None
+            and self._cuadros_sin_deteccion <= 3
+        ):
+            candidatos_campo = self._extraer_candidatos_campo(
+                cuadro_bgr, pred_x, pred_y, cajas_jugadores
+            )
             candidatos.extend(candidatos_campo)
 
         # 4. Asociar mejor candidato
@@ -190,23 +198,20 @@ class RastreadorBalon:
         cuadro_bgr: np.ndarray,
         pred_x: float | None,
         pred_y: float | None,
+        cajas_jugadores: Sequence[tuple[float, float, float, float]] = (),
     ) -> list[CandidatoBalon]:
-        """Detecta pequeños objetos brillantes y circulares en el área verde del césped."""
-        alto, ancho = cuadro_bgr.shape[:2]
+        """Detecta pequeños objetos brillantes y circulares cerca de la predicción reciente."""
+        if pred_x is None or pred_y is None:
+            return []
 
-        # Si tenemos predicción cinemática previa, acotamos la búsqueda a una ROI
-        if pred_x is not None and pred_y is not None:
-            radio_busqueda = int(self.distancia_max_asociacion_px * 1.5)
-            x_min = max(0, int(pred_x - radio_busqueda))
-            x_max = min(ancho, int(pred_x + radio_busqueda))
-            y_min = max(0, int(pred_y - radio_busqueda))
-            y_max = min(alto, int(pred_y + radio_busqueda))
-            roi = cuadro_bgr[y_min:y_max, x_min:x_max]
-            offset_x, offset_y = x_min, y_min
-        else:
-            # Buscar en toda la mitad inferior del campo (zona de césped habitual)
-            roi = cuadro_bgr[int(alto * 0.15) : int(alto * 0.95), :]
-            offset_x, offset_y = 0, int(alto * 0.15)
+        alto, ancho = cuadro_bgr.shape[:2]
+        radio_busqueda = min(65, int(self.distancia_max_asociacion_px * 0.5))
+        x_min = max(0, int(pred_x - radio_busqueda))
+        x_max = min(ancho, int(pred_x + radio_busqueda))
+        y_min = max(0, int(pred_y - radio_busqueda))
+        y_max = min(alto, int(pred_y + radio_busqueda))
+        roi = cuadro_bgr[y_min:y_max, x_min:x_max]
+        offset_x, offset_y = x_min, y_min
 
         if roi.size == 0:
             return []
@@ -222,7 +227,7 @@ class RastreadorBalon:
         # Canal V (brillo) alto y saturación baja/moderada (balón blanco o claro)
         v = hsv[:, :, 2]
         s = hsv[:, :, 1]
-        candidatos_mask = (v > 175) & (s < 140) & (cesped_dilatado > 0)
+        candidatos_mask = (v > 185) & (s < 120) & (cesped_dilatado > 0)
         candidatos_mask = (candidatos_mask.astype(np.uint8)) * 255
 
         # Componentes conectados
@@ -236,21 +241,28 @@ class RastreadorBalon:
             w = stats[i, cv2.CC_STAT_WIDTH]
             h = stats[i, cv2.CC_STAT_HEIGHT]
 
-            # En 1080p el balón mide típicamente entre 5 y 22 píxeles de diámetro
-            if not (12 <= area <= 400 and 4 <= w <= 25 and 4 <= h <= 25):
+            # En 720p/1080p el balón mide típicamente entre 4 y 22 píxeles de diámetro
+            if not (12 <= area <= 350 and 4 <= w <= 24 and 4 <= h <= 24):
                 continue
 
             relacion_aspecto = float(w) / float(h)
-            if not (0.55 <= relacion_aspecto <= 1.8):
+            if not (0.65 <= relacion_aspecto <= 1.55):
                 continue  # Descartar líneas largas del campo
 
             cx = float(centroids[i][0]) + offset_x
             cy = float(centroids[i][1]) + offset_y
-            radio = (w + h) / 4.0
 
-            # Confianza basada en circularidad
+            # Evitar falsos positivos sobre medias/botines blancos dentro de cajas de jugadores
+            en_pies_jugador = any(
+                x1 <= cx <= x2 and (y1 + 0.65 * (y2 - y1)) <= cy <= y2
+                for x1, y1, x2, y2 in cajas_jugadores
+            )
+            if en_pies_jugador:
+                continue
+
+            radio = (w + h) / 4.0
             circularidad = 1.0 - abs(1.0 - relacion_aspecto)
-            conf = float(np.clip(0.35 + 0.3 * circularidad, 0.0, 0.8))
+            conf = float(np.clip(0.30 + 0.25 * circularidad, 0.0, 0.65))
             candidatos.append(CandidatoBalon(cx, cy, radio, conf, "campo"))
 
         return candidatos
@@ -264,27 +276,31 @@ class RastreadorBalon:
         if not candidatos:
             return None
 
+        yolo_cands = [c for c in candidatos if c.fuente == "yolo"]
         if pred_x is None or pred_y is None:
-            # Sin predicción previa: tomar el de mayor confianza (preferencia YOLO)
-            yolo_cands = [c for c in candidatos if c.fuente == "yolo"]
+            # Sin predicción previa: solo iniciar desde detección confirmada de YOLO
             if yolo_cands:
                 return max(yolo_cands, key=lambda c: c.confianza)
-            return max(candidatos, key=lambda c: c.confianza)
+            return None
 
         # Con predicción: buscar candidato más cercano dentro del radio máximo
         candidatos_validos: list[tuple[float, CandidatoBalon]] = []
         for c in candidatos:
             dist = math.hypot(c.x - pred_x, c.y - pred_y)
             if dist <= self.distancia_max_asociacion_px:
-                # Puntuación combinada: cercanía a la predicción + confianza
-                # Peso extra para detecciones del modelo YOLO
-                bonus_yolo = 0.3 if c.fuente == "yolo" else 0.0
-                score = (1.0 - dist / self.distancia_max_asociacion_px) * 0.7 + (c.confianza + bonus_yolo) * 0.3
+                bonus_yolo = 0.35 if c.fuente == "yolo" else 0.0
+                score = (1.0 - dist / self.distancia_max_asociacion_px) * 0.65 + (c.confianza + bonus_yolo) * 0.35
                 candidatos_validos.append((score, c))
 
-        if not candidatos_validos:
-            return None
+        if candidatos_validos:
+            candidatos_validos.sort(key=lambda item: item[0], reverse=True)
+            return candidatos_validos[0][1]
 
-        candidatos_validos.sort(key=lambda item: item[0], reverse=True)
-        return candidatos_validos[0][1]
+        # Re-adquisición inmediata si un pelotazo largo supera el radio pero YOLO ve
+        # el balón con confianza clara (evita esperar 10 cuadros de pérdida).
+        if yolo_cands:
+            mejor_yolo = max(yolo_cands, key=lambda c: c.confianza)
+            if mejor_yolo.confianza >= 0.40:
+                return mejor_yolo
+        return None
 

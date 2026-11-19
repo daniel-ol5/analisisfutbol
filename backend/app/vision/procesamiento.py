@@ -22,6 +22,7 @@ import sys
 import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 from typing import Any
 
 import cv2
@@ -270,7 +271,7 @@ async def recibir_resultados(
     # Guardar en disco para que el reproductor y el radar 2D puedan sincronizarlo
     if lote.muestras:
         guardar_muestras_partido(video.partido_id, lote.muestras)
-        guardar_muestras_video(video.id, lote.muestras)
+        guardar_muestras_video(video.id, lote.muestras, desde=video.iniciado_en)
         hub = obtener_hub()
         canal = canal_partido(usuario.club_id, video.partido_id)
         ultima = lote.muestras[-1]
@@ -377,15 +378,27 @@ _TRANSMISIONES_ACTIVAS: dict[int, asyncio.Task[None]] = {}
 _ULTIMA_MUESTRA_PARTIDO: dict[int, MensajeWorker] = {}
 
 
-def _guardar_muestras_archivo(ruta: Path, muestras: list[MensajeWorker]) -> None:
+def _leer_muestras_archivo(ruta: Path, desde: datetime | None = None) -> list[dict[str, Any]]:
+    try:
+        with ruta.open(encoding="utf-8") as archivo:
+            if desde is not None:
+                inicio = desde if desde.tzinfo is not None else desde.replace(tzinfo=UTC)
+                if os.fstat(archivo.fileno()).st_mtime < inicio.timestamp():
+                    return []
+            return json.load(archivo)
+    except FileNotFoundError:
+        return []
+
+
+def _guardar_muestras_archivo(
+    ruta: Path, muestras: list[MensajeWorker], *, desde: datetime | None = None,
+) -> None:
     ruta.parent.mkdir(parents=True, exist_ok=True)
     existentes: list[dict[str, object]] = []
-    if ruta.exists():
-        try:
-            with open(ruta, encoding="utf-8") as f:
-                existentes = json.load(f)
-        except Exception:
-            existentes = []
+    try:
+        existentes = _leer_muestras_archivo(ruta, desde)
+    except (OSError, ValueError):
+        log.exception("No se pudieron recuperar las muestras anteriores de %s", ruta.name)
     existentes.extend(m.model_dump(mode="json") for m in muestras)
     vistos: set[float] = set()
     unicas: list[dict[str, object]] = []
@@ -395,8 +408,16 @@ def _guardar_muestras_archivo(ruta: Path, muestras: list[MensajeWorker]) -> None
             vistos.add(t_val)
             unicas.append(d)
     unicas.sort(key=lambda x: float(x.get("t", 0.0)))
-    with open(ruta, "w", encoding="utf-8") as f:
-        json.dump(unicas, f)
+    # El visor puede leer un lote mientras el worker publica el siguiente.
+    ruta_temporal: Path | None = None
+    try:
+        with NamedTemporaryFile(mode="w", encoding="utf-8", dir=ruta.parent, delete=False) as temporal:
+            ruta_temporal = Path(temporal.name)
+            json.dump(unicas, temporal)
+        ruta_temporal.replace(ruta)
+    finally:
+        if ruta_temporal is not None:
+            ruta_temporal.unlink(missing_ok=True)
 
 
 def _ruta_muestras_partido(partido_id: int) -> Path:
@@ -435,23 +456,26 @@ def guardar_muestras_partido(partido_id: int, muestras: list[MensajeWorker]) -> 
             _guardar_muestras_archivo(otra_raiz / f"partido-{partido_id}.json", muestras)
 
 
-def guardar_muestras_video(video_id: int, muestras: list[MensajeWorker]) -> None:
+def guardar_muestras_video(
+    video_id: int, muestras: list[MensajeWorker], *, desde: datetime | None = None,
+) -> None:
     """Persiste en disco las muestras del video procesado."""
-    _guardar_muestras_archivo(_ruta_muestras_video(video_id), muestras)
+    _guardar_muestras_archivo(_ruta_muestras_video(video_id), muestras, desde=desde)
     for otra_raiz in [Path("almacen/muestras"), Path("backend/almacen/muestras")]:
         if otra_raiz.exists():
-            _guardar_muestras_archivo(otra_raiz / f"video-{video_id}.json", muestras)
+            _guardar_muestras_archivo(otra_raiz / f"video-{video_id}.json", muestras, desde=desde)
 
 
-def cargar_muestras_video(video_id: int) -> list[MensajeWorker]:
+def cargar_muestras_video(
+    video_id: int, *, desde: datetime | None = None, despues_de: float | None = None,
+) -> list[MensajeWorker]:
     """Recupera las muestras reales detectadas para un video específico."""
-    ruta = _ruta_muestras_video(video_id)
-    if not ruta.exists():
-        return []
     try:
-        with open(ruta, encoding="utf-8") as f:
-            datos = json.load(f)
-        return [MensajeWorker.model_validate(d) for d in datos]
+        datos = _leer_muestras_archivo(_ruta_muestras_video(video_id), desde)
+        return [
+            MensajeWorker.model_validate(d) for d in datos
+            if despues_de is None or d["t"] > despues_de
+        ]
     except Exception:
         log.exception("Error cargando muestras persistidas para video %s", video_id)
         return []
@@ -460,9 +484,7 @@ def cargar_muestras_video(video_id: int) -> list[MensajeWorker]:
 def cargar_muestras_partido(partido_id: int, video_id: int | None = None) -> list[MensajeWorker]:
     """Recupera las muestras reales detectadas para el partido o video."""
     if video_id is not None:
-        muestras_vid = cargar_muestras_video(video_id)
-        if muestras_vid:
-            return muestras_vid
+        return cargar_muestras_video(video_id)
     ruta = _ruta_muestras_partido(partido_id)
     if not ruta.exists():
         return []

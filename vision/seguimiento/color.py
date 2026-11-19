@@ -70,6 +70,11 @@ def es_color_cesped(color: np.ndarray) -> bool:
     return bool(color[1] < -0.12 and color[2] > 0.16)
 
 
+def es_prototipo_verde(color: np.ndarray) -> bool:
+    """Detecta si el color de camiseta registrado de un equipo es verde."""
+    return bool(color[1] < -0.10 and color[2] > 0.03)
+
+
 def descartar_cesped(recorte_bgr: np.ndarray) -> np.ndarray:
     """Máscara booleana del mismo alto x ancho: `True` donde NO es césped."""
     hsv = cv2.cvtColor(recorte_bgr, cv2.COLOR_BGR2HSV)
@@ -77,25 +82,41 @@ def descartar_cesped(recorte_bgr: np.ndarray) -> np.ndarray:
     return ~es_cesped
 
 
-def color_dominante(recorte_bgr: np.ndarray) -> np.ndarray:
+def color_dominante(recorte_bgr: np.ndarray, excluir_cesped: bool = True) -> np.ndarray:
     """Vector `[L, a, b]` normalizado en espacio CIELAB del color dominante.
 
     L en [0, 1] mide luminosidad (blanco vs negro).
     a en [-1, 1] mide verde-rojo.
     b en [-1, 1] mide azul-amarillo.
-    Si todo el recorte es césped se usa el recorte completo sin máscara.
+    Usa mediana por canal para resistir piel, dorsales o sombras en torsos pequeños.
+    Cuando `excluir_cesped=False` (ej. un equipo viste de verde), toma el centro
+    del torso sin eliminar los píxeles verdes.
     """
     if recorte_bgr.size == 0:
         raise RecorteVacio("No se puede calcular el color de un recorte vacio")
 
-    lab = cv2.cvtColor(recorte_bgr, cv2.COLOR_BGR2LAB).reshape(-1, 3).astype(np.float64)
-    mascara = descartar_cesped(recorte_bgr).reshape(-1)
-    pixeles = lab[mascara] if mascara.any() else lab
+    recorte = recorte_bgr
+    if not excluir_cesped and recorte.shape[0] >= 5 and recorte.shape[1] >= 5:
+        h, w = recorte.shape[:2]
+        centro = recorte[h // 5 : h - h // 5, w // 5 : w - w // 5]
+        if centro.size > 0:
+            recorte = centro
+
+    lab = cv2.cvtColor(recorte, cv2.COLOR_BGR2LAB).reshape(-1, 3).astype(np.float64)
+    if excluir_cesped:
+        mascara = descartar_cesped(recorte).reshape(-1)
+        pixeles = lab[mascara] if mascara.any() else lab
+    else:
+        pixeles = lab
 
     l_norm = pixeles[:, 0] / 255.0
     a_norm = (pixeles[:, 1] - 128.0) / 128.0
     b_norm = (pixeles[:, 2] - 128.0) / 128.0
-    return np.array([float(l_norm.mean()), float(a_norm.mean()), float(b_norm.mean())])
+    return np.array([
+        float(np.median(l_norm)),
+        float(np.median(a_norm)),
+        float(np.median(b_norm)),
+    ])
 
 
 def agrupar_equipos(colores: Sequence[np.ndarray], k: int = 2) -> np.ndarray:
@@ -140,12 +161,21 @@ def _confianza(distancia: float, escala: float) -> float:
     return float(np.clip(1.0 - distancia / escala, 0.0, 1.0))
 
 
-def _distancia_color_robusta(datos: np.ndarray, proto: np.ndarray) -> np.ndarray:
-    """Calcula la distancia perceptual invariante a desaturación por distancia y luz.
+_PESOS_LAB = np.array([1.15, 1.0, 1.0], dtype=np.float64)
 
-    Para colores neutros (blanco/gris/negro): penaliza si la muestra tiene color (croma).
-    Para colores cromáticos (rojo, celeste, verde): prioriza la coincidencia angular de tono
-    en el plano (a*, b*) independientemente de si la cámara desaturó la camiseta.
+
+def _distancia_lab_ponderada(datos: np.ndarray, centroide: np.ndarray) -> np.ndarray:
+    """Distancia euclidiana en CIELAB normalizado dando peso equilibrado a L*, a*, b*."""
+    diff = (datos - centroide) * _PESOS_LAB
+    return np.linalg.norm(diff, axis=1)
+
+
+def _distancia_color_robusta(datos: np.ndarray, proto: np.ndarray) -> np.ndarray:
+    """Calcula la distancia perceptual equilibrando luminosidad (L*) y tono (a*, b*).
+
+    Para colores neutros (blanco/gris/negro): combina diferencia de luminosidad y croma.
+    Para colores cromáticos (rojo, celeste, azul marino, verde): combina luminosidad
+    (clave para separar celeste vs azul oscuro) con coincidencia angular de tono.
     """
     chroma_c = np.sqrt(datos[:, 1] ** 2 + datos[:, 2] ** 2)
     chroma_p = float(np.sqrt(proto[1] ** 2 + proto[2] ** 2))
@@ -153,15 +183,16 @@ def _distancia_color_robusta(datos: np.ndarray, proto: np.ndarray) -> np.ndarray
     if chroma_p < 0.08:
         # Prototipo neutro (blanco o negro)
         dL = np.abs(datos[:, 0] - proto[0])
-        return dL * 0.45 + chroma_c * 1.6
+        return dL * 0.65 + chroma_c * 1.5
     else:
         # Prototipo cromático (color definido)
-        dL = np.abs(datos[:, 0] - proto[0]) * 0.25
+        dL = np.abs(datos[:, 0] - proto[0]) * 0.85
         denom = np.maximum(1e-4, chroma_c * chroma_p)
         dot = (datos[:, 1] * proto[1] + datos[:, 2] * proto[2]) / denom
         cos_dist = 1.0 - np.clip(dot, -1.0, 1.0)
-        deficit = np.maximum(0.0, 0.08 - chroma_c) * 1.8
-        return dL + cos_dist * 0.55 + deficit
+        d_chroma = np.abs(chroma_c - chroma_p) * 0.25
+        deficit = np.maximum(0.0, 0.06 - chroma_c) * 1.5
+        return dL + cos_dist * 0.50 + d_chroma + deficit
 
 
 def clasificar_equipos(
@@ -174,7 +205,7 @@ def clasificar_equipos(
 
     1. Compara contra árbitro (si está configurado o si la distancia mínima a ambos
        equipos supera `umbral_arbitro`).
-    2. Aplica K-means al resto de jugadores y asocia cada clúster al equipo más cercano.
+    2. Clasifica contra los prototipos registrados preservando tanto tono como claridad.
     """
     datos = np.asarray(colores, dtype=np.float64)
     if datos.size == 0:
@@ -188,20 +219,28 @@ def clasificar_equipos(
 
     cL = float(np.sqrt(vec_local[1] ** 2 + vec_local[2] ** 2))
     cV = float(np.sqrt(vec_visitante[1] ** 2 + vec_visitante[2] ** 2))
+    # Solo usar proyección cromática pura si los tonos están claramente separados (>60°).
+    # Dos tonos similares (ej. celeste vs azul marino) deben decidirse incluyendo L*.
+    tonos_distintos = cL >= 0.08 and cV >= 0.08 and (
+        float(np.dot(vec_local[1:3], vec_visitante[1:3])) < 0.50 * cL * cV
+    )
 
     dist_local = _distancia_color_robusta(datos, vec_local)
     dist_visitante = _distancia_color_robusta(datos, vec_visitante)
     dist_equipo_min = np.minimum(dist_local, dist_visitante)
+    algun_equipo_oscuro = min(vec_local[0], vec_visitante[0]) < 0.42
 
     if vec_arbitro is not None:
         dist_arbitro = _distancia_color_robusta(datos, vec_arbitro)
-        # Solo se etiqueta como árbitro si es significativamente más cercano que a los equipos
-        # y la distancia perceptual absoluta es menor al umbral (evita falsos árbitros en jugadores de campo)
         es_arbitro = (dist_arbitro < dist_equipo_min) & (dist_arbitro < 0.38)
     else:
-        # Árbitro por defecto: indumentaria oscura / negra estándar (L < 0.28)
+        # Árbitro por defecto: indumentaria muy oscura / negra si ningún equipo es oscuro
         dist_arbitro = None
-        es_arbitro = (datos[:, 0] < 0.28) & (dist_equipo_min > 0.30)
+        es_arbitro = (
+            (datos[:, 0] < 0.24) & (dist_equipo_min > 0.30)
+            if not algun_equipo_oscuro
+            else np.zeros(len(datos), dtype=bool)
+        )
 
     resultado: list[ClasificacionJugador] = []
     for i in range(len(datos)):
@@ -210,22 +249,22 @@ def clasificar_equipos(
             resultado.append(ClasificacionJugador(EquipoDetectado.ARBITRO, conf))
             continue
 
-        if dist_equipo_min[i] > 0.65:
+        if dist_equipo_min[i] > 0.80:
             resultado.append(ClasificacionJugador(EquipoDetectado.DESCONOCIDO, 0.20))
             continue
 
         ab = datos[i, 1:3]
-        if cL >= 0.08 and cV < 0.08:
+        if cL >= 0.08 and cV < 0.08 and abs(vec_local[0] - vec_visitante[0]) < 0.35:
             dir_L = vec_local[1:3] / cL
             proj = float(np.dot(ab, dir_L))
             es_local = proj > 0.005
             conf = float(np.clip(0.55 + abs(proj) * 5.0, 0.50, 0.95))
-        elif cV >= 0.08 and cL < 0.08:
+        elif cV >= 0.08 and cL < 0.08 and abs(vec_local[0] - vec_visitante[0]) < 0.35:
             dir_V = vec_visitante[1:3] / cV
             proj = float(np.dot(ab, dir_V))
             es_local = proj <= 0.005
             conf = float(np.clip(0.55 + abs(proj) * 5.0, 0.50, 0.95))
-        elif cL >= 0.08 and cV >= 0.08:
+        elif tonos_distintos:
             dir_L = vec_local[1:3] / cL
             dir_V = vec_visitante[1:3] / cV
             sim_L = float(np.dot(ab, dir_L))
@@ -235,7 +274,7 @@ def clasificar_equipos(
         else:
             es_local = dist_local[i] <= dist_visitante[i]
             distancia = dist_local[i] if es_local else dist_visitante[i]
-            conf = _confianza(distancia, umbral_arbitro)
+            conf = _confianza(distancia, max(umbral_arbitro, 0.65))
 
         equipo = EquipoDetectado.LOCAL if es_local else EquipoDetectado.VISITANTE
         resultado.append(ClasificacionJugador(equipo, conf))
@@ -258,14 +297,15 @@ class ClasificadorTemporalEquipos:
         self._cuadro_actual: int = 0
 
     def registrar_y_suavizar(
-        self, tid: int, equipo: EquipoDetectado, confianza: float
+        self, tid: int, equipo: EquipoDetectado, confianza: float, peso: int = 1
     ) -> tuple[EquipoDetectado, float]:
         self._ultimo_visto[tid] = self._cuadro_actual
         if equipo != EquipoDetectado.DESCONOCIDO:
             hist = self._historial.setdefault(tid, [])
-            hist.append(equipo)
+            for _ in range(max(1, peso)):
+                hist.append(equipo)
             if len(hist) > self.ventana:
-                hist.pop(0)
+                del hist[: len(hist) - self.ventana]
 
         hist = self._historial.get(tid)
         if not hist:
@@ -295,13 +335,13 @@ class CalibradorEquiposPartido:
 
     Resuelve el problema de variaciones de luz, sombras y desaturación broadcast:
     1. Acumula vectores CIELAB [L, a, b] de torsos de jugadores de campo durante los primeros fotogramas.
-    2. Ejecuta K-means (k=2) con filtrado de atípicos sobre las muestras acumuladas para
+    2. Ejecuta K-means (k=2) ponderado en LAB con filtrado de atípicos para
        descubrir los centroides empíricos reales observados bajo la iluminación del partido.
-    3. Asocia óptimamente los 2 centroides a `color_local` y `color_visitante` de forma robusta.
-    4. Clasifica a los jugadores en cada fotograma contra los centroides empíricos con un
-       margen de confianza superior y resistente a sombras.
-    5. Aísla a los porteros (por clase YOLO o por posición) para no sesgar los clústeres
-       de campo, y los asigna al equipo correspondiente según la mitad de cancha defendida.
+    3. Asocia óptimamente los 2 centroides a `color_local` y `color_visitante` de forma robusta
+       (incluyendo equipos de igual tono y distinta claridad, o equipos con camiseta verde).
+    4. Clasifica a los jugadores contra los centroides empíricos reales del estadio.
+    5. Aísla a los porteros (por clase YOLO o por posición + color atípico) para no sesgar
+       los clústeres de campo, y los asigna al equipo correspondiente según la mitad defendida.
     """
 
     def __init__(
@@ -330,17 +370,38 @@ class CalibradorEquiposPartido:
             if colores_equipo.color_arbitro
             else None
         )
-        self._algun_equipo_es_oscuro = min(self._vec_local[0], self._vec_visitante[0]) < 0.35
+        self._algun_equipo_es_oscuro = min(self._vec_local[0], self._vec_visitante[0]) < 0.45
+        self._algun_equipo_es_verde = (
+            es_prototipo_verde(self._vec_local) or es_prototipo_verde(self._vec_visitante)
+        )
+
+    @property
+    def excluir_cesped(self) -> bool:
+        """False si algún equipo juega de verde para no borrar su propia camiseta."""
+        return not self._algun_equipo_es_verde
 
     @property
     def total_muestras(self) -> int:
         return len(self._muestras)
 
+    def es_color_atipico(self, color: np.ndarray, umbral: float = 0.24) -> bool:
+        """True si el color del torso está lejos de ambos equipos de campo (arquero/árbitro)."""
+        if self.calibrado and self.centroide_local is not None and self.centroide_visitante is not None:
+            dL = float(_distancia_lab_ponderada(color[None, :], self.centroide_local)[0])
+            dV = float(_distancia_lab_ponderada(color[None, :], self.centroide_visitante)[0])
+            sep = float(_distancia_lab_ponderada(
+                self.centroide_local[None, :], self.centroide_visitante
+            )[0])
+            return min(dL, dV) > max(umbral, 0.40 * sep)
+        dL = float(_distancia_color_robusta(color[None, :], self._vec_local)[0])
+        dV = float(_distancia_color_robusta(color[None, :], self._vec_visitante)[0])
+        return min(dL, dV) > max(umbral, 0.38)
+
     def es_muestra_invalida_o_arbitro(self, color: np.ndarray) -> bool:
         """Determina si una muestra es césped espurio o indumentaria de árbitro."""
-        if es_color_cesped(color):
+        if not self._algun_equipo_es_verde and es_color_cesped(color):
             return True
-        if not self._algun_equipo_es_oscuro and color[0] < 0.38:
+        if not self._algun_equipo_es_oscuro and color[0] < 0.24:
             return True
         if self._vec_arbitro is not None:
             d_arb = float(_distancia_color_robusta(color[None, :], self._vec_arbitro)[0])
@@ -383,23 +444,32 @@ class CalibradorEquiposPartido:
         if len(datos) < 2:
             return False
 
+        pesos = _PESOS_LAB.astype(np.float32)
+        datos_pond = datos * pesos
         criterios = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 50, 1e-4)
-        _, etiquetas, centros = cv2.kmeans(datos, 2, None, criterios, 15, cv2.KMEANS_PP_CENTERS)
+        _, etiquetas, centros = cv2.kmeans(
+            datos_pond, 2, None, criterios, 15, cv2.KMEANS_PP_CENTERS
+        )
 
-        c0, c1 = centros[0], centros[1]
+        c0 = (centros[0] / pesos).astype(np.float64)
+        c1 = (centros[1] / pesos).astype(np.float64)
 
         # Refinamiento robusto: descartar atípicos de cada clúster
         for g, centro in enumerate([c0, c1]):
-            pts = datos[etiquetas.ravel() == g]
+            pts = datos[etiquetas.ravel() == g].astype(np.float64)
             if len(pts) > 5:
-                dists = np.linalg.norm(pts - centro, axis=1)
+                dists = _distancia_lab_ponderada(pts, centro)
                 med = float(np.median(dists))
                 inliers = pts[dists <= max(2.0 * med, 0.12)]
                 if len(inliers) > 3:
                     if g == 0:
-                        c0 = inliers.mean(axis=0)
+                        c0 = np.median(inliers, axis=0)
                     else:
-                        c1 = inliers.mean(axis=0)
+                        c1 = np.median(inliers, axis=0)
+
+        # Evita fijar dos centroides colapsados si aún solo se observó un equipo.
+        if not forzar and float(_distancia_lab_ponderada(c0[None, :], c1)[0]) < 0.08:
+            return False
 
         costo_0_loc = float(_distancia_color_robusta(c0[None, :], self._vec_local)[0]) + float(
             _distancia_color_robusta(c1[None, :], self._vec_visitante)[0]
@@ -446,9 +516,9 @@ class CalibradorEquiposPartido:
                 eq = EquipoDetectado.LOCAL if x_m < 52.5 else EquipoDetectado.VISITANTE
             return ClasificacionJugador(eq, 0.95)
 
-        # 2. Árbitro por indumentaria oscura o cercanía a color árbitro registrado
-        if not es_color_cesped(color):
-            if not self._algun_equipo_es_oscuro and color[0] < 0.30:
+        # 2. Árbitro por indumentaria muy oscura o cercanía a color árbitro registrado
+        if self._algun_equipo_es_verde or not es_color_cesped(color):
+            if not self._algun_equipo_es_oscuro and color[0] < 0.24:
                 return ClasificacionJugador(EquipoDetectado.ARBITRO, 0.90)
             if self._vec_arbitro is not None:
                 d_arb = float(_distancia_color_robusta(color[None, :], self._vec_arbitro)[0])
@@ -462,9 +532,9 @@ class CalibradorEquiposPartido:
             res = clasificar_equipos([color], self.colores_equipo)
             return res[0] if res else ClasificacionJugador(EquipoDetectado.DESCONOCIDO, 0.0)
 
-        # 4. Clasificación contra centroides empíricos
-        dL = float(_distancia_color_robusta(color[None, :], self.centroide_local)[0])
-        dV = float(_distancia_color_robusta(color[None, :], self.centroide_visitante)[0])
+        # 4. Clasificación contra centroides empíricos reales del estadio en LAB ponderado
+        dL = float(_distancia_lab_ponderada(color[None, :], self.centroide_local)[0])
+        dV = float(_distancia_lab_ponderada(color[None, :], self.centroide_visitante)[0])
 
         if min(dL, dV) > 0.70 and not self.es_muestra_invalida_o_arbitro(color):
             return ClasificacionJugador(EquipoDetectado.DESCONOCIDO, 0.20)

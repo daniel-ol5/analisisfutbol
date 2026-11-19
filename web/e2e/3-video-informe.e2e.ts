@@ -62,7 +62,7 @@ test("subir un video, procesarlo y verlo como procesado", async ({ page, request
   // La interfaz lo muestra como procesado (sondea el estado del video).
   await expect(tarjeta.getByText("Procesado", { exact: true })).toBeVisible({ timeout: 30_000 });
   const bloque = page.waitForResponse((r) => r.url().includes(`/vision/videos/${videoId}/archivo/bloque?`));
-  await tarjeta.getByRole("button", { name: "Analizar en panel en vivo" }).click();
+  await tarjeta.getByRole("button", { name: "Ver análisis", exact: true }).click();
   await expect(page.getByRole("combobox", { name: "Seleccionar video" })).toHaveValue(String(videoId));
   const descarga = await bloque;
   expect(descarga.ok()).toBe(true);

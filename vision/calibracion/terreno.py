@@ -21,6 +21,100 @@ def mascara_terreno(cuadro: np.ndarray) -> np.ndarray:
     return mascara
 
 
+def ajustar_mediocampo(cuadro, marcas_px, marcas_m, largo, ancho):
+    """Usa ambas bandas y el círculo pintado cuando solo es visible el mediocampo.
+
+    Las dos marcas laterales aproximan la anchura del círculo en imagen. Solo
+    inicializan el ajuste: los extremos de la elipse cambian con la perspectiva.
+    Las primeras cuatro marcas son cruces físicos de la línea media.
+    """
+    ancho_px = cuadro.shape[1]
+    escala = min(1., 960 / ancho_px)
+    imagen = cv2.resize(cuadro, None, fx=escala, fy=escala)
+    h_img, w_img = imagen.shape[:2]
+    hsv = cv2.cvtColor(imagen, cv2.COLOR_BGR2HSV)
+    gris = cv2.cvtColor(imagen, cv2.COLOR_BGR2GRAY)
+    contraste = cv2.subtract(gris, cv2.GaussianBlur(gris, (0, 0), 3))
+    cesped = cv2.inRange(hsv, (28, 30, 25), (90, 255, 255))
+    pintura = cv2.inRange(hsv, (0, 0, 110), (179, 130, 255)) & cv2.dilate(cesped, np.ones((7, 7), np.uint8))
+    pintura[contraste < 5] = 0
+    if cv2.countNonZero(pintura) < 80:
+        return None, float("inf")
+    dist = cv2.distanceTransform(255 - pintura, cv2.DIST_L2, 3)
+    centro = np.array([largo, ancho]) / 2
+    mundo = (marcas_m - centro) / 9.15
+    pixeles = marcas_px * escala
+    normalizador = np.diag([w_img, h_img, 1.])
+    observados = pixeles / [w_img, h_img]
+    # Ajustar la perspectiva longitudinal solo con cruces físicos. Tratar los
+    # extremos aparentes como hitos en DLT deforma incluso las bandas lejanas.
+    y = mundo[:4, 1]
+    u, v = observados[:4].T
+    ceros = np.zeros(4)
+    unos = np.ones(4)
+    sistema = np.vstack([np.c_[y, unos, ceros, ceros, -y*u],
+                         np.c_[ceros, ceros, y, unos, -y*v]])
+    (b, c, e, f, k), _, rango, _ = np.linalg.lstsq(sistema, np.r_[u, v], rcond=None)
+    if rango < 5:
+        return None, float("inf")
+    a, d = (observados[5] - observados[4]) / 2
+    semilla = np.array([[a, b, c], [d, e, f], [0., k, 1.]])
+    ang = np.arange(64) * (2 * np.pi / 64)
+    circulo = np.c_[np.cos(ang), np.sin(ang)]
+    # Medir ambas bandas a izquierda y derecha de la línea media.
+    x = np.linspace(-2., 2., 48)
+    y_banda = centro[1] / 9.15
+    grupos = [circulo, np.c_[x, np.full_like(x, y_banda)],
+              np.c_[x, np.full_like(x, -y_banda)],
+              np.c_[np.zeros_like(x), np.linspace(-y_banda, y_banda, len(x))]]
+
+    def proyectar(p, puntos):
+        matriz = normalizador @ np.r_[p, 1.].reshape(3, 3)
+        return cv2.perspectiveTransform(puntos.reshape(-1, 1, 2), matriz).reshape(-1, 2)
+
+    inicio = semilla.ravel()[:8]
+    visibles = []
+    for grupo in grupos:
+        u, v = proyectar(inicio, grupo).T
+        dentro = (u > 3) & (u < w_img - 4) & (v > 3) & (v < h_img - 4)
+        if dentro.mean() < .7:
+            return None, float("inf")
+        visibles.append(grupo[dentro])
+
+    def distancias(p, puntos):
+        u, v = proyectar(p, puntos).T
+        return map_coordinates(dist, [v, u], order=1, mode="constant", cval=50)
+
+    def residuos(p):
+        marcas = (proyectar(p, mundo[:4]) - pixeles[:4]).ravel()
+        return np.concatenate([distancias(p, g) for g in visibles] + [marcas])
+
+    ajuste = least_squares(residuos, inicio, loss="soft_l1", f_scale=2.,
+                           diff_step=1e-4, max_nfev=45).x
+    # Un círculo ausente podría colapsarse sobre la recta central y obtener
+    # distancia cero a la pintura. Conservar la extensión observada en imagen.
+    aro_inicial = proyectar(inicio, circulo)
+    aro_final = proyectar(ajuste, circulo)
+    extension = np.ptp(aro_inicial, axis=0)
+    if (np.any(extension < 12) or
+            np.any(np.abs(aro_final - aro_inicial) > .25 * extension)):
+        return None, float("inf")
+    # Cada arco debe coincidir con pintura. Una banda o un jugador aislado
+    # no proporcionan evidencia suficiente para proyectar todo el campo.
+    comprobaciones = [*np.array_split(visibles[0], 8), *visibles[1:]]
+    errores = [np.median(distancias(ajuste, g)) for g in comprobaciones]
+    if max(errores) > 2.5 or np.max(np.linalg.norm(proyectar(ajuste, mundo[:4]) - pixeles[:4], axis=1)) > 12:
+        return None, float("inf")
+    campo = np.array([[9.15, 0., centro[0]], [0., 9.15, centro[1]], [0., 0., 1.]])
+    try:
+        h = campo @ np.linalg.inv(normalizador @ np.r_[ajuste, 1.].reshape(3, 3)) @ np.diag([escala, escala, 1.])
+    except np.linalg.LinAlgError:
+        return None, float("inf")
+    if abs(h[2, 2]) < 1e-9 or not np.isfinite(h).all():
+        return None, float("inf")
+    return h / h[2, 2], float(np.median(errores) / escala)
+
+
 def segmentos_lineas(largo: float, ancho: float) -> list:
     segmentos = [((0, 0), (largo, 0)), ((0, ancho), (largo, ancho)),
                  ((0, 0), (0, ancho)), ((largo, 0), (largo, ancho)),
