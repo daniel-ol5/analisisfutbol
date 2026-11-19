@@ -1,5 +1,5 @@
 /**
- * CU-54 · Catálogo de reglas (T-092). Pestaña "Reglas tácticas" de AsistenciaPage.
+ * CU-54 · Catálogo de reglas (T-092).
  *
  * Lista las reglas globales del sistema y las propias del club, y permite
  * activarlas o desactivarlas sin tocar código. Criterio de T-092: el cambio
@@ -56,13 +56,7 @@ export function ReglasPage() {
   const activas = reglas.filter((r) => r.activa).length;
 
   return (
-    <section className="reg-pagina" aria-label="Catálogo de reglas">
-      <p className="reg-intro">
-        Las reglas deciden qué recomendaciones recibe el cuerpo técnico durante el partido. Activar
-        o desactivar una regla vale desde la próxima evaluación del motor, sin desplegar nada. Las
-        reglas <strong>globales</strong> son del sistema: solo se activan o desactivan, y el cambio
-        vale únicamente para tu club. Para otra variante, crea una regla propia.
-      </p>
+    <section aria-label="Catálogo de reglas">
 
       {!puedeGestionar && (
         <p className="reg-nota" role="note">

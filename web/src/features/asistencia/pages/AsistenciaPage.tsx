@@ -1,14 +1,5 @@
-/** Asistencia y Reportes  —  P6 · CU-49 … CU-58.
- *
- * Pestañas del rediseño (Daniel):
- * - Recomendaciones: T-090 y T-091 (Alejandra), recomendaciones en vivo del
- *   partido elegido, con su valoración.
- * - Reglas tácticas: CU-54 / T-092 (Araceli), catálogo con activación por club,
- *   edición y prueba contra un partido.
- */
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation, useSearchParams } from "react-router-dom";
 
 import { listarPartidos } from "@/features/deportivo/api";
 import type { Partido } from "@/features/deportivo/types";
@@ -17,10 +8,9 @@ import { Alert, Select } from "@/shared/ui";
 import { Pestanas } from "@/shared/ui/Pestanas";
 
 import { RecomendacionesEnVivo } from "../components/RecomendacionesEnVivo";
-import "../components/recomendaciones.css";
 import { ReglasPage } from "./ReglasPage";
+import "../asistencia.css";
 
-/** Primero el partido en juego; después, los más recientes. */
 function ordenar(partidos: readonly Partido[]): Partido[] {
   return [...partidos].sort(
     (a, b) =>
@@ -30,38 +20,41 @@ function ordenar(partidos: readonly Partido[]): Partido[] {
 }
 
 function Recomendaciones() {
+  const [parametros, cambiarParametros] = useSearchParams();
   const partidos = useQuery({ queryKey: ["partidos"], queryFn: () => listarPartidos() });
-  const [elegido, setElegido] = useState<number | null>(null);
   const lista = ordenar(partidos.data ?? []);
-  const partidoId = elegido ?? lista[0]?.id ?? null;
+  const elegido = Number(parametros.get("partidoId"));
+  const partidoId = (lista.find((partido) => partido.id === elegido) ?? lista[0])?.id;
 
   return (
-    <section className="rec-pagina" aria-label="Recomendaciones del partido">
+    <section className="asistencia-panel" aria-label="Recomendaciones del partido">
       {partidos.isError && <Alert tono="error">{mensajeDeError(partidos.error)}</Alert>}
-      {lista.length > 0 && (
-        <Select
-          etiqueta="Partido"
-          value={partidoId ?? ""}
-          onChange={(e) => setElegido(Number(e.target.value))}
-          data-testid="asistencia-partido"
-        >
-          {lista.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.rival} · {new Date(p.fecha_hora).toLocaleDateString("es")}
-              {p.estado === "EN_CURSO" ? " · en curso" : ""}
-            </option>
-          ))}
-        </Select>
+      {partidos.isPending && <p role="status">Cargando partidos…</p>}
+      {partidos.isSuccess && lista.length === 0 && <p>No hay partidos registrados.</p>}
+      {partidoId !== undefined && (
+        <>
+          <Select
+            etiqueta="Partido"
+            value={partidoId}
+            onChange={(evento) => cambiarParametros({ partidoId: evento.currentTarget.value })}
+            data-testid="asistencia-partido"
+          >
+            {lista.map((partido) => (
+              <option key={partido.id} value={partido.id}>
+                vs. {partido.rival} · {new Date(partido.fecha_hora).toLocaleDateString("es-BO")}
+                {partido.estado === "EN_CURSO" ? " · en curso" : ""}
+              </option>
+            ))}
+          </Select>
+          <RecomendacionesEnVivo key={partidoId} partidoId={partidoId} />
+        </>
       )}
-      {!partidos.isLoading && lista.length === 0 && !partidos.isError && (
-        <p>No hay partidos registrados.</p>
-      )}
-      {partidoId !== null && <RecomendacionesEnVivo key={partidoId} partidoId={partidoId} />}
     </section>
   );
 }
 
 export function AsistenciaPage() {
+  const { search } = useLocation();
   return (
     <main className="area-pagina">
       <header className="area-titulo">
@@ -70,15 +63,17 @@ export function AsistenciaPage() {
       <Pestanas
         titulo="Asistencia y reportes"
         enlaces={[
-          { ruta: "/asistencia", titulo: "Recomendaciones", exacta: true },
-          { ruta: "/asistencia/reglas", titulo: "Reglas tácticas" },
+          { ruta: `/asistencia${search}`, titulo: "Recomendaciones", exacta: true },
+          { ruta: `/asistencia/reglas${search}`, titulo: "Reglas tácticas" },
         ]}
       />
-      <Routes>
-        <Route index element={<Recomendaciones />} />
-        <Route path="reglas" element={<ReglasPage />} />
-        <Route path="*" element={<Navigate to="/asistencia" replace />} />
-      </Routes>
+      <div className="area-contenido">
+        <Routes>
+          <Route index element={<Recomendaciones />} />
+          <Route path="reglas" element={<ReglasPage />} />
+          <Route path="*" element={<Navigate to="/asistencia" replace />} />
+        </Routes>
+      </div>
     </main>
   );
 }

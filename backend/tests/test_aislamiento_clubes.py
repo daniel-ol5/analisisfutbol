@@ -18,6 +18,7 @@ Si se agrega un endpoint con id en la ruta, esta prueba lo toma sola.
 
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
@@ -31,6 +32,7 @@ from app.deportivo.schemas import EstadoPartido
 from app.main import app
 from app.partido.models import EventoManual
 from app.seguridad.models import Usuario
+from app.vision.almacen import AlmacenEnDisco, obtener_almacen_videos
 from app.vision.models import Calibracion, ModeloML, Video
 
 ESQUEMA = app.openapi()
@@ -57,8 +59,6 @@ AISLADO = {401, 403, 404, 501}
 # Control del club B. Estos endpoints responden 4xx aunque el recurso exista:
 # pasan por una validación propia antes del dato y no sirven para el control.
 CONTROL_EXENTO = {
-    ("GET", "/api/vision/videos/{video_id}/archivo"),         # el archivo no está en el almacén de prueba
-    ("GET", "/api/vision/videos/{video_id}/archivo/bloque"),  # ídem: 409 "todavía no está disponible"
     ("GET", "/api/vision/videos/{video_id}/cuadro"),
     ("GET", "/api/vision/videos/{video_id}/muestras"),
 }
@@ -191,7 +191,8 @@ async def club_b() -> None:
             Jugador(id=502, club_id=CLUB_B, equipo_id=501, nombre="Jugador", apellido="B",
                     dorsal=9, posicion="DEL", altura_cm=180),
             Video(id=503, club_id=CLUB_B, partido_id=PARTIDO_B, archivo_url="v.mp4",
-                  nombre="v.mp4", tipo="video/mp4", tamano_bytes=10, estado="SUBIDO"),
+                  nombre="v.mp4", tipo="video/mp4", tamano_bytes=10, bytes_recibidos=10,
+                  duracion_s=1, estado="SUBIDO"),
             Calibracion(club_id=CLUB_B, partido_id=PARTIDO_B, largo_m=105.0, ancho_m=68.0,
                         puntos_imagen=[{"x": 1.0, "y": 1.0}], puntos_cancha=[{"x": 0.0, "y": 0.0}],
                         valida=True),
@@ -208,9 +209,15 @@ async def club_b() -> None:
 
 
 @pytest.fixture
-async def cliente() -> AsyncIterator[AsyncClient]:
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
-        yield c
+async def cliente(tmp_path: Path) -> AsyncIterator[AsyncClient]:
+    almacen = AlmacenEnDisco(tmp_path)
+    almacen.ruta_local("v.mp4").write_bytes(b"\x00\x00\x00\x0aftyp00")
+    app.dependency_overrides[obtener_almacen_videos] = lambda: almacen
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+            yield c
+    finally:
+        app.dependency_overrides.pop(obtener_almacen_videos, None)
 
 
 def _id(op: tuple[str, str]) -> str:

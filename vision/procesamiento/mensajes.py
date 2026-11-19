@@ -294,9 +294,8 @@ def armar_mensaje(
         personas, balones = [], []
 
     # 2. Proyección de jugadores a coordenadas de cancha en metros
-    proy_personas = proyectar_detecciones(personas, homografia_efectiva)
-    mapa_pos_m = {d.tid: xy for d, xy in proy_personas} if proy_personas else {}
-    posiciones_m = [mapa_pos_m.get(p.tid) for p in personas]
+    proy_personas = [(d, xy) for d, xy in proyectar_detecciones(personas, homografia_efectiva)
+                    if _en_cancha(xy, ctx)]
 
     # 3. Calibrador empírico de indumentaria a nivel de partido (Fase F4)
     calibrador = None
@@ -315,18 +314,16 @@ def armar_mensaje(
     clasif_temp = estado.clasificador_temporal if estado is not None else None
     equipos = equipos_de(
         cuadro,
-        personas,
+        [d for d, _ in proy_personas],
         ctx,
         clasificador_temporal=clasif_temp,
         calibrador_equipos=calibrador,
-        posiciones_m=posiciones_m,
+        posiciones_m=[xy for _, xy in proy_personas],
     )
 
     # 5. Estructuración de jugadores
     mapa_jugadores: dict[int, dict[str, Any]] = {}
     for (d, xy), equipo in zip(proy_personas, equipos, strict=True):
-        if not _en_cancha(xy, ctx):
-            continue
         pt = _punto(d, equipo, xy, ancho, alto)
         tid = pt["tid"]
         if tid not in mapa_jugadores or pt["conf"] > mapa_jugadores[tid]["conf"]:

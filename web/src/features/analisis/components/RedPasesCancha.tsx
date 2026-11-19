@@ -24,7 +24,7 @@ export function RedPasesCancha() {
   const [equipo, setEquipo] = useState<LadoPartido>("LOCAL");
   const [desde, setDesde] = useState(0);
   const [hasta, setHasta] = useState(90);
-  const [minimo, setMinimo] = useState(2);
+  const [minimo, setMinimo] = useState(1);
   const { id, nombreLocal, nombreVisitante } = usePartidosAnalisis(seleccionado);
   const rangoValido = hasta >= desde;
   const red = useQuery({
@@ -102,6 +102,14 @@ export function RedPasesCancha() {
             {red.isPending ? "Cargando…" : `${total} pases entre ${nodos.length} jugadores`}
           </span>
         </div>
+        {red.isSuccess && rangoValido && total === 0 && (
+          <p role="status">
+            La red requiere pases completados con posesión confirmada del balón y ambos tracks vinculados a jugadores del plantel.
+          </p>
+        )}
+        {red.isSuccess && rangoValido && total > 0 && flechas.length === 0 && (
+          <p role="status">Reduce el mínimo de pases para ver las conexiones de este intervalo.</p>
+        )}
         <svg
           viewBox="-4 -4 113 76"
           className="plano-cancha-svg"

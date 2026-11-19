@@ -4,9 +4,8 @@
  * Endpoints bajo /api/asistencia. Usar hooks de TanStack Query, no fetch suelto
  * dentro de los componentes.
  */
-import { api } from "@/shared/api/client";
-
 import type { Partido } from "@/features/deportivo";
+import { api } from "@/shared/api/client";
 
 import type {
   OpcionValoracion,

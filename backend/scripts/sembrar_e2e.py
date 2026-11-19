@@ -53,7 +53,7 @@ EMAIL = os.environ.get("E2E_EMAIL", "admin.e2e@clubprueba.com")
 # Cuenta de una base desechable de pruebas: no es una credencial real.
 PASSWORD = os.environ.get("E2E_PASSWORD", "solo-pruebas-e2e-2026")
 
-# Ocho referencias reales de una cancha de 105 x 68 y su imagen (homografía exacta).
+# Ocho referencias reales de una cancha de 105 por 68 y su imagen (homografía exacta).
 _CANCHA = [(0, 0), (105, 0), (105, 68), (0, 68), (52.5, 0), (52.5, 68), (16.5, 13.84), (88.5, 54.16)]
 
 

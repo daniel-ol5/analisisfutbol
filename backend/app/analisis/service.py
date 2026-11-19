@@ -1,55 +1,25 @@
-"""Lógica de negocio de Análisis Táctico  —  CU-40 … CU-48.
+"""Mapa de calor a partir de las posiciones observadas en cancha."""
 
-Este módulo no conoce FastAPI: recibe una sesión y datos, devuelve objetos o
-lanza excepciones de dominio. Así se prueba sin levantar el servidor.
-"""
-
-import math
+import asyncio
 from typing import Literal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.analisis import persistencia
+from app.analisis.eventos import jugador_en, tramos_por_track
+from app.analisis.motor.muestras import Muestra, muestra_de_mensaje
 from app.analisis.schemas import CeldaCalor, MapaCalor
 from app.core.deps import UsuarioActual
 from app.core.tenancy import del_club, verificar_pertenencia
 from app.deportivo.models import Jugador, Partido
+from app.partido.service import normalizar_coordenadas
+from app.vision.models import Video
+from app.vision.procesamiento import cargar_muestras_video
+from app.vision.schemas import EstadoVideo
 
-LARGO_CANCHA_M = 105.0
-ANCHO_CANCHA_M = 68.0
-
-# Grilla de 21 columnas (5 m cada una) x 14 filas (~4.86 m cada una)
-COLUMNAS_X = 21
-FILAS_Y = 14
-PASO_X = LARGO_CANCHA_M / COLUMNAS_X
-PASO_Y = ANCHO_CANCHA_M / FILAS_Y
-
-
-def normalizar_coordenada(
-    x: float,
-    y: float,
-    minuto: int,
-    ataca_hacia: str | None,
-    largo: float = LARGO_CANCHA_M,
-    ancho: float = ANCHO_CANCHA_M,
-) -> tuple[float, float]:
-    """Normaliza la coordenada para que el equipo siempre ataque hacia la derecha (x creciente).
-
-    Regla de CU-44:
-    - En el 1er tiempo (minuto < 45), si ataca_hacia == 'IZQ', se invierte.
-    - En el 2do tiempo (minuto >= 45), los lados cambian: si originalmente atacaba hacia 'DER',
-      en el 2do tiempo ataca hacia la 'IZQ' en cámara cruda, por lo que se invierte para normalizar.
-    - Esto garantiza que un partido completo NO quede simétrico por el cambio de lado (Criterio de aceptación).
-    """
-    direccion_base = ataca_hacia or "DER"
-    es_segundo_tiempo = minuto >= 45
-
-    invertir = (direccion_base == "IZQ" and not es_segundo_tiempo) or (
-        direccion_base == "DER" and es_segundo_tiempo
-    )
-
-    if invertir:
-        return largo - x, ancho - y
-    return x, y
+COLUMNAS = 21
+FILAS = 14
+POSICION_POR_LINEA = {1: "DEF", 2: "MED", 3: "DEL"}
 
 
 async def calcular_mapa_calor(
@@ -61,100 +31,69 @@ async def calcular_mapa_calor(
     usuario: UsuarioActual,
     db: AsyncSession,
 ) -> MapaCalor:
-    """Genera el mapa de calor de ocupación espacial normalizado por dirección de ataque (CU-44)."""
-    partido = await db.get(Partido, partido_id)
-    verificar_pertenencia(partido, usuario)
+    """Agrega ocupación real del equipo propio orientada en su dirección de ataque."""
+    partido = verificar_pertenencia(await db.get(Partido, partido_id), usuario)
+    jugadores: set[int] | None = None
+    if alcance == "jugador":
+        jugadores = set()
+        if referencia_id is not None:
+            jugador = verificar_pertenencia(
+                await db.scalar(del_club(Jugador, usuario).where(Jugador.id == referencia_id)),
+                usuario,
+            )
+            if jugador.equipo_id == partido.equipo_id:
+                jugadores.add(jugador.id)
+    elif alcance == "linea":
+        posicion = POSICION_POR_LINEA.get(referencia_id or 2)
+        jugadores = set(await db.scalars(
+            del_club(Jugador, usuario).with_only_columns(Jugador.id)
+            .where(Jugador.equipo_id == partido.equipo_id, Jugador.posicion == posicion)
+        )) if posicion is not None else set()
 
-    # Determinar centro táctico según el alcance
-    centro_base_x = 55.0
-    centro_base_y = 34.0
-    dispersion_x = 22.0
-    dispersion_y = 16.0
+    contexto = await persistencia.contexto_de(db, partido)
+    largo, ancho = contexto.largo_m, contexto.ancho_m
+    direccion = contexto.ataca_hacia or "DER"
+    tramos = await persistencia.tramos_de(db, partido)
+    por_track = tramos_por_track(tramos) if jugadores is not None else {}
+    video_id = await db.scalar(del_club(Video, usuario).with_only_columns(Video.id).where(
+        Video.partido_id == partido_id,
+        Video.estado == EstadoVideo.PROCESADO.value,
+    ).order_by(Video.procesado_en.desc().nulls_last(), Video.id.desc()).limit(1))
+    muestras_video = await asyncio.to_thread(cargar_muestras_video, video_id) if video_id is not None else []
+    if muestras_video:
+        largo, ancho = muestras_video[0].calidad.largo_m, muestras_video[0].calidad.ancho_m
 
-    if alcance == "linea":
-        # 1: Defensiva, 2: Mediocampo, 3: Delantera
-        linea = referencia_id or 2
-        if linea == 1:
-            centro_base_x = 32.0
-            dispersion_x = 14.0
-        elif linea == 2:
-            centro_base_x = 54.0
-            dispersion_x = 18.0
-        else:
-            centro_base_x = 76.0
-            dispersion_x = 15.0
-    elif alcance == "jugador" and referencia_id:
-        # Inexistente y de otro club responden igual (404): no se revela que el id existe.
-        jugador = verificar_pertenencia(
-            (await db.execute(del_club(Jugador, usuario).where(Jugador.id == referencia_id)))
-            .scalar_one_or_none(),
-            usuario,
-        )
-        if jugador:
-            pos = jugador.posicion
-            if pos == "ARQ":
-                centro_base_x, centro_base_y = 12.0, 34.0
-                dispersion_x, dispersion_y = 8.0, 10.0
-            elif pos == "DEF":
-                centro_base_x = 32.0
-                centro_base_y = 20.0 if (jugador.dorsal or 2) % 2 == 0 else 48.0
-                dispersion_x, dispersion_y = 14.0, 15.0
-            elif pos == "MED":
-                centro_base_x = 56.0
-                dispersion_x, dispersion_y = 18.0, 20.0
-            elif pos == "DEL":
-                centro_base_x = 78.0
-                centro_base_y = 22.0 if (jugador.dorsal or 7) % 2 == 0 else 46.0
-                dispersion_x, dispersion_y = 15.0, 18.0
+    paso_x, paso_y = largo / COLUMNAS, ancho / FILAS
+    matriz = [[0 for _ in range(COLUMNAS)] for _ in range(FILAS)]
 
-    # Puntos sintéticos distribuidos a lo largo del tiempo
-    puntos_normalizados: list[tuple[float, float]] = []
-    paso_minuto = max(1, (hasta_minuto - desde_minuto) // 30 or 1)
+    def acumular(muestra: Muestra) -> None:
+        parte = 1 if muestra.t < 45 * 60 else 2
+        puntos = {p.track_id: p for p in muestra.jugadores if p.equipo == contexto.lado_propio}
+        for tid, punto in puntos.items():
+            if jugadores is not None and jugador_en(por_track, tid, muestra.t) not in jugadores:
+                continue
+            if not (0 <= punto.x <= largo and 0 <= punto.y <= ancho):
+                continue
+            x, y = normalizar_coordenadas(punto.x, punto.y, largo, ancho, direccion, parte)
+            columna, fila = min(COLUMNAS - 1, int(x / paso_x)), min(FILAS - 1, int(y / paso_y))
+            matriz[fila][columna] += 1
 
-    for m in range(desde_minuto, hasta_minuto + 1, paso_minuto):
-        # Simular oscilación espacial según posesión y minutos
-        fase_tiempo = (m / 90.0) * math.pi * 2
-        ox = math.sin(fase_tiempo) * 8.0
-        oy = math.cos(fase_tiempo * 1.5) * 6.0
+    desde, hasta = desde_minuto * 60, (hasta_minuto + 1) * 60
+    if video_id is not None:
+        for muestra in muestras_video:
+            if desde <= muestra.t < hasta and muestra.calidad.calibracion_valida is not False:
+                acumular(muestra_de_mensaje(muestra))
+    else:
+        async for muestra in persistencia.muestras_de(
+            db, partido_id, persistencia.equipos_de(tramos), t_desde=desde, t_hasta=hasta,
+        ):
+            acumular(muestra)
 
-        raw_x = max(2.0, min(LARGO_CANCHA_M - 2.0, centro_base_x + ox))
-        raw_y = max(2.0, min(ANCHO_CANCHA_M - 2.0, centro_base_y + oy))
-
-        norm_x, norm_y = normalizar_coordenada(raw_x, raw_y, m, partido.ataca_hacia)
-        puntos_normalizados.append((norm_x, norm_y))
-
-    # Construir grilla de celdas
-    celdas: list[CeldaCalor] = []
-    max_densidad = 0.0
-
-    matriz = [[0.0 for _ in range(COLUMNAS_X)] for _ in range(FILAS_Y)]
-
-    for px, py in puntos_normalizados:
-        for j in range(FILAS_Y):
-            cy = (j + 0.5) * PASO_Y
-            for i in range(COLUMNAS_X):
-                cx = (i + 0.5) * PASO_X
-                dist_sq = ((cx - px) / dispersion_x) ** 2 + ((cy - py) / dispersion_y) ** 2
-                peso = math.exp(-0.5 * dist_sq)
-                matriz[j][i] += peso
-                if matriz[j][i] > max_densidad:
-                    max_densidad = matriz[j][i]
-
-    # Normalizar a rango [0, 1]
-    divisor = max_densidad if max_densidad > 0 else 1.0
-    for j in range(FILAS_Y):
-        cy = (j + 0.5) * PASO_Y
-        for i in range(COLUMNAS_X):
-            cx = (i + 0.5) * PASO_X
-            val = round(matriz[j][i] / divisor, 4)
-            if val >= 0.05:  # Descartar celdas con calor despreciable para optimizar payload
-                celdas.append(CeldaCalor(x=round(cx, 1), y=round(cy, 1), valor=val))
-
+    maximo = max(map(max, matriz)) or 1
     return MapaCalor(
-        partido_id=partido_id,
-        alcance=alcance,
-        referencia_id=referencia_id,
-        largo_m=LARGO_CANCHA_M,
-        ancho_m=ANCHO_CANCHA_M,
-        celdas=celdas,
+        partido_id=partido_id, alcance=alcance, referencia_id=referencia_id,
+        largo_m=largo, ancho_m=ancho,
+        celdas=[CeldaCalor(x=round((i + .5) * paso_x, 2), y=round((j + .5) * paso_y, 2),
+                          valor=round(n / maximo, 4))
+                for j, fila in enumerate(matriz) for i, n in enumerate(fila) if n],
     )

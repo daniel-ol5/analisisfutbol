@@ -29,7 +29,7 @@ function obtenerColorCelda(valor: number): string {
 }
 
 function obtenerOpacidadCelda(valor: number): number {
-  return Math.min(0.85, Math.max(0.25, valor * 0.9));
+  return 0.85 * Math.sqrt(Math.max(0, valor));
 }
 
 export function MapaCalorCancha() {
@@ -82,12 +82,13 @@ export function MapaCalorCancha() {
     async function cargarMapa(id: number) {
       setCargando(true);
       setError(null);
+      setMapa(null);
 
       let desdeMin = 0;
       let hastaMin = 90;
       if (intervalo === "primer_tiempo") {
         desdeMin = 0;
-        hastaMin = 45;
+        hastaMin = 44;
       } else if (intervalo === "segundo_tiempo") {
         desdeMin = 45;
         hastaMin = 90;
@@ -139,11 +140,11 @@ export function MapaCalorCancha() {
   const estadisticas = useMemo(() => {
     if (!mapa || mapa.celdas.length === 0) {
       return {
-        campoPropioPct: 50,
-        campoRivalPct: 50,
-        bandaIzquierdaPct: 33,
-        carrilCentralPct: 34,
-        bandaDerechaPct: 33,
+        campoPropioPct: 0,
+        campoRivalPct: 0,
+        bandaIzquierdaPct: 0,
+        carrilCentralPct: 0,
+        bandaDerechaPct: 0,
         totalPuntos: 0,
       };
     }
@@ -157,15 +158,15 @@ export function MapaCalorCancha() {
 
     for (const c of mapa.celdas) {
       sumaTotal += c.valor;
-      if (c.x < 52.5) {
+      if (c.x < mapa.largo_m / 2) {
         sumaPropio += c.valor;
       } else {
         sumaRival += c.valor;
       }
 
-      if (c.y < 22.6) {
+      if (c.y < mapa.ancho_m / 3) {
         sumaBandaIzq += c.valor;
-      } else if (c.y <= 45.4) {
+      } else if (c.y <= 2 * mapa.ancho_m / 3) {
         sumaCentro += c.valor;
       } else {
         sumaBandaDer += c.valor;
@@ -334,6 +335,13 @@ export function MapaCalorCancha() {
       </div>
 
       {error && <div className="mapa-calor-error">{error}</div>}
+      {mapa && !mapa.celdas.length && (
+        <p role="status">
+          {alcance === "equipo"
+            ? "Sin posiciones válidas del equipo en este intervalo."
+            : "Sin posiciones vinculadas a este filtro en el intervalo seleccionado."}
+        </p>
+      )}
 
       {/* Cancha con capa de mapa de calor */}
       <div className="mapa-calor-cancha-wrapper">
@@ -362,6 +370,9 @@ export function MapaCalorCancha() {
             <filter id="calor-blur" x="-20%" y="-20%" width="140%" height="140%">
               <feGaussianBlur stdDeviation="3.6" />
             </filter>
+            <clipPath id="calor-limite-cancha">
+              <rect x="0" y="0" width="105" height="68" />
+            </clipPath>
 
             {/* Césped reglamentario con franjas */}
             <pattern
@@ -405,13 +416,13 @@ export function MapaCalorCancha() {
 
           {/* CAPA DE CALOR: Celdas de densidad agrupadas con desenfoque */}
           {mapa && mapa.celdas.length > 0 && (
-            <g filter="url(#calor-blur)" opacity="0.9">
+            <g clipPath="url(#calor-limite-cancha)" filter="url(#calor-blur)" opacity="0.9">
               {mapa.celdas.map((c, idx) => (
                 <circle
                   key={`heat-${idx}`}
-                  cx={c.x}
-                  cy={c.y}
-                  r={6.5}
+                  cx={c.x * 105 / mapa.largo_m}
+                  cy={c.y * 68 / mapa.ancho_m}
+                  r={4}
                   fill={obtenerColorCelda(c.valor)}
                   opacity={obtenerOpacidadCelda(c.valor)}
                 />
@@ -475,7 +486,7 @@ export function MapaCalorCancha() {
       </div>
 
       {/* Tarjetas analíticas de distribución espacial */}
-      <div className="mapa-calor-metricas-grid">
+      {estadisticas.totalPuntos > 0 && <div className="mapa-calor-metricas-grid">
         <div className="mapa-calor-card">
           <span className="mapa-calor-card-titulo">Ocupación Longitudinal</span>
           <div className="mapa-calor-progreso-wrap">
@@ -577,7 +588,7 @@ export function MapaCalorCancha() {
             </div>
           </div>
         </div>
-      </div>
+      </div>}
     </div>
   );
 }
