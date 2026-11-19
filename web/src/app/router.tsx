@@ -16,7 +16,7 @@ import { RequiereAutenticacion } from "./RequiereAutenticacion";
 import { RequiereRol } from "./RequiereRol";
 import { RetornoTrasLogin } from "./RetornoTrasLogin";
 import { AnalisisPage } from "@/features/analisis";
-import { AsistenciaPage, ReglasPage } from "@/features/asistencia";
+import { AsistenciaPage } from "@/features/asistencia";
 import { DeportivoPage } from "@/features/deportivo";
 import { PartidoPage } from "@/features/partido";
 import {
@@ -25,6 +25,7 @@ import {
   RecuperarPage,
   RegistroPage,
   RestablecerPage,
+  SeguridadPage,
   UsuariosPage,
 } from "@/features/seguridad";
 import {
@@ -52,33 +53,25 @@ export function Router() {
               </RetornoTrasLogin>
             }
           />
-          {/* La sección no tiene página propia: lleva al perfil. */}
           <Route
             path="/seguridad"
             element={
               <RequiereRol ruta="/seguridad">
-                <Navigate to="/seguridad/perfil" replace />
+                <SeguridadPage />
               </RequiereRol>
             }
-          />
-          {/* Perfil propio, para todos los autenticados. */}
-          <Route
-            path="/seguridad/perfil"
-            element={
-              <RequiereRol ruta="/seguridad/perfil">
-                <PerfilPage />
-              </RequiereRol>
-            }
-          />
-          {/* Solo ADMIN. */}
-          <Route
-            path="/seguridad/usuarios"
-            element={
-              <RequiereRol ruta="/seguridad/usuarios">
-                <UsuariosPage />
-              </RequiereRol>
-            }
-          />
+          >
+            <Route index element={<Navigate to="perfil" replace />} />
+            <Route path="perfil" element={<PerfilPage />} />
+            <Route
+              path="usuarios"
+              element={
+                <RequiereRol ruta="/seguridad/usuarios">
+                  <UsuariosPage />
+                </RequiereRol>
+              }
+            />
+          </Route>
           <Route
             path="/deportivo/*"
             element={
@@ -88,45 +81,19 @@ export function Router() {
             }
           />
           <Route
-            path="/vision/guia-montaje"
-            element={
-              <RequiereRol ruta="/vision">
-                <GuiaMontajePage />
-              </RequiereRol>
-            }
-          />
-          <Route
-            path="/vision/calibracion"
-            element={
-              <RequiereRol ruta="/vision">
-                <CalibracionPage />
-              </RequiereRol>
-            }
-          />
-          <Route
-            path="/vision/modelos"
-            element={
-              <RequiereRol ruta="/vision">
-                <ModelosPage />
-              </RequiereRol>
-            }
-          />
-          <Route
-            path="/vision/videos"
-            element={
-              <RequiereRol ruta="/vision">
-                <VideosPage />
-              </RequiereRol>
-            }
-          />
-          <Route
-            path="/vision/*"
+            path="/vision"
             element={
               <RequiereRol ruta="/vision">
                 <VisionPage />
               </RequiereRol>
             }
-          />
+          >
+            <Route index element={<Navigate to="videos" replace />} />
+            <Route path="videos" element={<VideosPage />} />
+            <Route path="calibracion" element={<CalibracionPage />} />
+            <Route path="guia-montaje" element={<GuiaMontajePage />} />
+            <Route path="modelos" element={<ModelosPage />} />
+          </Route>
           <Route
             path="/partido/*"
             element={
@@ -140,14 +107,6 @@ export function Router() {
             element={
               <RequiereRol ruta="/analisis">
                 <AnalisisPage />
-              </RequiereRol>
-            }
-          />
-          <Route
-            path="/asistencia/reglas"
-            element={
-              <RequiereRol ruta="/asistencia">
-                <ReglasPage />
               </RequiereRol>
             }
           />

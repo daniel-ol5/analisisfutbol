@@ -1,16 +1,8 @@
 /* CU-54 · Catálogo de reglas (T-092) */
 
+/* Pestaña dentro de AsistenciaPage: el marco (.area-pagina) pone márgenes y título. */
 .reg-pagina {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 40px 24px 80px;
-}
-
-.reg-pagina h1 {
-  font-size: var(--fs-xl);
-  font-weight: var(--fw-black);
-  letter-spacing: -0.02em;
-  margin: 6px 0 10px;
+  padding-top: 8px;
 }
 
 .reg-intro {

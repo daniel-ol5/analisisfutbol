@@ -75,12 +75,6 @@ export function EquiposView({ onIrIndumentaria }: EquiposViewProps) {
     });
   }, [equipos, busqueda, categoriaFiltro]);
 
-  const kpis = useMemo(() => {
-    const total = equipos.length;
-    const activos = equipos.filter((e) => e.activo).length;
-    const totalJugadores = equipos.reduce((acc, e) => acc + e.jugadores, 0);
-    return { total, activos, totalJugadores };
-  }, [equipos]);
 
   const handleAbrirCrear = () => {
     setEquipoAEditar(null);
@@ -131,105 +125,6 @@ export function EquiposView({ onIrIndumentaria }: EquiposViewProps) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-      {/* Barra de KPIs de Equipos */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
-          gap: 12,
-        }}
-      >
-        <div
-          style={{
-            padding: "14px 18px",
-            borderRadius: 10,
-            background: "var(--surface)",
-            border: "1px solid var(--line)",
-          }}
-        >
-          <div
-            style={{
-              fontSize: 11,
-              fontWeight: 700,
-              color: "var(--text-3)",
-              textTransform: "uppercase",
-            }}
-          >
-            Equipos Registrados
-          </div>
-          <div
-            style={{
-              fontSize: 24,
-              fontWeight: 800,
-              color: "var(--text)",
-              marginTop: 4,
-            }}
-          >
-            {kpis.total}
-          </div>
-        </div>
-
-        <div
-          style={{
-            padding: "14px 18px",
-            borderRadius: 10,
-            background: "var(--surface)",
-            border: "1px solid var(--line)",
-          }}
-        >
-          <div
-            style={{
-              fontSize: 11,
-              fontWeight: 700,
-              color: "var(--text-3)",
-              textTransform: "uppercase",
-            }}
-          >
-            Equipos Activos
-          </div>
-          <div
-            style={{
-              fontSize: 24,
-              fontWeight: 800,
-              color: "var(--pitch)",
-              marginTop: 4,
-            }}
-          >
-            {kpis.activos}
-          </div>
-        </div>
-
-        <div
-          style={{
-            padding: "14px 18px",
-            borderRadius: 10,
-            background: "var(--surface)",
-            border: "1px solid var(--line)",
-          }}
-        >
-          <div
-            style={{
-              fontSize: 11,
-              fontWeight: 700,
-              color: "var(--text-3)",
-              textTransform: "uppercase",
-            }}
-          >
-            Futbolistas en Planteles
-          </div>
-          <div
-            style={{
-              fontSize: 24,
-              fontWeight: 800,
-              color: "var(--text)",
-              marginTop: 4,
-            }}
-          >
-            {kpis.totalJugadores}
-          </div>
-        </div>
-      </div>
-
       {/* Barra Superior de Búsqueda, Filtros y Alta */}
       <div
         style={{
@@ -255,7 +150,8 @@ export function EquiposView({ onIrIndumentaria }: EquiposViewProps) {
         >
           <input
             type="search"
-            placeholder="Buscar por nombre, división o temporada..."
+            placeholder="Buscar equipo…"
+            aria-label="Buscar por nombre, categoría o temporada"
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
             style={{
@@ -265,7 +161,7 @@ export function EquiposView({ onIrIndumentaria }: EquiposViewProps) {
               background: "var(--ground)",
               color: "var(--text)",
               fontSize: 13,
-              minWidth: 260,
+              minWidth: "min(220px, 100%)",
             }}
           />
 
@@ -407,7 +303,7 @@ export function EquiposView({ onIrIndumentaria }: EquiposViewProps) {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(310px, 1fr))",
+            gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 310px), 1fr))",
             gap: 18,
           }}
         >
@@ -660,7 +556,7 @@ export function EquiposView({ onIrIndumentaria }: EquiposViewProps) {
                     cursor: "pointer",
                   }}
                 >
-                  Configurar indumentaria (CU-10)
+                  Configurar indumentaria
                 </button>
               )}
             </div>

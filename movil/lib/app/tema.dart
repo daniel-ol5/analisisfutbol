@@ -22,6 +22,15 @@ const pizarraOscura = Color(0xFF111827);
 const mentaSuave = Color(0xFFF0FDFA);
 const mentaBorde = Color(0xFF99F6E4);
 const fondoClaro = Color(0xFFF8FAFC);
+const fondoOscuro = Color(0xFF0F172A);
+const verdeProfundo = Color(0xFF0F766E);
+
+const menuOscuro = Color(0xFF121918);
+const textoMenu = Color(0xFFB4C7BC);
+const bordeMenu = Color(0x33FFFFFF);
+const limaMarca = Color(0xFFC8E9A2);
+const canchaOscura = Color(0xFF18332B);
+const canchaClara = Color(0xFF24503B);
 
 const ambar = Color(0xFFD97706);
 const rojo = Color(0xFFDC2626);
@@ -42,6 +51,12 @@ ThemeData _tema(
     useMaterial3: true,
     // Ningún texto por debajo de 16: tiene que leerse al sol (T-023).
     textTheme: TextTheme(
+      headlineSmall: TextStyle(
+        fontSize: 28,
+        fontWeight: FontWeight.w800,
+        letterSpacing: -0.8,
+        color: esquema.onSurface,
+      ),
       bodySmall: TextStyle(fontSize: 16, color: esquema.onSurface),
       bodyMedium: TextStyle(fontSize: 16, color: esquema.onSurface),
       bodyLarge: TextStyle(fontSize: 18, color: esquema.onSurface),
@@ -55,6 +70,7 @@ ThemeData _tema(
         fontSize: 22,
         fontWeight: FontWeight.w800,
         color: esquema.onSurface,
+        letterSpacing: -0.45,
       ),
     ),
     appBarTheme: AppBarTheme(
@@ -62,7 +78,7 @@ ThemeData _tema(
       foregroundColor: esquema.onSurface,
       surfaceTintColor: Colors.transparent,
       elevation: 0,
-      scrolledUnderElevation: 0.5,
+      scrolledUnderElevation: 0,
       centerTitle: false,
       titleTextStyle: TextStyle(
         fontSize: 19,
@@ -70,18 +86,18 @@ ThemeData _tema(
         color: esquema.onSurface,
         letterSpacing: -0.3,
       ),
-      shape: Border(
-        bottom: BorderSide(color: colorBordeTarjeta, width: 1),
-      ),
+      shape: Border(bottom: BorderSide(color: colorBordeTarjeta, width: 1)),
     ),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
-        backgroundColor: esquema.primary,
+        backgroundColor: esquema.primary == verde
+            ? verdeProfundo
+            : esquema.primary,
         foregroundColor: esquema.onPrimary,
         // Zona táctil grande: se usa con una sola mano y sin mirar.
         minimumSize: const Size(88, 54),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        textStyle: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+        textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
       ),
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
@@ -90,7 +106,7 @@ ThemeData _tema(
         foregroundColor: esquema.onSurface,
         side: BorderSide(color: esquema.outline, width: grosorBorde),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        textStyle: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+        textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
       ),
     ),
     inputDecorationTheme: InputDecorationTheme(
@@ -111,13 +127,35 @@ ThemeData _tema(
       labelStyle: const TextStyle(fontSize: 16),
     ),
     navigationBarTheme: NavigationBarThemeData(
-      height: 70,
+      height: 62,
       backgroundColor: fondoAppBar,
       surfaceTintColor: Colors.transparent,
       indicatorColor: esquema.secondaryContainer,
-      labelTextStyle: WidgetStateProperty.all(
-        const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+      iconTheme: WidgetStateProperty.resolveWith(
+        (estados) => IconThemeData(
+          color: estados.contains(WidgetState.selected)
+              ? esquema.onSecondaryContainer
+              : esquema.onSurfaceVariant,
+          size: 23,
+        ),
       ),
+      labelTextStyle: WidgetStateProperty.resolveWith(
+        (estados) => TextStyle(
+          fontSize: 13,
+          fontWeight: estados.contains(WidgetState.selected)
+              ? FontWeight.w700
+              : FontWeight.w500,
+          color: esquema.onSurface,
+        ),
+      ),
+    ),
+    floatingActionButtonTheme: FloatingActionButtonThemeData(
+      backgroundColor: esquema.primary == verde
+          ? verdeProfundo
+          : esquema.primary,
+      foregroundColor: esquema.onPrimary,
+      elevation: 1,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
     ),
     cardTheme: CardThemeData(
       elevation: 0,
@@ -125,24 +163,24 @@ ThemeData _tema(
       surfaceTintColor: Colors.transparent,
       shape: RoundedRectangleBorder(
         side: BorderSide(color: colorBordeTarjeta, width: grosorBorde),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(12),
       ),
     ),
   );
 }
 
 final temaClaro = _tema(
-  ColorScheme.fromSeed(
-    seedColor: verde,
-    brightness: Brightness.light,
-  ).copyWith(
+  ColorScheme.fromSeed(seedColor: verde, brightness: Brightness.light).copyWith(
     primary: verde,
     onPrimary: Colors.white,
     secondary: verdeClaro,
     onSecondary: Colors.white,
     secondaryContainer: mentaSuave,
-    onSecondaryContainer: const Color(0xFF0F766E),
+    onSecondaryContainer: verdeProfundo,
     surface: Colors.white,
+    surfaceContainerLow: fondoClaro,
+    surfaceContainer: const Color(0xFFF1F5F9),
+    surfaceContainerHigh: const Color(0xFFE2E8F0),
     onSurface: pizarra,
     onSurfaceVariant: const Color(0xFF4B5563),
     outline: const Color(0xFF94A3B8),
@@ -165,13 +203,16 @@ final temaOscuro = _tema(
     secondaryContainer: const Color(0xFF134E4A),
     onSecondaryContainer: mentaSuave,
     surface: pizarra,
+    surfaceContainerLow: const Color(0xFF1E293B),
+    surfaceContainer: const Color(0xFF273449),
+    surfaceContainerHigh: const Color(0xFF334155),
     onSurface: const Color(0xFFF8FAFC),
     onSurfaceVariant: const Color(0xFFCBD5E1),
     outline: const Color(0xFF64748B),
     outlineVariant: const Color(0xFF334155),
     error: const Color(0xFFF87171),
   ),
-  fondoScaffold: pizarraOscura,
+  fondoScaffold: fondoOscuro,
   fondoAppBar: pizarra,
   colorBordeTarjeta: const Color(0xFF334155),
 );
@@ -212,10 +253,10 @@ enum ModoTema {
   final String etiqueta;
 
   ThemeMode get themeMode => switch (this) {
-        ModoTema.sistema => ThemeMode.light,
-        ModoTema.oscuro => ThemeMode.dark,
-        ModoTema.claro || ModoTema.sol => ThemeMode.light,
-      };
+    ModoTema.sistema => ThemeMode.system,
+    ModoTema.oscuro => ThemeMode.dark,
+    ModoTema.claro || ModoTema.sol => ThemeMode.light,
+  };
 }
 
 /// Modo elegido por el usuario. Se guarda en el dispositivo (T-024).

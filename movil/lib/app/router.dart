@@ -21,6 +21,7 @@ import '../features/analisis/pagina.dart';
 import '../features/analisis/resumen_pagina.dart';
 import '../features/asistencia/alertas_pagina.dart';
 import '../features/asistencia/alertas_widgets.dart';
+import '../features/asistencia/recomendaciones_pagina.dart';
 import '../features/asistencia/pagina.dart';
 
 /// Pantalla de inicio de sesión (CU-02).
@@ -36,25 +37,38 @@ final router = GoRouter(
     return null;
   },
   routes: [
-    GoRoute(
-      path: '/seguridad',
-      builder: (_, _) => const SeguridadPagina(),
-    ),
+    GoRoute(path: '/seguridad', builder: (_, _) => const SeguridadPagina()),
     // T-081: resumen de métricas a pantalla completa (fuera del Marco: sin la
     // barra inferior, para que todo entre sin desplazamiento).
+    // T-094: recomendaciones en vivo, también a pantalla completa.
     GoRoute(
-      path: '/partidos/:id/resumen',
-      builder: (_, estado) => ResumenPagina(
+      path: '/partidos/:id/recomendaciones',
+      builder: (_, estado) => RecomendacionesPagina(
         partidoId: int.parse(estado.pathParameters['id']!),
       ),
     ),
+    GoRoute(
+      path: '/partidos/:id/resumen',
+      builder: (_, estado) =>
+          ResumenPagina(partidoId: int.parse(estado.pathParameters['id']!)),
+    ),
     ShellRoute(
-      builder: (_, _, child) => Marco(child: child),
+      builder: (_, estado, child) => Marco(ruta: estado.uri.path, child: child),
       routes: [
-        GoRoute(path: '/', builder: (_, _) => const Inicio()),
+        GoRoute(
+          path: '/',
+          pageBuilder: (_, estado) =>
+              NoTransitionPage(key: estado.pageKey, child: const Inicio()),
+        ),
         GoRoute(path: '/perfil', builder: (_, _) => const PerfilPagina()),
         // T-052 agenda; cada partido abre su alineación (T-053).
-        GoRoute(path: '/partidos', builder: (_, _) => const AgendaPagina()),
+        GoRoute(
+          path: '/partidos',
+          pageBuilder: (_, estado) => NoTransitionPage(
+            key: estado.pageKey,
+            child: const AgendaPagina(),
+          ),
+        ),
         GoRoute(
           path: '/partidos/:id/alineacion',
           builder: (_, estado) => AlineacionPagina(
@@ -87,8 +101,17 @@ final router = GoRouter(
             barraSuperior: _barraAlertas,
           ),
         ),
-        GoRoute(path: '/analisis', builder: (_, _) => const AnalisisPagina()),
-        GoRoute(path: '/asistencia', builder: (_, _) => const AsistenciaPagina()),
+        GoRoute(
+          path: '/analisis',
+          pageBuilder: (_, estado) => NoTransitionPage(
+            key: estado.pageKey,
+            child: const AnalisisPagina(),
+          ),
+        ),
+        GoRoute(
+          path: '/asistencia',
+          builder: (_, _) => const AsistenciaPagina(),
+        ),
       ],
     ),
   ],

@@ -108,15 +108,15 @@ class _AnalisisPaginaState extends State<AnalisisPagina> {
   Widget build(BuildContext context) {
     final tema = Theme.of(context);
     final fondo = _altoContraste ? const Color(0xFF030712) : tema.scaffoldBackgroundColor;
-    final colorTexto = _altoContraste ? Colors.white : Colors.black87;
-    final colorSubtexto = _altoContraste ? const Color(0xFF9CA3AF) : Colors.black54;
-    final colorTarjeta = _altoContraste ? const Color(0xFF111827) : tema.cardColor;
-    final colorBorde = _altoContraste ? const Color(0xFF374151) : Colors.grey.shade300;
+    final colorTexto = _altoContraste ? Colors.white : tema.colorScheme.onSurface;
+    final colorSubtexto = _altoContraste ? const Color(0xFFCBD5E1) : tema.colorScheme.onSurfaceVariant;
+    final colorTarjeta = _altoContraste ? const Color(0xFF111827) : tema.colorScheme.surface;
+    final colorBorde = _altoContraste ? const Color(0xFF64748B) : tema.colorScheme.outlineVariant;
 
     return Scaffold(
       backgroundColor: fondo,
       appBar: AppBar(
-        title: const Text('Partido en Vivo'),
+        title: const Text('Análisis en vivo'),
         backgroundColor: _altoContraste ? const Color(0xFF0F172A) : null,
         foregroundColor: _altoContraste ? Colors.white : null,
         actions: [
@@ -658,12 +658,14 @@ class _AnalisisPaginaState extends State<AnalisisPagina> {
             aspectRatio: 105 / 68,
             child: ClipRRect(
               borderRadius: BorderRadius.circular(8),
-              child: CustomPaint(
-                painter: _CanchaRadarPainter(
-                  jugadores: jugadores,
-                  balon: balon,
-                  estela: _mostrarEstela ? estela : const [],
-                  altoContraste: _altoContraste,
+              child: RepaintBoundary(
+                child: CustomPaint(
+                  painter: _CanchaRadarPainter(
+                    jugadores: jugadores,
+                    balon: balon,
+                    estela: _mostrarEstela ? estela : const [],
+                    altoContraste: _altoContraste,
+                  ),
                 ),
               ),
             ),

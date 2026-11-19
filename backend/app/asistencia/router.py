@@ -9,7 +9,7 @@ Responsables segun el Sprint Planning:
 
 from fastapi import APIRouter, Depends, Query, Response, status
 
-from app.asistencia import service
+from app.asistencia import service, valoracion
 from app.asistencia.schemas import (
     Alerta,
     DispositivoRegistrar,
@@ -90,11 +90,38 @@ async def recomendaciones(partido_id: int, usuario: Actual, db: Db,
     return await service.listar_recomendaciones(db, usuario, partido_id, solo_activas)
 
 
+# T-090, T-091 (Alejandra): quien ve las recomendaciones en el panel las valora.
+PUEDEN_VALORAR = Depends(requiere_rol("ADMIN", "DT", "ANALISTA"))
+_RESPUESTAS_RECOMENDACION = {
+    403: {"description": "Requiere rol ADMIN, DT o ANALISTA"},
+    404: {"description": "Recomendacion inexistente o de un partido de otro club"},
+}
+
+
 @router.post("/recomendaciones/{recomendacion_id}/valorar", response_model=Recomendacion,
-             responses=RESPUESTA_501,
-             summary="CU-51 · Marcar util, no util o aplicada")
+             dependencies=[PUEDEN_VALORAR],
+             responses={**_RESPUESTAS_RECOMENDACION,
+                        409: {"description": "La recomendacion ya fue valorada"}},
+             summary="CU-51 · Marcar util, no util o aplicada",
+             description=(
+                 "T-091. Util: queda VISTA (sigue activa). No util: DESCARTADA. Aplicada: "
+                 "APLICADA, con `util` = true si no se indica. Las dos ultimas salen de las "
+                 "activas. Una sola valoracion por recomendacion."
+             ))
 async def valorar(recomendacion_id: int, datos: Valoracion, usuario: Actual, db: Db) -> Recomendacion:
-    pendiente("CU-51", "Sprint 4", "Alejandra")
+    return await valoracion.valorar(db, usuario, recomendacion_id, datos)
+
+
+@router.post("/recomendaciones/{recomendacion_id}/vista", response_model=Recomendacion,
+             dependencies=[PUEDEN_VALORAR],
+             responses=_RESPUESTAS_RECOMENDACION,
+             summary="CU-50 · Marcar una recomendacion como vista",
+             description=(
+                 "T-090. Lo llama el cliente la primera vez que la muestra: estado VISTA y "
+                 "`vista_en`. Idempotente; no cambia una recomendacion ya valorada."
+             ))
+async def marcar_vista(recomendacion_id: int, usuario: Actual, db: Db) -> Recomendacion:
+    return await valoracion.marcar_vista(db, usuario, recomendacion_id)
 
 
 @router.get("/partidos/{partido_id}/alertas", response_model=list[Alerta],

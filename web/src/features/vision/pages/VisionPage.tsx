@@ -1,15 +1,29 @@
-/** Visión por Computadora  —  P3 · CU-18 … CU-29 */
-import { Pendiente } from "@/shared/ui/Pendiente";
+import { Outlet, useSearchParams } from "react-router-dom";
 
-const CASOS = [
-  "CU-18 Guía de montaje de cámara",
-  "CU-19 Calibrar cámara",
-  "CU-20 Medidas de la cancha",
-  "CU-21 Validar error de calibración",
-  "CU-22 Reutilizar calibración",
-  "CU-23 Corregir distorsión",
-];
+import { Pestanas } from "@/shared/ui/Pestanas";
 
 export function VisionPage() {
-  return <Pendiente paquete="P3" titulo="Visión por Computadora" casos={CASOS} />;
+  const [parametros] = useSearchParams();
+  const partidoId = parametros.get("partidoId");
+  const contexto = partidoId ? `?partidoId=${encodeURIComponent(partidoId)}` : "";
+
+  return (
+    <main className="area-pagina">
+      <header className="area-titulo">
+        <h1>Visión y video</h1>
+      </header>
+      <Pestanas
+        titulo="Visión y video"
+        enlaces={[
+          { ruta: `/vision/videos${contexto}`, titulo: "Videos" },
+          { ruta: `/vision/calibracion${contexto}`, titulo: "Calibración" },
+          { ruta: `/vision/guia-montaje${contexto}`, titulo: "Montaje" },
+          { ruta: "/vision/modelos", titulo: "Modelos" },
+        ]}
+      />
+      <div className="area-contenido vision-contenido">
+        <Outlet />
+      </div>
+    </main>
+  );
 }

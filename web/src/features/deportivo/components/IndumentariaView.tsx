@@ -1,4 +1,4 @@
-import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { editarEquipo, listarEquipos } from "../api";
 import { calcularDistanciaHsv, hexAHsv, type Equipo } from "../types";
 import { ColorPickerKit } from "./ColorPickerKit";
@@ -16,6 +16,7 @@ interface IndumentariaViewProps {
 }
 
 export function IndumentariaView({ equipoInicialId }: IndumentariaViewProps) {
+  const equipoInicialAbierto = useRef<number | null>(null);
   const [equipos, setEquipos] = useState<Equipo[]>([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -85,13 +86,13 @@ export function IndumentariaView({ equipoInicialId }: IndumentariaViewProps) {
     [equipos],
   );
 
-  // Si venimos redirigidos desde un equipo en CU-09, abrimos su editor de indumentaria
+  // Abrir el equipo enlazado una sola vez, aunque se recargue la lista al guardar.
   useEffect(() => {
-    if (equipoInicialId && equipos.length > 0) {
-      const eq = equipos.find((e) => e.id === equipoInicialId);
-      if (eq) {
-        abrirConfigurarIndumentaria(eq);
-      }
+    if (!equipoInicialId || equipoInicialAbierto.current === equipoInicialId) return;
+    const equipo = equipos.find((item) => item.id === equipoInicialId);
+    if (equipo) {
+      equipoInicialAbierto.current = equipoInicialId;
+      abrirConfigurarIndumentaria(equipo);
     }
   }, [equipoInicialId, equipos, abrirConfigurarIndumentaria]);
 
@@ -206,114 +207,9 @@ export function IndumentariaView({ equipoInicialId }: IndumentariaViewProps) {
     });
   }, [equiposConMetricas, busqueda, filtroContraste]);
 
-  const kpis = useMemo(() => {
-    const total = equiposConMetricas.length;
-    const optimos = equiposConMetricas.filter((e) => !e.hayRiesgo).length;
-    const conAlerta = equiposConMetricas.filter((e) => e.hayRiesgo).length;
-    return { total, optimos, conAlerta };
-  }, [equiposConMetricas]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-      {/* KPIs de Indumentaria y Contraste Óptico (CU-10) */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-          gap: 12,
-        }}
-      >
-        <div
-          style={{
-            padding: "14px 18px",
-            borderRadius: 10,
-            background: "var(--surface)",
-            border: "1px solid var(--line)",
-          }}
-        >
-          <div
-            style={{
-              fontSize: 11,
-              fontWeight: 700,
-              color: "var(--text-3)",
-              textTransform: "uppercase",
-            }}
-          >
-            Kits de Equipos Configurados
-          </div>
-          <div
-            style={{
-              fontSize: 24,
-              fontWeight: 800,
-              color: "var(--text)",
-              marginTop: 4,
-            }}
-          >
-            {kpis.total}
-          </div>
-        </div>
-
-        <div
-          style={{
-            padding: "14px 18px",
-            borderRadius: 10,
-            background: "var(--surface)",
-            border: "1px solid var(--line)",
-          }}
-        >
-          <div
-            style={{
-              fontSize: 11,
-              fontWeight: 700,
-              color: "var(--text-3)",
-              textTransform: "uppercase",
-            }}
-          >
-            Contraste Óptico Óptimo (HSV ≥ 40)
-          </div>
-          <div
-            style={{
-              fontSize: 24,
-              fontWeight: 800,
-              color: "var(--pitch)",
-              marginTop: 4,
-            }}
-          >
-            {kpis.optimos}
-          </div>
-        </div>
-
-        <div
-          style={{
-            padding: "14px 18px",
-            borderRadius: 10,
-            background: "var(--surface)",
-            border: "1px solid var(--line)",
-          }}
-        >
-          <div
-            style={{
-              fontSize: 11,
-              fontWeight: 700,
-              color: "var(--text-3)",
-              textTransform: "uppercase",
-            }}
-          >
-            Alertas de Similitud Interna
-          </div>
-          <div
-            style={{
-              fontSize: 24,
-              fontWeight: 800,
-              color: kpis.conAlerta > 0 ? "var(--risk)" : "var(--text-3)",
-              marginTop: 4,
-            }}
-          >
-            {kpis.conAlerta}
-          </div>
-        </div>
-      </div>
-
       {/* Barra de Búsqueda, Filtro Óptico y Acción Principal */}
       <div
         style={{
@@ -349,7 +245,7 @@ export function IndumentariaView({ equipoInicialId }: IndumentariaViewProps) {
               background: "var(--ground)",
               color: "var(--text)",
               fontSize: 13,
-              minWidth: 260,
+              minWidth: "min(220px, 100%)",
             }}
           />
 
@@ -439,15 +335,14 @@ export function IndumentariaView({ equipoInicialId }: IndumentariaViewProps) {
             No se encontraron registros de indumentaria
           </h4>
           <p style={{ margin: 0, fontSize: 13, color: "var(--text-2)" }}>
-            Registra primero un equipo en la pestaña "Gestionar Equipos (CU-09)"
-            o ajusta los filtros de búsqueda.
+            Registra un equipo o ajusta los filtros de búsqueda.
           </p>
         </div>
       ) : (
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(360px, 1fr))",
+            gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 340px), 1fr))",
             gap: 18,
           }}
         >
@@ -842,7 +737,7 @@ export function IndumentariaView({ equipoInicialId }: IndumentariaViewProps) {
                   className="kicker"
                   style={{ color: "var(--pitch)", fontWeight: 700 }}
                 >
-                  CU-10 · REGISTRAR INDUMENTARIA DE EQUIPO
+                  Camisetas del equipo
                 </span>
                 <h3 style={{ margin: "4px 0 0", fontSize: 20 }}>
                   Configuración Oficial de Camisetas y Contraste HSV
@@ -1035,7 +930,7 @@ export function IndumentariaView({ equipoInicialId }: IndumentariaViewProps) {
                   className="kicker"
                   style={{ color: "var(--pitch)", fontWeight: 700 }}
                 >
-                  CU-10 · FICHA ÓPTICA DE INDUMENTARIA
+                  Contraste de colores
                 </span>
                 <h3 style={{ margin: "4px 0 0", fontSize: 20 }}>
                   {equipoVerFicha.nombre}

@@ -58,6 +58,7 @@ AISLADO = {401, 403, 404, 501}
 # pasan por una validación propia antes del dato y no sirven para el control.
 CONTROL_EXENTO = {
     ("GET", "/api/vision/videos/{video_id}/archivo"),         # el archivo no está en el almacén de prueba
+    ("GET", "/api/vision/videos/{video_id}/archivo/bloque"),  # ídem: 409 "todavía no está disponible"
     ("GET", "/api/vision/videos/{video_id}/cuadro"),
     ("GET", "/api/vision/videos/{video_id}/muestras"),
 }

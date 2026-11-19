@@ -9,7 +9,8 @@ import {
   radioNodo,
 } from "../circulacion";
 import type { LadoPartido, NodoPase } from "../types";
-import { SelectorPartido, usePartidosAnalisis } from "./SelectorPartido";
+import { usePartidosAnalisis, usePartidoUrl } from "../hooks/usePartidosAnalisis";
+import { SelectorPartido } from "./SelectorPartido";
 
 const LINEA = "rgba(255,255,255,.88)";
 const FLECHA = "#f9d65c";
@@ -19,7 +20,7 @@ const etiqueta = (n: NodoPase) => `${n.dorsal != null ? `#${n.dorsal} ` : ""}${n
 
 /** CU-48 · Red de pases sobre el plano de cancha. Cada equipo se ve atacando hacia la derecha. */
 export function RedPasesCancha() {
-  const [seleccionado, setSeleccionado] = useState<number | null>(null);
+  const { partidoId: seleccionado, elegir } = usePartidoUrl();
   const [equipo, setEquipo] = useState<LadoPartido>("LOCAL");
   const [desde, setDesde] = useState(0);
   const [hasta, setHasta] = useState(90);
@@ -53,7 +54,7 @@ export function RedPasesCancha() {
   return (
     <div className="analisis-sesion">
       <div className="analisis-sesion-barra">
-        <SelectorPartido valor={id} onCambiar={setSeleccionado} />
+        <SelectorPartido valor={id} onCambiar={elegir} />
         <label>
           Equipo{" "}
           <select value={equipo} onChange={(e) => setEquipo(e.target.value as LadoPartido)}>

@@ -33,6 +33,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
@@ -43,6 +44,10 @@ from app.analisis.motor.muestras import muestra_de_mensaje
 from app.analisis.parametros import PARAMETROS
 from app.asistencia import service as asistencia
 from app.asistencia.contexto import INTERVALO_EVALUACION_S, EstadoTactico
+from app.asistencia.models import Recomendacion as RecomendacionModelo
+from app.asistencia.motor import ORDEN_PRIORIDAD
+from app.asistencia.schemas import Prioridad
+from app.asistencia.schemas import Recomendacion as RecomendacionEsquema
 from app.core.config import settings
 from app.core.realtime import Hub, canal_partido, obtener_hub
 from app.deportivo.models import Partido
@@ -131,10 +136,34 @@ class AnalisisEnVivo:
                     reloj_activo = await asistencia.evaluar_en_vivo(
                         db, partido_id, club_id, t, vivo.tactica.metricas(),
                     )
+                    nuevas = await self._recomendaciones_de(db, partido_id, t)
+                await self._difundir_recomendaciones(club_id, partido_id, nuevas)
                 if not reloj_activo:
                     vivo.tactica.interrumpir()
         except Exception:
             log.exception("Falló la evaluación táctica del partido %s", partido_id)
+
+    @staticmethod
+    async def _recomendaciones_de(db: AsyncSession, partido_id: int,
+                                  t: float) -> list[dict[str, Any]]:
+        """T-090: las creadas en la evaluación del instante `t`.
+
+        La restricción única (partido, regla, t) garantiza que son las recién
+        creadas, sin tocar `evaluar_en_vivo` (motor de reglas de Daniel).
+        """
+        r = RecomendacionModelo
+        filas = (await db.scalars(
+            select(r).where(r.partido_id == partido_id, r.t == t).order_by(r.id)
+        )).all()
+        ordenadas = sorted(filas, key=lambda f: (ORDEN_PRIORIDAD[Prioridad(f.prioridad)], f.id))
+        return [RecomendacionEsquema.model_validate(f).model_dump(mode="json") for f in ordenadas]
+
+    async def _difundir_recomendaciones(self, club_id: int, partido_id: int,
+                                        nuevas: list[dict[str, Any]]) -> None:
+        """T-090: cada recomendación nueva sale por /vivo apenas se crea."""
+        canal = canal_partido(club_id, partido_id)
+        for datos in nuevas:
+            await self.hub.difundir(canal, {"tipo": "recomendacion", "datos": datos})
 
     async def _hidratar(self, partido_id: int, vaciar: Vaciar | None) -> _Vivo | None:
         if self.reloj() < self._descartados.get(partido_id, float("-inf")):

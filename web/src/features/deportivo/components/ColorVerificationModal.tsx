@@ -118,7 +118,7 @@ export function ColorVerificationModal({
                 letterSpacing: "0.08em",
               }}
             >
-              CU-10 · Verificador Óptico de Partido vs Rival
+              Colores del próximo partido
             </span>
             <h3 style={{ margin: "2px 0 0", fontSize: 17, fontWeight: 800, color: "var(--text)" }}>
               Contraste de Indumentaria: {equipo.nombre} vs. Rival
@@ -279,8 +279,8 @@ export function ColorVerificationModal({
 
               <p style={{ margin: 0, fontSize: 12.5, lineHeight: 1.5, color: "var(--text)" }}>
                 {analisisKits.hayRiesgoActivo
-                  ? `La indumentaria ${kitNuestro === "local" ? "titular" : "alternativa"} está muy próxima a la del rival en espacio HSV (distancia ${analisisKits.distActiva.toFixed(1)} < 40). El pipeline de visión computacional podría confundir a los jugadores.`
-                  : `Contraste adecuado: la distancia en espacio HSV (${analisisKits.distActiva.toFixed(1)} ≥ 40) garantiza una segmentación nítida de ambos planteles.`}
+                  ? `La indumentaria ${kitNuestro === "local" ? "titular" : "alternativa"} está muy próxima a la del rival en espacio HSV (distancia ${analisisKits.distActiva.toFixed(1)} < 40). Los equipos podrían confundirse durante el análisis.`
+                  : `Contraste adecuado: la distancia en espacio HSV (${analisisKits.distActiva.toFixed(1)} ≥ 40) permite diferenciar mejor los colores.`}
               </p>
 
               {/* Recomendación inteligente de cambio a indumentaria alternativa */}

@@ -186,17 +186,21 @@ def abrir_con_yolo(dispositivo: str, clases: str, carpeta: Path, vid_stride: int
         from procesamiento.fuente import datos_del_video, seguir_con_cuadros
 
         modelo = trabajo.get("modelo")
-        pesos = str(_PESOS_FUTBOL if _PESOS_FUTBOL.exists() and clases == "futbol" else "yolo11n.pt")
+        futbol_local = clases == "futbol" and _PESOS_FUTBOL.is_file()
+        pesos_coco = _PESOS_FUTBOL.with_name("yolo11n.pt")
+        pesos = str(pesos_coco) if pesos_coco.is_file() else "yolo11n.pt"
         if modelo:
             pesos = str(_bajar_pesos(modelo["archivo_url"], carpeta / "modelos"))
         elif clases == "propio":
             raise ValueError("Para --clases propio debes registrar y seleccionar un modelo entrenado")
-        elif clases == "futbol" and not _PESOS_FUTBOL.exists():
+        elif futbol_local:
+            pesos = str(_PESOS_FUTBOL)
+        elif clases == "futbol":
             log.warning("No hay pesos especializados; se usará COCO con sus clases correctas")
 
         clases_map = (
             CLASES_FUTBOL
-            if clases == "futbol" and (modelo or _PESOS_FUTBOL.exists())
+            if clases == "futbol" and (modelo or futbol_local)
             else (CLASES_PROPIO if clases == "propio" else CLASES_COCO)
         )
         config = ConfigModelo(

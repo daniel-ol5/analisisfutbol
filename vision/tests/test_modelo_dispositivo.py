@@ -4,6 +4,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+
 from deteccion.modelo import ModeloDeteccion
 
 
@@ -32,8 +33,13 @@ def test_se_registra_dispositivo_durante_inferencia_aunque_se_libere_predictor(m
     modelo = ModeloDeteccion()
     modelo.cargar()
     assert modelo.dispositivo_inferencia() is None
-    callbacks["on_predict_postprocess_end"](SimpleNamespace(device="cuda:0"))
+    cajas_originales = object()
+    predictor = SimpleNamespace(device="cuda:0", results=[SimpleNamespace(boxes=cajas_originales)])
+    callbacks["on_predict_postprocess_end"](predictor)
+    predictor.results = [SimpleNamespace(boxes=object())]
+    callbacks["on_predict_batch_end"](predictor)
     assert modelo.dispositivo_inferencia() == "cuda:0"
+    assert predictor.results[0].cajas_antes_del_tracker is cajas_originales
     modelo.cargar()  # Otra carga no puede heredar evidencia de una ejecución anterior.
     assert modelo.dispositivo_inferencia() is None
 

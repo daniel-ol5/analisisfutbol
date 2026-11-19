@@ -1,4 +1,5 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
+import { Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   listarEquipos,
@@ -28,9 +29,9 @@ const ETIQUETAS_ORDEN: Record<OrdenJugadores, string> = {
   apellido: "Apellido",
 };
 
-export function JugadoresView() {
+export function JugadoresView({ equipoInicialId = null }: { equipoInicialId?: number | null }) {
   const queryClient = useQueryClient();
-  const [equipoId, setEquipoId] = useState<number | null>(null);
+  const [equipoElegido, setEquipoId] = useState(equipoInicialId);
   const [mostrarInactivos, setMostrarInactivos] = useState(false);
   const [busqueda, setBusqueda] = useState("");
   const [orden, setOrden] = useState<OrdenJugadores>("dorsal");
@@ -53,12 +54,7 @@ export function JugadoresView() {
     retry: 1,
   });
 
-  // Selecciona automáticamente el primer equipo disponible
-  useEffect(() => {
-    if (equipoId === null && equipos.length > 0) {
-      setEquipoId(equipos[0].id);
-    }
-  }, [equipos, equipoId]);
+  const equipoId = equipos.find(({ id }) => id === equipoElegido)?.id ?? equipos[0]?.id ?? null;
 
   // Consulta del plantel del equipo seleccionado
   const {
@@ -195,8 +191,7 @@ export function JugadoresView() {
           Aún no hay equipos registrados en el club.
         </h4>
         <p style={{ margin: "6px 0 0", fontSize: 13, color: "var(--text-2)" }}>
-          Registra primero un equipo en la pestaña "Gestionar Equipos (CU-09)" para poder gestionar su
-          plantel.
+          <Link to="/deportivo/equipos" className="volver">Ir a equipos →</Link>
         </p>
       </div>
     );
@@ -263,6 +258,7 @@ export function JugadoresView() {
       >
         <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", flex: 1 }}>
           <select
+            aria-label="Equipo del plantel"
             value={equipoId ?? ""}
             onChange={(e) => setEquipoId(Number(e.target.value))}
             style={{

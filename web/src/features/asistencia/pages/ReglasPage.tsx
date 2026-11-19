@@ -1,5 +1,5 @@
 /**
- * CU-54 · Catálogo de reglas (T-092).
+ * CU-54 · Catálogo de reglas (T-092). Pestaña "Reglas tácticas" de AsistenciaPage.
  *
  * Lista las reglas globales del sistema y las propias del club, y permite
  * activarlas o desactivarlas sin tocar código. Criterio de T-092: el cambio
@@ -10,7 +10,6 @@
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Link } from "react-router-dom";
 
 import "@/features/asistencia/reglas.css";
 import { useSesion } from "@/features/seguridad/session";
@@ -57,12 +56,7 @@ export function ReglasPage() {
   const activas = reglas.filter((r) => r.activa).length;
 
   return (
-    <main className="reg-pagina">
-      <Link to="/asistencia" className="volver">
-        ← Asistencia y Reportes
-      </Link>
-      <p className="kicker">P6 · CU-54</p>
-      <h1>Catálogo de reglas</h1>
+    <section className="reg-pagina" aria-label="Catálogo de reglas">
       <p className="reg-intro">
         Las reglas deciden qué recomendaciones recibe el cuerpo técnico durante el partido. Activar
         o desactivar una regla vale desde la próxima evaluación del motor, sin desplegar nada. Las
@@ -181,6 +175,6 @@ export function ReglasPage() {
         />
       )}
       {probando && <ProbarRegla regla={probando} onCerrar={() => setProbando(null)} />}
-    </main>
+    </section>
   );
 }

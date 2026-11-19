@@ -182,18 +182,14 @@ void main() {
 
       // Verificamos presencia de textos clave de alto contraste
       expect(find.text('Primera División'), findsOneWidget);
-      expect(find.text('PRIMERA A'), findsOneWidget);
-      expect(find.text('TEMP 2026'), findsOneWidget);
-      expect(find.text('28 JUGADORES'), findsOneWidget);
-      expect(find.text('INDUMENTARIA OFICIAL (CU-10)'), findsOneWidget);
+      expect(find.text('Primera A · 2026'), findsOneWidget);
+      expect(find.text('28 jugadores'), findsOneWidget);
+      expect(find.text('Indumentaria'), findsOneWidget);
 
       // Verificamos los 3 chips de camisetas
-      expect(find.text('LOCAL'), findsOneWidget);
-      expect(find.text('VISITA'), findsOneWidget);
-      expect(find.text('ARQUERO'), findsOneWidget);
-      expect(find.text('#1E5AA8'), findsOneWidget);
-      expect(find.text('#FFFFFF'), findsOneWidget);
-      expect(find.text('#F2C200'), findsOneWidget);
+      expect(find.text('Titular · #1E5AA8'), findsOneWidget);
+      expect(find.text('Alternativa · #FFFFFF'), findsOneWidget);
+      expect(find.text('Arquero · #F2C200'), findsOneWidget);
 
       // Verificamos interacción táctil
       await tester.tap(find.byType(TarjetaEquipo));
@@ -245,11 +241,9 @@ void main() {
       await tester.pumpAndSettle();
 
       // Título y pestañas
-      expect(find.text('Gestión Deportiva'), findsOneWidget);
+      expect(find.text('Gestión deportiva'), findsOneWidget);
       expect(find.text('Equipos'), findsOneWidget);
       expect(find.text('Plantel'), findsOneWidget);
-      expect(find.text('Partidos'), findsOneWidget);
-      expect(find.text('Alineación'), findsOneWidget);
 
       // Verificamos que los equipos cargados se muestran
       expect(find.text('Primera División'), findsOneWidget);
@@ -274,16 +268,28 @@ void main() {
       await tester.tap(find.text('Primera División'));
       await tester.pumpAndSettle();
 
-      expect(find.text('COLORES DE INDUMENTARIA (CU-10)'), findsWidgets);
+      expect(find.text('Indumentaria'), findsWidgets);
       expect(find.text('Titular (Local)'), findsOneWidget);
       expect(find.text('Alternativa (Visita)'), findsOneWidget);
       expect(find.text('Guardameta (Arquero)'), findsOneWidget);
-      expect(find.text('CERRAR FICHA'), findsOneWidget);
+      expect(find.text('Cerrar ficha'), findsOneWidget);
 
       // Cerramos el modal
-      await tester.tap(find.text('CERRAR FICHA'));
+      await tester.tap(find.text('Cerrar ficha'));
       await tester.pumpAndSettle();
-      expect(find.text('CERRAR FICHA'), findsNothing);
+      expect(find.text('Cerrar ficha'), findsNothing);
+
+      final tarjeta = find.ancestor(
+        of: find.text('Primera División'),
+        matching: find.byType(TarjetaEquipo),
+      );
+      await tester.tap(find.descendant(of: tarjeta, matching: find.text('Indumentaria')));
+      await tester.pumpAndSettle();
+      expect(find.text('Primera División'), findsOneWidget);
+      expect(find.text('Reserva Sub-20'), findsNothing);
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      expect(find.text('Reserva Sub-20'), findsOneWidget);
     });
   });
 

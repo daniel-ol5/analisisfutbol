@@ -3068,6 +3068,94 @@
         }
       }
     },
+    "/api/vision/videos/{video_id}/archivo/bloque": {
+      "get": {
+        "tags": [
+          "P3 · Visión por Computadora"
+        ],
+        "summary": "Descargar un bloque de la grabación para el visor web",
+        "operationId": "descargar_bloque_video_api_vision_videos__video_id__archivo_bloque_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "video_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Video Id"
+            }
+          },
+          {
+            "name": "inicio",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "title": "Inicio"
+            }
+          },
+          {
+            "name": "cantidad",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 1048576,
+              "exclusiveMinimum": 0,
+              "default": 1048576,
+              "title": "Cantidad"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BloqueVideo"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "Declarado en el contrato, pendiente de implementacion",
+            "content": {
+              "application/json": {
+                "example": {
+                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Partido o video inexistente, o de otro club"
+          },
+          "409": {
+            "description": "El video no está disponible"
+          },
+          "416": {
+            "description": "El inicio está fuera del archivo"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/vision/partidos/{partido_id}/transmitir-vivo": {
       "post": {
         "tags": [
@@ -5590,6 +5678,7 @@
           "P6 · Asistencia y Reportes"
         ],
         "summary": "CU-51 · Marcar util, no util o aplicada",
+        "description": "T-091. Util: queda VISTA (sigue activa). No util: DESCARTADA. Aplicada: APLICADA, con `util` = true si no se indica. Las dos ultimas salen de las activas. Una sola valoracion por recomendacion.",
         "operationId": "valorar_api_asistencia_recomendaciones__recomendacion_id__valorar_post",
         "security": [
           {
@@ -5628,15 +5717,68 @@
               }
             }
           },
-          "501": {
-            "description": "Declarado en el contrato, pendiente de implementacion",
+          "403": {
+            "description": "Requiere rol ADMIN, DT o ANALISTA"
+          },
+          "404": {
+            "description": "Recomendacion inexistente o de un partido de otro club"
+          },
+          "409": {
+            "description": "La recomendacion ya fue valorada"
+          },
+          "422": {
+            "description": "Validation Error",
             "content": {
               "application/json": {
-                "example": {
-                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/api/asistencia/recomendaciones/{recomendacion_id}/vista": {
+      "post": {
+        "tags": [
+          "P6 · Asistencia y Reportes"
+        ],
+        "summary": "CU-50 · Marcar una recomendacion como vista",
+        "description": "T-090. Lo llama el cliente la primera vez que la muestra: estado VISTA y `vista_en`. Idempotente; no cambia una recomendacion ya valorada.",
+        "operationId": "marcar_vista_api_asistencia_recomendaciones__recomendacion_id__vista_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "recomendacion_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Recomendacion Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Recomendacion"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Requiere rol ADMIN, DT o ANALISTA"
+          },
+          "404": {
+            "description": "Recomendacion inexistente o de un partido de otro club"
           },
           "422": {
             "description": "Validation Error",
@@ -6223,6 +6365,34 @@
         "type": "object",
         "title": "BloqueFase",
         "description": "Altura de linea, amplitud y compacidad promediadas sobre una fase (T-102)."
+      },
+      "BloqueVideo": {
+        "properties": {
+          "inicio": {
+            "type": "integer",
+            "title": "Inicio"
+          },
+          "total_bytes": {
+            "type": "integer",
+            "title": "Total Bytes"
+          },
+          "tipo": {
+            "type": "string",
+            "title": "Tipo"
+          },
+          "contenido_base64": {
+            "type": "string",
+            "title": "Contenido Base64"
+          }
+        },
+        "type": "object",
+        "required": [
+          "inicio",
+          "total_bytes",
+          "tipo",
+          "contenido_base64"
+        ],
+        "title": "BloqueVideo"
       },
       "Body_analizar_cuadro_en_vivo_api_vision_vivo_analizar_cuadro_post": {
         "properties": {

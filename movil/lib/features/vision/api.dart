@@ -6,4 +6,25 @@ library;
 
 import '../../shared/api/cliente.dart';
 
-Future<dynamic> ping() => cliente.get('/vision/ping');
+typedef VideoPartido = ({
+  String nombre,
+  String estado,
+  int progreso,
+  bool enCola,
+});
+
+Future<List<VideoPartido>> listarVideos(int partidoId) async {
+  final respuesta =
+      await cliente.get('/vision/partidos/$partidoId/videos') as List;
+  return [
+    for (final registro in respuesta.cast<Map<String, dynamic>>())
+      (
+        nombre: registro['nombre'] as String,
+        estado: registro['estado'] as String,
+        progreso: (registro['progreso_pct'] as int? ?? 0).clamp(0, 100),
+        enCola:
+            registro['estado'] == 'PROCESANDO' &&
+            registro['iniciado_en'] == null,
+      ),
+  ];
+}

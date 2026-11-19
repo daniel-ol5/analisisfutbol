@@ -83,10 +83,8 @@ export function CalibracionDinamicaPage() {
   }
 
   const dimensiones = referencia?.ancho_px && referencia.alto_px ? { ancho: referencia.ancho_px, alto: referencia.alto_px } : null;
-  return <main className="cal-pagina">
-    <Link to="/vision" className="volver">← Visión por computadora</Link>
-    <h1>Calibración y seguimiento de cancha</h1>
-    <p className="cal-intro">Configura la fuente y las medidas del campo. El worker sigue los paneos y vuelve a buscar referencias cuando la cámara cambia.</p>
+  return <section className="cal-pagina">
+    <h2>Calibrar cámara</h2>
     <section className="cal-barra-config" aria-label="Fuente y medidas">
       <label className="cal-campo">Partido<select aria-label="Partido" className="cal-input" value={partidoId} onChange={e => { limpiar(); setPartidoId(Number(e.target.value)); setVideoId(0); }}>
         <option value={0}>Seleccionar partido</option>{partidos.data?.map(p => <option key={p.id} value={p.id}>#{p.id} · {p.rival}</option>)}
@@ -155,5 +153,5 @@ export function CalibracionDinamicaPage() {
       <p><a download={`calibracion-partido-${partidoId}.json`} href={`data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(guardar.data, null, 2))}`}>Descargar configuración para Colab</a></p>
     </div>}
     {(partidos.isError || videos.isError) && <p role="alert">No se pudieron cargar los datos del club. Comprueba la conexión con la API.</p>}
-  </main>;
+  </section>;
 }

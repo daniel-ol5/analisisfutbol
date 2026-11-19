@@ -7,6 +7,8 @@ Responsables segun el Sprint Planning:
     CU-27 a CU-29  video y modelos           · S3 · Araceli
 """
 
+from base64 import b64encode
+from os import fstat
 from typing import Annotated, Any
 
 from fastapi import (
@@ -33,7 +35,9 @@ from app.partido.service import AlmacenPosiciones, obtener_almacen_posiciones
 from app.vision import procesamiento, service, videos
 from app.vision.almacen import AlmacenVideos, obtener_almacen_videos
 from app.vision.schemas import (
+    FORMATOS_VIDEO,
     ActivarModelo,
+    BloqueVideo,
     Calibracion,
     CalibracionGuardar,
     CalibracionIntrinseca,
@@ -421,6 +425,38 @@ async def descargar_video(video_id: int, usuario: Actual, db: Db,
                           almacen: AlmacenDep) -> FileResponse:
     ruta = await procesamiento.archivo(db, usuario, video_id, almacen)
     return FileResponse(ruta, media_type="video/mp4")
+
+
+MAX_BLOQUE_VIDEO = 1024 * 1024
+
+
+@router.get("/videos/{video_id}/archivo/bloque", response_model=BloqueVideo,
+            responses={**_RESPUESTA_404, 409: {"description": "El video no está disponible"},
+                       416: {"description": "El inicio está fuera del archivo"}},
+            summary="Descargar un bloque de la grabación para el visor web")
+async def descargar_bloque_video(
+    video_id: int, usuario: Actual, db: Db, almacen: AlmacenDep, response: Response,
+    inicio: Annotated[int, Query(ge=0)],
+    cantidad: Annotated[int, Query(gt=0, le=MAX_BLOQUE_VIDEO)] = MAX_BLOQUE_VIDEO,
+) -> BloqueVideo:
+    ruta = await procesamiento.archivo(db, usuario, video_id, almacen)
+
+    def leer_bloque() -> BloqueVideo:
+        try:
+            with ruta.open("rb") as archivo:
+                total = fstat(archivo.fileno()).st_size
+                if inicio >= total:
+                    raise HTTPException(416, "El bloque empieza fuera del video")
+                archivo.seek(inicio)
+                datos = archivo.read(cantidad)
+        except FileNotFoundError as exc:
+            raise HTTPException(404, "No se encontró el archivo del video") from exc
+        tipo = FORMATOS_VIDEO.get(ruta.suffix.lower(), ("application/octet-stream",))[0]
+        return BloqueVideo(inicio=inicio, total_bytes=total, tipo=tipo,
+                           contenido_base64=b64encode(datos).decode("ascii"))
+
+    response.headers["Cache-Control"] = "private, no-store"
+    return await run_in_threadpool(leer_bloque)
 
 
 @router.post("/partidos/{partido_id}/transmitir-vivo", status_code=status.HTTP_202_ACCEPTED,

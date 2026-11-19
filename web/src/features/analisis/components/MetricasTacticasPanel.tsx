@@ -1,8 +1,8 @@
-import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { obtenerMetricasTacticas } from "../api";
 import type { BloqueFase, MetricaTactica } from "../types";
-import { SelectorPartido, usePartidosAnalisis } from "./SelectorPartido";
+import { usePartidosAnalisis, usePartidoUrl } from "../hooks/usePartidosAnalisis";
+import { SelectorPartido } from "./SelectorPartido";
 
 const num = (v: number | null) => (v == null ? "—" : v.toFixed(1));
 const FASES = [
@@ -44,7 +44,7 @@ function TablaEquipo({ nombre, m }: { nombre: string; m: MetricaTactica }) {
 
 /** CU-45 · Altura de línea defensiva, amplitud y compacidad con y sin balón. */
 export function MetricasTacticasPanel() {
-  const [seleccionado, setSeleccionado] = useState<number | null>(null);
+  const { partidoId: seleccionado, elegir } = usePartidoUrl();
   const { id, nombreLocal, nombreVisitante } = usePartidosAnalisis(seleccionado);
   const consulta = useQuery({
     queryKey: ["metricas-tacticas", id],
@@ -57,7 +57,7 @@ export function MetricasTacticasPanel() {
   return (
     <div className="analisis-sesion">
       <div className="analisis-sesion-barra">
-        <SelectorPartido valor={id} onCambiar={setSeleccionado} />
+        <SelectorPartido valor={id} onCambiar={elegir} />
       </div>
       {consulta.isError && <p role="alert">No se pudieron cargar las métricas tácticas.</p>}
       {consulta.isSuccess && !hayDatos && (
