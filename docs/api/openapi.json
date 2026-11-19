@@ -5616,6 +5616,7 @@
           "P6 · Asistencia y Reportes"
         ],
         "summary": "CU-51 · Marcar util, no util o aplicada",
+        "description": "T-091. Util: queda VISTA (sigue activa). No util: DESCARTADA. Aplicada: APLICADA, con `util` = true si no se indica. Las dos ultimas salen de las activas. Una sola valoracion por recomendacion.",
         "operationId": "valorar_api_asistencia_recomendaciones__recomendacion_id__valorar_post",
         "security": [
           {
@@ -5654,15 +5655,68 @@
               }
             }
           },
-          "501": {
-            "description": "Declarado en el contrato, pendiente de implementacion",
+          "403": {
+            "description": "Requiere rol ADMIN, DT o ANALISTA"
+          },
+          "404": {
+            "description": "Recomendacion inexistente o de un partido de otro club"
+          },
+          "409": {
+            "description": "La recomendacion ya fue valorada"
+          },
+          "422": {
+            "description": "Validation Error",
             "content": {
               "application/json": {
-                "example": {
-                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/api/asistencia/recomendaciones/{recomendacion_id}/vista": {
+      "post": {
+        "tags": [
+          "P6 · Asistencia y Reportes"
+        ],
+        "summary": "CU-50 · Marcar una recomendacion como vista",
+        "description": "T-090. Lo llama el cliente la primera vez que la muestra: estado VISTA y `vista_en`. Idempotente; no cambia una recomendacion ya valorada.",
+        "operationId": "marcar_vista_api_asistencia_recomendaciones__recomendacion_id__vista_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "recomendacion_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Recomendacion Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Recomendacion"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Requiere rol ADMIN, DT o ANALISTA"
+          },
+          "404": {
+            "description": "Recomendacion inexistente o de un partido de otro club"
           },
           "422": {
             "description": "Validation Error",

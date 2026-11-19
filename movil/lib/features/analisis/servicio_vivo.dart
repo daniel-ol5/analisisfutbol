@@ -50,6 +50,7 @@ class ServicioPartidoVivo extends ChangeNotifier {
     'metricas_jugadores',
     'intervalo',
     'estado',
+    'recomendacion', // T-094 (Alejandra)
   };
   final StreamController<Map<String, dynamic>> _mensajesAnalisis =
       StreamController<Map<String, dynamic>>.broadcast();

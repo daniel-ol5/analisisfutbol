@@ -1,0 +1,122 @@
+/* Recomendaciones tácticas (T-090, T-091). Solo tokens del sistema de diseño (T-015). */
+
+.rec-lista {
+  display: grid;
+  gap: var(--sp-3);
+}
+
+.rec-lista-cabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+}
+
+.rec-lista-cabecera h2 {
+  margin: 0;
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-bold);
+}
+
+.rec-vacio {
+  margin: 0;
+  color: var(--text-2);
+}
+
+.rec-tarjeta {
+  display: grid;
+  gap: var(--sp-2);
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-left: 6px solid var(--line-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+}
+
+.rec-tarjeta--critica {
+  border-left-color: var(--risk);
+}
+
+.rec-tarjeta--alta {
+  border-left-color: var(--warn);
+}
+
+.rec-tarjeta--media {
+  border-left-color: var(--info);
+}
+
+.rec-cabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+}
+
+.rec-minuto {
+  font-weight: var(--fw-semibold);
+  font-variant-numeric: tabular-nums;
+}
+
+.rec-mensaje {
+  margin: 0;
+  font-size: var(--fs-md);
+  font-weight: var(--fw-bold);
+}
+
+.rec-justificacion {
+  margin: 0;
+}
+
+.rec-cifras {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin: 0;
+}
+
+.rec-cifra {
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+
+.rec-cifra dt {
+  font-size: var(--fs-sm);
+}
+
+.rec-cifra dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.rec-umbral {
+  font-size: var(--fs-sm);
+}
+
+.rec-valoracion {
+  display: grid;
+  gap: var(--sp-2);
+}
+
+.rec-botones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+
+.rec-elegida {
+  margin: 0;
+  font-weight: var(--fw-semibold);
+}
+
+.rec-pagina {
+  display: grid;
+  gap: var(--sp-4);
+  max-width: 760px;
+}
+
+.rec-pagina h1 {
+  margin: 0;
+  font-size: var(--fs-xl);
+}

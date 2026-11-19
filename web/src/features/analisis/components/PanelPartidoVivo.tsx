@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { listarEquipos, listarPartidos } from "@/features/deportivo/api";
+import { RecomendacionesEnVivo } from "@/features/asistencia/components/RecomendacionesEnVivo"; // T-090 (Alejandra)
 import { api } from "@/shared/api/client";
 import { obtenerMetricasMinuto } from "../api";
 import { usePartidoEnVivo } from "../hooks/usePartidoEnVivo";
@@ -270,6 +271,7 @@ export function PanelPartidoVivo({ partidoIdInicial }: { partidoIdInicial?: numb
               </details>
             </section>
           </div>
+          {directo && id !== null && <RecomendacionesEnVivo partidoId={id} />} {/* T-090 (Alejandra): recomendaciones en vivo */}
           {minutoFiltro !== null && (
             <MetricasDelMinuto
               minuto={minutoFiltro}
