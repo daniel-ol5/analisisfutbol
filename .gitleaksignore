@@ -1,0 +1,6 @@
+# Hallazgos revisados a mano: no son credenciales reales.
+#
+# T-093 (e2e): clave por defecto del usuario que siembra la base EFIMERA de las
+# pruebas de punta a punta (se crea y se borra en cada corrida del CI). Se puede
+# reemplazar con la variable E2E_PASSWORD.
+dd1cb5c2645f7c471fa1ab798fb150e6b25c985c:backend/scripts/sembrar_e2e.py:generic-api-key:54
