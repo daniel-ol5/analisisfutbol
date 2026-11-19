@@ -1,3 +1,16 @@
-/** Tipos del dominio de Asistencia y Reportes  —  P6 · CU-49 … CU-58. */
+export type Prioridad = "CRITICA" | "ALTA" | "MEDIA" | "BAJA";
 
-export {};
+export interface Recomendacion {
+  id: number;
+  minuto: number;
+  mensaje: string;
+  justificacion: string;
+  prioridad: Prioridad;
+}
+
+export interface ReglaTactica {
+  id: number;
+  nombre: string;
+  prioridad: Prioridad;
+  activa: boolean;
+}

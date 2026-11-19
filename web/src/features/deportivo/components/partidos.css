@@ -11,40 +11,33 @@
   gap: 20px;
 }
 
-.partidos-cabecera h3 {
+.partidos-cabecera h2 {
   margin: 3px 0 4px;
   font-size: 21px;
   line-height: 1.25;
 }
 
-.partidos-cabecera p {
-  max-width: 680px;
-  margin: 0;
+.partidos-competiciones {
+  list-style: none;
+  padding: 0;
+  margin: 16px 0 0;
+}
+
+.partidos-competiciones li {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px 16px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+}
+
+.partidos-competiciones span {
   color: var(--text-2);
-  font-size: var(--fs-sm);
+  font-size: 13px;
 }
 
-.partidos-estado-inicial {
-  flex: 0 0 auto;
-  padding: 7px 11px;
-  border: 1px solid var(--pitch-border);
-  border-radius: 999px;
-  background: var(--pitch-soft);
-  color: var(--pitch);
-  font-family: var(--font-mono);
-  font-size: var(--fs-xs);
-  font-weight: var(--fw-bold);
-}
-
-.partidos-distribucion {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(250px, 320px);
-  gap: 18px;
-  align-items: start;
-}
-
-.partidos-formulario,
-.partidos-resumen {
+.partidos-formulario {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--surface);
@@ -53,29 +46,6 @@
 
 .partidos-formulario {
   padding: 22px;
-}
-
-.partidos-formulario-cabecera {
-  margin: -22px -22px 20px;
-  padding: 15px 22px;
-  border-bottom: 1px solid var(--line);
-  background: var(--surface-2);
-  border-radius: var(--radius) var(--radius) 0 0;
-}
-
-.partidos-formulario-cabecera strong,
-.partidos-formulario-cabecera span {
-  display: block;
-}
-
-.partidos-formulario-cabecera strong {
-  font-size: var(--fs-md);
-}
-
-.partidos-formulario-cabecera span {
-  margin-top: 2px;
-  color: var(--text-3);
-  font-size: var(--fs-xs);
 }
 
 .partidos-grilla {
@@ -108,43 +78,6 @@
   border-top: 1px solid var(--line);
 }
 
-.partidos-resumen {
-  position: sticky;
-  top: calc(var(--header-h) + 18px);
-  padding: 20px;
-}
-
-.partidos-resumen h4 {
-  margin: 4px 0 12px;
-  font-size: 17px;
-}
-
-.partidos-resumen ol {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin: 0;
-  padding-left: 22px;
-  color: var(--text-2);
-  font-size: var(--fs-sm);
-}
-
-.partidos-resumen li::marker {
-  color: var(--pitch);
-  font-weight: var(--fw-bold);
-}
-
-.partidos-resumen-nota {
-  margin-top: 18px;
-  padding: 12px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: var(--ground);
-  color: var(--text-3);
-  font-size: var(--fs-xs);
-  line-height: 1.5;
-}
-
 .partidos-vista .ui-alerta p {
   margin: 0 0 10px;
 }
@@ -154,13 +87,6 @@
     flex-direction: column;
   }
 
-  .partidos-distribucion {
-    grid-template-columns: 1fr;
-  }
-
-  .partidos-resumen {
-    position: static;
-  }
 }
 
 @media (max-width: 580px) {
@@ -174,11 +100,6 @@
 
   .partidos-formulario {
     padding: 18px;
-  }
-
-  .partidos-formulario-cabecera {
-    margin: -18px -18px 18px;
-    padding: 14px 18px;
   }
 
   .partidos-acciones .ui-btn {

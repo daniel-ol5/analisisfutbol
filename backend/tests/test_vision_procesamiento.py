@@ -6,6 +6,7 @@ partido en vivo. Se verifica que los lotes del worker entran por el mismo
 retomar un trabajo abandonado, descarga y roles.
 """
 
+from base64 import b64decode
 from datetime import UTC, datetime, timedelta
 
 import cv2
@@ -464,6 +465,36 @@ async def test_la_descarga_admite_range_para_reanudar(cliente, mp4):
                           headers={**club["auth"], "Range": "bytes=100-199"})
     assert r.status_code == 206
     assert r.content == mp4[100:200]
+
+
+async def test_el_visor_recibe_bloques_json_del_archivo(cliente, mp4):
+    club = await _club(cliente, "bloques")
+    video = await _video_subido(cliente, club, mp4)
+    ruta = f"/api/vision/videos/{video['id']}/archivo/bloque"
+    for inicio, cantidad in [(0, 32), (len(mp4) - 10, 32)]:
+        r = await cliente.get(ruta, headers=club["auth"],
+                              params={"inicio": inicio, "cantidad": cantidad})
+        assert r.status_code == 200
+        assert r.headers["cache-control"] == "private, no-store"
+        bloque = r.json()
+        assert (bloque["inicio"], bloque["total_bytes"], bloque["tipo"]) == (
+            inicio, len(mp4), "video/mp4",
+        )
+        assert b64decode(bloque["contenido_base64"]) == mp4[inicio:inicio + cantidad]
+
+    assert (await cliente.get(ruta, headers=club["auth"],
+                              params={"inicio": len(mp4)})).status_code == 416
+    assert (await cliente.get(ruta, headers=club["auth"],
+                              params={"inicio": 0, "cantidad": 1048577})).status_code == 422
+
+
+async def test_visor_no_lee_bloques_de_otro_club(cliente, mp4):
+    propietario = await _club(cliente, "propietario_bloque")
+    otro = await _club(cliente, "otro_bloque")
+    video = await _video_subido(cliente, propietario, mp4)
+    ruta = f"/api/vision/videos/{video['id']}/archivo/bloque?inicio=0"
+    assert (await cliente.get(ruta)).status_code == 401
+    assert (await cliente.get(ruta, headers=otro["auth"])).status_code == 404
 
 
 # ---------- HU-25 · Criterio 2: tiempo restante estimado ----------

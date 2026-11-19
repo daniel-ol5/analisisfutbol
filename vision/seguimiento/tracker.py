@@ -73,37 +73,46 @@ def _adaptar(resultado: Any, config: ConfigModelo) -> list[Deteccion]:
     prueba, sin ultralytics ni GPU.
     """
     cajas = resultado.boxes
-    if cajas is None or cajas.id is None:
-        return []
-
     detecciones = []
     vistos_tid: set[int] = set()
-    for caja, tid, clase_id, conf in zip(
-        cajas.xyxy.tolist(), cajas.id.tolist(), cajas.cls.tolist(), cajas.conf.tolist(), strict=True
-    ):
-        clase = config.clases.get(int(clase_id))
-        if clase is None or conf < config.confianza_min:
-            continue
-        x1, y1, x2, y2 = caja
-        w = max(0.0, x2 - x1)
-        h = max(0.0, y2 - y1)
+    if cajas is not None and cajas.id is not None:
+        for caja, tid, clase_id, conf in zip(
+            cajas.xyxy.tolist(), cajas.id.tolist(), cajas.cls.tolist(), cajas.conf.tolist(), strict=True
+        ):
+            clase = config.clases.get(int(clase_id))
+            if clase is None or conf < config.confianza_min:
+                continue
+            x1, y1, x2, y2 = caja
+            w, h = x2 - x1, y2 - y1
 
-        # Filtro de cordura geométrica: descarta falsos positivos degenerados
-        # como vallas publicitarias gigantes, gradas o artefactos de compresión.
-        if clase in (Clase.JUGADOR, Clase.PORTERO, Clase.ARBITRO):
-            if h < 6.0 or h > 220.0 or w < 3.0 or w > 140.0:
-                continue
-            if h / max(w, 1.0) < 0.6:  # Un jugador o árbitro no puede ser 2x más ancho que alto
-                continue
-        elif clase == Clase.BALON:
-            if w > 45.0 or h > 45.0 or (w > 0 and h > 0 and (w / h > 2.5 or h / w > 2.5)):
+            # Descarta cajas aberrantes de gradas, vallas y artefactos de compresión.
+            if clase == Clase.BALON:
+                if not _tamano_balon_valido(w, h):
+                    continue
+            elif not (3.0 <= w <= 140.0 and 6.0 <= h <= 220.0 and h / w >= 0.6):
                 continue
 
-        tid_int = int(tid)
-        # Evitar duplicados del mismo Track ID dentro del mismo fotograma
-        if tid_int in vistos_tid:
-            continue
-        vistos_tid.add(tid_int)
+            tid_int = int(tid)
+            if tid_int in vistos_tid:
+                continue
+            vistos_tid.add(tid_int)
+            detecciones.append(Deteccion.desde_caja(tid_int, clase, (x1, y1, x2, y2), float(conf)))
 
-        detecciones.append(Deteccion.desde_caja(tid_int, clase, (x1, y1, x2, y2), float(conf)))
+    # El balón tiene su propio seguimiento. Una caja de YOLO es candidata aunque
+    # el tracker de personas todavía no le haya asignado un identificador.
+    originales = getattr(resultado, "cajas_antes_del_tracker", None)
+    if originales is not None and not any(d.clase == Clase.BALON for d in detecciones):
+        for i, (caja, clase_id, conf) in enumerate(zip(
+            originales.xyxy.tolist(), originales.cls.tolist(), originales.conf.tolist(), strict=True
+        ), start=1):
+            if config.clases.get(int(clase_id)) != Clase.BALON or conf < config.confianza_min:
+                continue
+            x1, y1, x2, y2 = caja
+            if _tamano_balon_valido(x2 - x1, y2 - y1):
+                detecciones.append(Deteccion.desde_caja(-i, Clase.BALON, (x1, y1, x2, y2), float(conf)))
+
     return detecciones
+
+
+def _tamano_balon_valido(ancho: float, alto: float) -> bool:
+    return 0 < ancho <= 45 and 0 < alto <= 45 and max(ancho, alto) / min(ancho, alto) <= 2.5

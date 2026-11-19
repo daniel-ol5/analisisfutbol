@@ -718,6 +718,20 @@ class _PartidoPaginaState extends State<PartidoPagina>
       _segundosVisibles,
       estado?.parte ?? 0,
     );
+    final compacto = MediaQuery.sizeOf(context).width < 420;
+    final sincronizacion = TextButton.icon(
+      key: const Key('eventos-pendientes'),
+      onPressed: _pendientes > 0 && !_sincronizando
+          ? () => _sincronizar(anunciar: true)
+          : null,
+      icon: _sincronizando
+          ? const SizedBox.square(
+              dimension: 16,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : const Icon(Icons.cloud_upload_outlined),
+      label: Text('Pendientes: $_pendientes'),
+    );
 
     return Scaffold(
       appBar: AppBar(
@@ -728,20 +742,7 @@ class _PartidoPaginaState extends State<PartidoPagina>
           onPressed: () => context.go('/partidos'),
         ),
         actions: [
-          if (_usarBotonera)
-            TextButton.icon(
-              key: const Key('eventos-pendientes'),
-              onPressed: _pendientes > 0 && !_sincronizando
-                  ? () => _sincronizar(anunciar: true)
-                  : null,
-              icon: _sincronizando
-                  ? const SizedBox.square(
-                      dimension: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.cloud_upload_outlined),
-              label: Text('Pendientes: $_pendientes'),
-            ),
+          if (_usarBotonera && !compacto) sincronizacion,
           IconButton(
             tooltip: 'Actualizar estado',
             icon: const Icon(Icons.refresh_rounded),
@@ -762,6 +763,8 @@ class _PartidoPaginaState extends State<PartidoPagina>
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
           children: [
+            if (_usarBotonera && compacto)
+              Align(alignment: Alignment.centerRight, child: sincronizacion),
             if (_partidos.isNotEmpty) ...[
               _SelectorPartido(
                 partidos: _partidos,

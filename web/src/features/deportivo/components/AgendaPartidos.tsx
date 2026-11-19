@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 
 import { mensajeDeError } from "@/shared/lib/errors";
 import { Alert, Badge, Button, Input, Select } from "@/shared/ui";
@@ -67,9 +68,10 @@ function Marcador({ partido }: { partido: Partido }) {
 interface Props {
   /** CU-17: si se pasa, cada partido ofrece abrir su alineación. */
   onVerAlineacion?: (partidoId: number) => void;
+  puedeProgramar?: boolean;
 }
 
-export function AgendaPartidos({ onVerAlineacion }: Props = {}) {
+export function AgendaPartidos({ onVerAlineacion, puedeProgramar = false }: Props = {}) {
   const [equipoId, setEquipoId] = useState("");
   const [competicionId, setCompeticionId] = useState("");
   const [estado, setEstado] = useState<EstadoPartido | "">("");
@@ -130,82 +132,90 @@ export function AgendaPartidos({ onVerAlineacion }: Props = {}) {
   return (
     <section className="agenda" aria-labelledby="agenda-titulo">
       <header className="agenda-cabecera">
-        <div>
-          <span className="kicker">CU-15 · AGENDA DE PARTIDOS</span>
-          <h3 id="agenda-titulo">Calendario del club</h3>
-          <p>Consulta los encuentros del club y acota los resultados con los filtros.</p>
+        <h3 id="agenda-titulo">Calendario del club</h3>
+        <div className="agenda-cabecera-acciones">
+          <Button
+            variante="secundario"
+            disabled={partidos.isFetching || rangoInvalido}
+            onClick={() => void partidos.refetch()}
+          >
+            {partidos.isFetching ? "Actualizando…" : "Actualizar"}
+          </Button>
+          {puedeProgramar && (
+            <Link className="ui-btn ui-btn--primario" to="/deportivo/calendario/programar">
+              Programar partido
+            </Link>
+          )}
         </div>
-        <Button
-          variante="secundario"
-          disabled={partidos.isFetching || rangoInvalido}
-          onClick={() => void partidos.refetch()}
-        >
-          {partidos.isFetching ? "Actualizando…" : "Actualizar agenda"}
-        </Button>
       </header>
 
-      <div className="agenda-filtros" aria-label="Filtros de la agenda">
-        <Select
-          etiqueta="Equipo"
-          value={equipoId}
-          onChange={(e) => setEquipoId(e.currentTarget.value)}
-        >
-          <option value="">Todos los equipos</option>
-          {equipos.data?.map((equipo) => (
-            <option key={equipo.id} value={equipo.id}>
-              {equipo.nombre}
-              {equipo.activo ? "" : " · Inactivo"}
-            </option>
-          ))}
-        </Select>
+      <details className="agenda-filtro-grupo">
+        <summary>
+          {rangoInvalido ? "Filtros · Revisar fechas" : hayFiltros ? "Filtros activos" : "Filtros"}
+        </summary>
+        <div className="agenda-filtros" aria-label="Filtros de la agenda">
+          <Select
+            etiqueta="Equipo"
+            value={equipoId}
+            onChange={(e) => setEquipoId(e.currentTarget.value)}
+          >
+            <option value="">Todos los equipos</option>
+            {equipos.data?.map((equipo) => (
+              <option key={equipo.id} value={equipo.id}>
+                {equipo.nombre}
+                {equipo.activo ? "" : " · Inactivo"}
+              </option>
+            ))}
+          </Select>
 
-        <Select
-          etiqueta="Competición"
-          value={competicionId}
-          onChange={(e) => setCompeticionId(e.currentTarget.value)}
-        >
-          <option value="">Todas las competiciones</option>
-          {competiciones.data?.map((competicion) => (
-            <option key={competicion.id} value={competicion.id}>
-              {competicion.nombre} · {competicion.temporada}
-            </option>
-          ))}
-        </Select>
+          <Select
+            etiqueta="Competición"
+            value={competicionId}
+            onChange={(e) => setCompeticionId(e.currentTarget.value)}
+          >
+            <option value="">Todas las competiciones</option>
+            {competiciones.data?.map((competicion) => (
+              <option key={competicion.id} value={competicion.id}>
+                {competicion.nombre} · {competicion.temporada}
+              </option>
+            ))}
+          </Select>
 
-        <Select
-          etiqueta="Estado"
-          value={estado}
-          onChange={(e) => setEstado(e.currentTarget.value as EstadoPartido | "")}
-        >
-          <option value="">Todos los estados</option>
-          {ESTADOS.map((opcion) => (
-            <option key={opcion.valor} value={opcion.valor}>
-              {opcion.etiqueta}
-            </option>
-          ))}
-        </Select>
+          <Select
+            etiqueta="Estado"
+            value={estado}
+            onChange={(e) => setEstado(e.currentTarget.value as EstadoPartido | "")}
+          >
+            <option value="">Todos los estados</option>
+            {ESTADOS.map((opcion) => (
+              <option key={opcion.valor} value={opcion.valor}>
+                {opcion.etiqueta}
+              </option>
+            ))}
+          </Select>
 
-        <Input
-          etiqueta="Desde"
-          type="date"
-          value={desde}
-          onChange={(e) => setDesde(e.currentTarget.value)}
-        />
-        <Input
-          etiqueta="Hasta"
-          type="date"
-          value={hasta}
-          min={desde || undefined}
-          error={rangoInvalido ? "Debe ser igual o posterior a la fecha desde." : undefined}
-          onChange={(e) => setHasta(e.currentTarget.value)}
-        />
+          <Input
+            etiqueta="Desde"
+            type="date"
+            value={desde}
+            onChange={(e) => setDesde(e.currentTarget.value)}
+          />
+          <Input
+            etiqueta="Hasta"
+            type="date"
+            value={hasta}
+            min={desde || undefined}
+            error={rangoInvalido ? "Debe ser igual o posterior a la fecha desde." : undefined}
+            onChange={(e) => setHasta(e.currentTarget.value)}
+          />
 
-        <div className="agenda-filtros-accion">
-          <Button variante="fantasma" disabled={!hayFiltros} onClick={limpiarFiltros}>
-            Limpiar filtros
-          </Button>
+          <div className="agenda-filtros-accion">
+            <Button variante="fantasma" disabled={!hayFiltros} onClick={limpiarFiltros}>
+              Limpiar filtros
+            </Button>
+          </div>
         </div>
-      </div>
+      </details>
 
       {errorCarga && (
         <Alert tono="error" titulo="No se pudo cargar la agenda">

@@ -1,0 +1,78 @@
+.equipo-card {
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--surface);
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+.equipo-card-cabecera,
+.equipo-card-accesos,
+.equipo-card-acciones {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.equipo-card-cabecera h3,
+.equipo-card-cabecera p {
+  margin: 0;
+}
+
+.equipo-card-cabecera h3 {
+  font-size: 18px;
+  letter-spacing: -0.025em;
+}
+
+.equipo-card-cabecera button,
+.equipo-card-accesos button {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  text-align: start;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.equipo-card-cabecera button:hover,
+.equipo-card-accesos :is(a, button):hover {
+  text-decoration: underline;
+}
+
+.equipo-card-cabecera p,
+.equipo-card-accesos {
+  color: var(--text-2);
+  font-size: 13px;
+}
+
+.equipo-card-accesos :is(a, button) {
+  font-size: 13px;
+  font-weight: 650;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.equipo-card-colores {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.equipo-card-colores i {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  border: 1px solid var(--line-strong);
+}
+
+.equipo-card-acciones {
+  border-top: 1px solid var(--line);
+  padding-top: 11px;
+  margin-top: auto;
+}

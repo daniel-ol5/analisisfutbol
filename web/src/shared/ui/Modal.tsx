@@ -5,6 +5,7 @@ interface Props {
   titulo: string;
   onCerrar: () => void;
   children: ReactNode;
+  className?: string;
   /** Botones de acción, alineados abajo a la derecha. */
   acciones?: ReactNode;
 }
@@ -13,7 +14,7 @@ interface Props {
  * Diálogo modal sobre <dialog>: el navegador atrapa el foco, cierra con Esc
  * y devuelve el foco al elemento que lo abrió.
  */
-export function Modal({ abierto, titulo, onCerrar, children, acciones }: Props) {
+export function Modal({ abierto, titulo, onCerrar, children, acciones, className }: Props) {
   const ref = useRef<HTMLDialogElement>(null);
   const idTitulo = useId();
 
@@ -27,7 +28,7 @@ export function Modal({ abierto, titulo, onCerrar, children, acciones }: Props) 
   return (
     <dialog
       ref={ref}
-      className="ui-modal"
+      className={["ui-modal", className].filter(Boolean).join(" ")}
       aria-labelledby={idTitulo}
       onClose={onCerrar}
       onClick={(evento) => {

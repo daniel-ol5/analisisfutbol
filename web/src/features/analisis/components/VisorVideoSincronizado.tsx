@@ -25,7 +25,9 @@ export function VisorVideoSincronizado({ partidoId, jugadores, balon, colorLocal
   const [muestras, setMuestras] = useState<MensajeWorker[]>([]);
   const [url, setUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [cargando, setCargando] = useState(false);
+  const [errorCarga, setErrorCarga] = useState<string | null>(null);
+  const [avance, setAvance] = useState<number | null>(null);
+  const [reintento, setReintento] = useState(0);
   const [cajas, setCajas] = useState(false);
   const [lineas, setLineas] = useState(false);
   const [aspecto, setAspecto] = useState(16 / 9);
@@ -42,24 +44,43 @@ export function VisorVideoSincronizado({ partidoId, jugadores, balon, colorLocal
     let vigente = true;
     listarVideos(partidoId).then(lista => {
       if (!vigente) return;
-      const disponibles = lista.filter(v => v.estado !== "CARGANDO");
+      const disponibles = lista.filter(v => v.estado !== "CARGANDO" && v.duracion_s !== null);
       setVideos(disponibles); setVideoId(disponibles[0]?.id ?? null);
     }).catch(() => { if (vigente) setError("No se pudo consultar la lista de videos."); });
     return () => { vigente = false; };
   }, [partidoId]);
+  const videoElegido = videos.find(v => v.id === videoId);
   useEffect(() => {
-    let vigente = true;
     limpiar(); setUrl(null); setMuestras([]); onMuestraSincronizada(null); setError(null);
-    if (fuente !== "servidor" || videoId === null) return;
-    setCargando(true);
-    Promise.all([descargarArchivoVideo(videoId), obtenerMuestrasVideo(videoId)]).then(([blob, datos]) => {
-      if (!vigente) return;
-      const objeto = URL.createObjectURL(blob); urlRef.current = objeto; setUrl(objeto);
-      setMuestras([...datos].sort((a, b) => a.t - b.t));
-    }).catch(() => { if (vigente) setError("No se pudo cargar el video o sus resultados."); })
-      .finally(() => { if (vigente) setCargando(false); });
-    return () => { vigente = false; };
-  }, [fuente, videoId, limpiar, onMuestraSincronizada]);
+    setAvance(null); setErrorCarga(null);
+    if (fuente !== "servidor" || !videoElegido) return;
+
+    const control = new AbortController();
+    const { signal } = control;
+    setAvance(0);
+    void Promise.allSettled([
+      descargarArchivoVideo(videoElegido, signal, (pct) => {
+        if (!signal.aborted) setAvance(pct);
+      }),
+      obtenerMuestrasVideo(videoElegido.id, signal),
+    ]).then(([archivo, resultados]) => {
+      if (signal.aborted) return;
+      setAvance(null);
+      if (archivo.status === "fulfilled") {
+        const objeto = URL.createObjectURL(archivo.value);
+        urlRef.current = objeto;
+        setUrl(objeto);
+      } else {
+        setErrorCarga("No se pudo cargar la grabación.");
+      }
+      if (resultados.status === "fulfilled") {
+        setMuestras([...resultados.value].sort((a, b) => a.t - b.t));
+      } else if (archivo.status === "fulfilled") {
+        setErrorCarga("La grabación está disponible. No se pudieron cargar las detecciones.");
+      }
+    });
+    return () => control.abort();
+  }, [fuente, videoElegido, limpiar, onMuestraSincronizada, reintento]);
   const sincronizar = useCallback(() => {
     if (fuente === "servidor") onMuestraSincronizada(muestraEnTiempo(muestras, video.current?.currentTime ?? 0));
   }, [fuente, muestras, onMuestraSincronizada]);
@@ -84,7 +105,7 @@ export function VisorVideoSincronizado({ partidoId, jugadores, balon, colorLocal
   }, [muestras, fuente, sincronizar]);
   const seleccionarFuente = (nueva: string) => {
     if (nueva === fuente) return;
-    limpiar(); setUrl(null); setMuestras([]); setError(null); setCargando(false);
+    limpiar(); setUrl(null); setMuestras([]); setError(null); setAvance(null); setErrorCarga(null);
     onMuestraSincronizada(null); onCambiarFuente(nueva === "directo"); setFuente(nueva);
   };
   const abrirCamara = async () => {
@@ -121,8 +142,11 @@ export function VisorVideoSincronizado({ partidoId, jugadores, balon, colorLocal
     <div className="analisis-video-lienzo" style={{ aspectRatio: aspecto, display: modoDisposicion === "solo-radar" ? "none" : undefined }}>
       <video key={fuente} ref={video} src={url ?? undefined} controls={fuente !== "directo"} playsInline muted={fuente === "directo"}
         onLoadedMetadata={() => { const el = video.current; if (el?.videoHeight) setAspecto(el.videoWidth / el.videoHeight); }}
-        onLoadedData={sincronizar} onTimeUpdate={sincronizar} onSeeked={sincronizar} />
-      {!url && fuente !== "directo" && <p className="analisis-video-vacio">{cargando ? "Cargando video…" : "Selecciona un video para comenzar"}</p>}
+        onLoadedData={sincronizar} onTimeUpdate={sincronizar} onSeeked={sincronizar}
+        onError={() => { if (url && fuente === "servidor") setErrorCarga("El navegador no pudo reproducir esta grabación."); }} />
+      {!url && !errorCarga && fuente !== "directo" && <p className="analisis-video-vacio">
+        {avance !== null ? `Cargando video… ${avance} %` : "Selecciona un video para comenzar"}
+      </p>}
       {lineas && fuente === "servidor" && <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-label="Líneas de cancha estimadas" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none" }}>
         {muestra?.calidad.lineas_imagen?.map((p, i) => <polyline key={i} points={p.map(x => x.join(",")).join(" ")} fill="none" stroke="#5fffe1" strokeWidth={.25} />)}
       </svg>}
@@ -137,11 +161,15 @@ export function VisorVideoSincronizado({ partidoId, jugadores, balon, colorLocal
     <div className="analisis-video-pie">
       {fuente === "servidor" && <><label><input type="checkbox" checked={cajas} onChange={e => setCajas(e.target.checked)} /> Mostrar detecciones</label>
         <label><input type="checkbox" checked={lineas} onChange={e => setLineas(e.target.checked)} /> Verificar líneas de cancha</label>
-        <span>{muestras.length ? "Resultados sincronizados con el video" : "Procesa el video para ver posiciones"}</span></>}
+        {avance === null && !errorCarga && <span>{muestras.length ? "Resultados sincronizados con el video" : "Procesa el video para ver posiciones"}</span>}</>}
       {fuente === "archivo" && <p>Vista previa del archivo. Súbelo y procésalo para obtener posiciones y métricas.</p>}
       {fuente === "directo" && <><button onClick={() => void abrirCamara()}>Vista previa de cámara</button>
         <p>{workerTransmitiendo ? "Recibiendo posiciones del worker" : "Esperando al worker de visión"}. La vista previa local no envía video al servidor.</p></>}
     </div>
+    {errorCarga && <div className="analisis-video-pie">
+      <p role="alert">{errorCarga}</p>
+      <button onClick={() => setReintento(n => n + 1)}>Reintentar carga</button>
+    </div>}
     {error && <p role="alert">{error}</p>}
   </section>;
 }

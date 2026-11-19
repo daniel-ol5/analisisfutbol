@@ -76,7 +76,7 @@ class _FormularioJugadorState extends State<FormularioJugador> {
       if (!mounted) return;
       setState(() {
         _error = e.pendiente
-            ? 'Caso de uso aún no disponible: ${e.detalle}'
+            ? 'Esta acción aún no está disponible.'
             : e.detalle;
         _guardando = false;
       });
@@ -114,7 +114,7 @@ class _FormularioJugadorState extends State<FormularioJugador> {
               ),
               const SizedBox(height: 16),
               Text(
-                'NUEVO JUGADOR (CU-11)',
+                'Nuevo jugador',
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w900,

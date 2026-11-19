@@ -8,7 +8,6 @@
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useId, useState, type FormEvent } from "react";
-import { Link } from "react-router-dom";
 
 import "@/features/vision/modelos.css";
 import { estadoHttp, mensajeDeError } from "@/shared/lib/errors";
@@ -167,18 +166,10 @@ export function ModelosPage() {
   const modelos: Modelo[] = consultaModelos.data ?? [];
 
   return (
-    <main className="mod-pagina">
-      <Link to="/vision" className="volver">
-        ← Visión por computadora
-      </Link>
-
-      <p className="kicker">P3 · CU-29</p>
-      <h1>Versionado de modelos ML</h1>
+    <section className="mod-pagina">
+      <h2>Modelos de visión</h2>
       <p className="mod-intro">
-        Registra aquí las versiones de modelo (detección o pose) ya entrenadas fuera de la
-        plataforma. Solo una versión puede estar activa por club a la vez: el worker usa la versión
-        activa en el siguiente procesamiento, y activar una versión desactiva automáticamente
-        cualquier otra, sin necesidad de reentrenar.
+        La versión activa se usará en el próximo procesamiento del club.
       </p>
 
       {!puedeGestionar && (
@@ -459,6 +450,6 @@ export function ModelosPage() {
           </table>
         </div>
       )}
-    </main>
+    </section>
   );
 }

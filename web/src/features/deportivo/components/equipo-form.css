@@ -1,0 +1,196 @@
+.ui-modal.equipo-modal {
+  --equipo-modal-espacio: clamp(14px, 4vw, 24px);
+  width: min(590px, calc(100% - 24px));
+  max-height: calc(100dvh - 24px);
+  border-radius: var(--radius-lg);
+  overflow: auto;
+  overscroll-behavior: contain;
+  container-type: inline-size;
+}
+
+.equipo-modal .ui-modal-cuerpo {
+  padding: 0;
+  position: relative;
+}
+
+.equipo-modal .ui-modal-titulo {
+  margin: 0;
+  padding: 18px var(--equipo-modal-espacio);
+  padding-inline-end: calc(var(--equipo-modal-espacio) + 48px);
+  border-bottom: 1px solid var(--line);
+  font-size: 21px;
+  letter-spacing: -0.025em;
+}
+
+.equipo-form-campos {
+  min-inline-size: 0;
+  margin: 0;
+  border: 0;
+  padding: var(--equipo-modal-espacio);
+}
+
+.equipo-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 14px;
+}
+
+.equipo-form-datos {
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+}
+
+.equipo-form .ui-campo {
+  min-width: 0;
+  margin: 0;
+}
+
+.equipo-form .ui-control {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  font-size: 14px;
+}
+
+.equipo-form .ui-etiqueta {
+  font-weight: 650;
+}
+
+.equipo-form .ui-alerta {
+  margin: 0 0 14px;
+}
+
+.equipo-form-temporada {
+  min-width: 0;
+  position: relative;
+}
+
+.equipo-form-temporada .ui-etiqueta {
+  padding-inline-end: 92px;
+}
+
+.equipo-form .equipo-form-alternar {
+  min-height: 30px;
+  padding: 3px 5px;
+  color: var(--pitch);
+  font-size: 12px;
+  font-weight: 650;
+  white-space: normal;
+}
+
+.equipo-form-temporada > .equipo-form-alternar {
+  position: absolute;
+  inset-block-start: -4px;
+  inset-inline-end: 0;
+  min-height: 26px;
+}
+
+.equipo-form-categoria {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-muted);
+  margin-top: 12px;
+  padding: 12px 14px 14px;
+}
+
+.equipo-form-categoria header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+
+.equipo-form-categoria h3 {
+  font-size: 15px;
+  margin: 0;
+}
+
+.equipo-form-division {
+  min-width: 0;
+  grid-column: 1 / -1;
+}
+
+.equipo-form-estado {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  font-size: 14px;
+}
+
+.equipo-form-acciones {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px var(--equipo-modal-espacio);
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.equipo-form .equipo-form-cerrar {
+  position: absolute;
+  inset: 12px var(--equipo-modal-espacio) auto auto;
+  width: 36px;
+  min-height: 36px;
+  padding: 0;
+  font-size: 22px;
+  font-weight: 400;
+  line-height: 1;
+  color: var(--text-2);
+}
+
+@container (max-width: 460px) {
+  .equipo-form-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .equipo-form-acciones > button {
+    flex: 1;
+  }
+}
+
+@media (max-height: 460px) {
+  .equipo-modal .ui-modal-titulo {
+    padding-block: 11px;
+  }
+
+  .equipo-form .equipo-form-cerrar {
+    inset-block-start: 6px;
+  }
+
+  .equipo-form-campos {
+    padding-block: 8px;
+  }
+
+  .equipo-form .ui-control {
+    padding-block: 7px;
+  }
+
+  .equipo-form .ui-etiqueta {
+    margin-bottom: 2px;
+  }
+
+  .equipo-form-grid {
+    row-gap: 8px;
+  }
+
+  .equipo-form-categoria {
+    margin-top: 8px;
+    padding-block: 6px;
+    gap: 5px;
+  }
+
+  .equipo-form-categoria .equipo-form-alternar {
+    min-height: 26px;
+  }
+
+  .equipo-form-acciones {
+    padding-block: 8px;
+  }
+}

@@ -6,7 +6,7 @@
   padding: 40px 24px 80px;
 }
 
-.mod-pagina h1 {
+.mod-pagina h2 {
   font-size: var(--fs-xl);
   font-weight: var(--fw-black);
   letter-spacing: -0.02em;

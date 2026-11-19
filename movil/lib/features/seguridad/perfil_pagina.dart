@@ -120,7 +120,7 @@ class _PerfilPaginaState extends State<PerfilPagina> {
                   icono: Icons.contrast_rounded,
                   titulo: 'Pantalla',
                   subtitulo:
-                      'Ajusta el contraste según la iluminación del campo (T-023).',
+                      'Elige el modo de pantalla que mejor se lea en la cancha.',
                   child: _SelectorTema(),
                 ),
                 if (perfil != null) ...[

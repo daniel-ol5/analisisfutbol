@@ -144,7 +144,7 @@ export function JugadorFormModal({
                 letterSpacing: "0.08em",
               }}
             >
-              CU-11 · Plantel de Jugadores
+              Plantel
             </span>
             <h3 style={{ margin: "2px 0 0", fontSize: 18, fontWeight: 800, color: "var(--text)" }}>
               {jugadorAEditar

@@ -1,5 +1,10 @@
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useState } from "react";
+
+import { mensajeDeError } from "@/shared/lib/errors";
+import { Alert, Button, Input, Modal, Select } from "@/shared/ui";
+
 import type { Equipo, EquipoCrear } from "../types";
+import "./equipo-form.css";
 
 interface EquipoFormModalProps {
   abierto: boolean;
@@ -14,7 +19,7 @@ const TEMPORADAS_SUGERIDAS = [
   "2026 - Clausura",
   "2025/2026",
   "2026/2027",
-  "Torneo de Verano 2026",
+  "Torneo Verano 2026",
   "Copa Nacional 2026",
 ];
 
@@ -25,7 +30,7 @@ const ESTRUCTURA_FUTBOL: Record<string, Record<string, string[]>> = {
       "Copa Simón Bolívar (Ascenso Nacional)",
       "Torneo Nacional de Reservas / Promoción",
     ],
-    "Asociaciones Departamentales (AFL / AFC / ACF)": [
+    "Asociaciones Departamentales": [
       "Primera A (Asociación Departamental)",
       "Primera B (Asociación Departamental)",
       "Primera de Ascenso",
@@ -47,15 +52,11 @@ const ESTRUCTURA_FUTBOL: Record<string, Record<string, string[]>> = {
   },
   "Argentina (AFA)": {
     "Ligas Profesionales": [
-      "Liga Profesional de Fútbol (Primera División)",
+      "Liga Profesional (Primera División)",
       "Primera Nacional (2da División)",
       " Torneo Proyección (Reserva)",
     ],
-    "Categorías de Ascenso": [
-      "Primera B Metropolitana",
-      "Torneo Federal A",
-      "Primera C",
-    ],
+    "Categorías de Ascenso": ["Primera B Metropolitana", "Torneo Federal A", "Primera C"],
     "Divisiones Inferiores AFA": [
       "Cuarta División (Sub-20)",
       "Quinta División (Sub-18)",
@@ -64,10 +65,7 @@ const ESTRUCTURA_FUTBOL: Record<string, Record<string, string[]>> = {
       "Octava División (Sub-15)",
       "Novena División (Sub-14)",
     ],
-    "Fútbol Femenino": [
-      " Campeonato Femenino YPF (Primera A)",
-      "Primera B Femenina",
-    ],
+    "Fútbol Femenino": [" Campeonato Femenino YPF (Primera A)", "Primera B Femenina"],
   },
   "España (RFEF / LaLiga)": {
     "Competiciones Nacionales": [
@@ -84,10 +82,7 @@ const ESTRUCTURA_FUTBOL: Record<string, Record<string, string[]>> = {
       "Cadete División de Honor (U16)",
       "Infantil Autonómico (U14)",
     ],
-    "Fútbol Femenino": [
-      "Liga F (Primera División Femenina)",
-      "Primera Federación FutFem",
-    ],
+    "Fútbol Femenino": ["Liga F (Primera División Femenina)", "Primera Federación FutFem"],
   },
   "Brasil (CBF)": {
     "Campeonatos Nacionales": [
@@ -97,7 +92,7 @@ const ESTRUCTURA_FUTBOL: Record<string, Record<string, string[]>> = {
       "Brasileirão Série D",
     ],
     "Torneos Estaduales y Base": [
-      "Campeonato Estadual (Paulista / Carioca / Mineiro)",
+      "Campeonato Estadual (Brasil)",
       "Brasileirão Sub-20",
       "Brasileirão Sub-17",
       "Brasileirão Feminino A1",
@@ -117,10 +112,21 @@ const ESTRUCTURA_FUTBOL: Record<string, Record<string, string[]>> = {
       "Selección Sub-17",
     ],
   },
-  "Personalizado / Otra Liga": {
-    "General": ["Otra categoría personalizada..."],
-  },
 };
+
+const PAIS_INICIAL = "Bolivia (FBF)";
+const RAMA_INICIAL = "División Profesional y Ascenso";
+const TEMPORADA_INICIAL = TEMPORADAS_SUGERIDAS[0];
+
+function ubicarCategoria(categoria?: string) {
+  for (const [pais, ramas] of Object.entries(ESTRUCTURA_FUTBOL)) {
+    const rama = Object.keys(ramas).find((nombre) =>
+      ramas[nombre].some((opcion) => opcion === categoria),
+    );
+    if (rama) return { pais, rama };
+  }
+  return null;
+}
 
 export function EquipoFormModal({
   abierto,
@@ -128,608 +134,219 @@ export function EquipoFormModal({
   onCerrar,
   onGuardar,
 }: EquipoFormModalProps) {
-  const [nombre, setNombre] = useState("");
+  return (
+    <Modal
+      abierto={abierto}
+      titulo={equipoEditar ? "Editar equipo" : "Nuevo equipo"}
+      onCerrar={onCerrar}
+      className="equipo-modal"
+    >
+      {abierto && (
+        <FormularioEquipo
+          key={equipoEditar?.id ?? "nuevo"}
+          equipoEditar={equipoEditar}
+          onCerrar={onCerrar}
+          onGuardar={onGuardar}
+        />
+      )}
+    </Modal>
+  );
+}
 
-  // Selectores jerárquicos de País -> Liga -> Categoría
-  const [paisLiga, setPaisLiga] = useState<string>("Bolivia (FBF)");
-  const [tipoCompeticion, setTipoCompeticion] = useState<string>("División Profesional y Ascenso");
-  const [categoria, setCategoria] = useState("");
-  const [modoCategoriaManual, setModoCategoriaManual] = useState(false);
-
-  const [temporada, setTemporada] = useState("2026");
-  const [modoTemporadaManual, setModoTemporadaManual] = useState(false);
-  const [activo, setActivo] = useState(true);
-
+function FormularioEquipo({
+  equipoEditar,
+  onCerrar,
+  onGuardar,
+}: Omit<EquipoFormModalProps, "abierto">) {
+  const ubicacion = ubicarCategoria(equipoEditar?.categoria);
+  const [nombre, setNombre] = useState(equipoEditar?.nombre ?? "");
+  const [temporada, setTemporada] = useState(equipoEditar?.temporada || TEMPORADA_INICIAL);
+  const [temporadaManual, setTemporadaManual] = useState(!TEMPORADAS_SUGERIDAS.includes(temporada));
+  const [pais, setPais] = useState(ubicacion?.pais ?? PAIS_INICIAL);
+  const [rama, setRama] = useState(ubicacion?.rama ?? RAMA_INICIAL);
+  const [categoria, setCategoria] = useState(
+    equipoEditar?.categoria ?? ESTRUCTURA_FUTBOL[PAIS_INICIAL][RAMA_INICIAL][0],
+  );
+  const [categoriaManual, setCategoriaManual] = useState(Boolean(equipoEditar && !ubicacion));
+  const [activo, setActivo] = useState(equipoEditar?.activo ?? true);
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (equipoEditar) {
-      setNombre(equipoEditar.nombre);
-      setCategoria(equipoEditar.categoria || "");
-      setTemporada(equipoEditar.temporada || "2026");
-      setActivo(equipoEditar.activo);
+  const ramas = Object.keys(ESTRUCTURA_FUTBOL[pais]);
+  const categorias = ESTRUCTURA_FUTBOL[pais][rama];
+  const categoriaSugerida = categorias.includes(categoria) ? categoria : categorias[0];
+  const temporadaSugerida = TEMPORADAS_SUGERIDAS.includes(temporada)
+    ? temporada
+    : TEMPORADA_INICIAL;
 
-      let encontrado = false;
-      for (const [pais, bloques] of Object.entries(ESTRUCTURA_FUTBOL)) {
-        for (const [bloque, cats] of Object.entries(bloques)) {
-          if (cats.includes(equipoEditar.categoria)) {
-            setPaisLiga(pais);
-            setTipoCompeticion(bloque);
-            encontrado = true;
-            break;
-          }
-        }
-        if (encontrado) break;
-      }
-
-      if (!encontrado && equipoEditar.categoria) {
-        setModoCategoriaManual(true);
-      } else {
-        setModoCategoriaManual(false);
-      }
-
-      if (
-        equipoEditar.temporada &&
-        !TEMPORADAS_SUGERIDAS.includes(equipoEditar.temporada)
-      ) {
-        setModoTemporadaManual(true);
-      } else {
-        setModoTemporadaManual(false);
-      }
-    } else {
-      setNombre("");
-      setPaisLiga("Bolivia (FBF)");
-      setTipoCompeticion("División Profesional y Ascenso");
-      setCategoria("Primera División (División Profesional)");
-      setModoCategoriaManual(false);
-      setTemporada("2026");
-      setModoTemporadaManual(false);
-      setActivo(true);
-    }
-    setError(null);
-  }, [equipoEditar, abierto]);
-
-  const handlePaisChange = (nuevoPais: string) => {
-    setPaisLiga(nuevoPais);
-    if (nuevoPais === "Personalizado / Otra Liga") {
-      setModoCategoriaManual(true);
-      setCategoria("");
-      return;
-    }
-    setModoCategoriaManual(false);
-    const bloques = Object.keys(ESTRUCTURA_FUTBOL[nuevoPais] || {});
-    const primerBloque = bloques[0] || "";
-    setTipoCompeticion(primerBloque);
-    const categorias = ESTRUCTURA_FUTBOL[nuevoPais]?.[primerBloque] || [];
-    setCategoria(categorias[0] || "");
+  const alCambiarPais = (siguiente: string) => {
+    const primeraRama = Object.keys(ESTRUCTURA_FUTBOL[siguiente])[0];
+    setPais(siguiente);
+    setRama(primeraRama);
+    setCategoria(ESTRUCTURA_FUTBOL[siguiente][primeraRama][0]);
   };
 
-  const handleBloqueChange = (nuevoBloque: string) => {
-    setTipoCompeticion(nuevoBloque);
-    const categorias = ESTRUCTURA_FUTBOL[paisLiga]?.[nuevoBloque] || [];
-    setCategoria(categorias[0] || "");
-  };
-
-  if (!abierto) return null;
-
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault();
-    setError(null);
-
+  const alGuardar = async (evento: FormEvent<HTMLFormElement>) => {
+    evento.preventDefault();
     if (!nombre.trim()) {
-      setError("El nombre del equipo es obligatorio.");
+      setError("Escribe el nombre del equipo.");
       return;
     }
-
+    setError(null);
     setEnviando(true);
     try {
       await onGuardar({
         nombre: nombre.trim(),
-        categoria: categoria.trim(),
-        temporada: temporada.trim(),
+        temporada: (temporadaManual ? temporada : temporadaSugerida).trim(),
+        categoria: (categoriaManual ? categoria : categoriaSugerida).trim(),
         color_local: equipoEditar?.color_local ?? "#1E5AA8",
         color_visitante: equipoEditar?.color_visitante ?? "#FFFFFF",
         color_arquero: equipoEditar?.color_arquero ?? "#F2C200",
         ...(equipoEditar ? { activo } : {}),
       });
       onCerrar();
-    } catch (err: unknown) {
-      const msg =
-        err instanceof Error ? err.message : "Error al guardar el equipo.";
-      setError(msg);
+    } catch (fallo) {
+      setError(mensajeDeError(fallo));
     } finally {
       setEnviando(false);
     }
   };
 
-  const bloquesDisponibles = Object.keys(ESTRUCTURA_FUTBOL[paisLiga] || {});
-  const categoriasDisponibles =
-    ESTRUCTURA_FUTBOL[paisLiga]?.[tipoCompeticion] || [];
-
   return (
-    <div
-      className="modal-backdrop"
-      style={{
-        position: "fixed",
-        inset: 0,
-        backgroundColor: "rgba(15, 22, 18, 0.6)",
-        backdropFilter: "blur(3px)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        zIndex: 1000,
-        padding: 20,
-      }}
-      onClick={onCerrar}
-    >
-      <div
-        className="modal-card"
-        style={{
-          background: "var(--surface)",
-          border: "1px solid var(--line)",
-          borderRadius: 10,
-          width: "100%",
-          maxWidth: 600,
-          maxHeight: "92vh",
-          overflowY: "auto",
-          boxShadow: "0 20px 50px rgba(0,0,0,0.3)",
-          padding: 24,
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            borderBottom: "1px solid var(--line)",
-            paddingBottom: 14,
-            marginBottom: 20,
-          }}
-        >
-          <div>
-            <span
-              className="kicker"
-              style={{ color: "var(--pitch)", fontWeight: 700 }}
+    <form className="equipo-form" onSubmit={alGuardar}>
+      <fieldset className="equipo-form-campos" disabled={enviando}>
+        {error && <Alert tono="error">{error}</Alert>}
+        <div className="equipo-form-grid equipo-form-datos">
+          <Input
+            etiqueta="Nombre del equipo"
+            placeholder="Ej. Horizonte Juvenil"
+            required
+            maxLength={120}
+            value={nombre}
+            onChange={(evento) => setNombre(evento.currentTarget.value)}
+          />
+          <div className="equipo-form-temporada">
+            {temporadaManual ? (
+              <Input
+                etiqueta="Temporada"
+                placeholder="Ej. 2027"
+                maxLength={20}
+                value={temporada}
+                onChange={(evento) => setTemporada(evento.currentTarget.value)}
+              />
+            ) : (
+              <Select
+                etiqueta="Temporada"
+                value={temporadaSugerida}
+                title={temporadaSugerida}
+                onChange={(evento) => setTemporada(evento.currentTarget.value)}
+              >
+                {TEMPORADAS_SUGERIDAS.map((opcion) => (
+                  <option key={opcion}>{opcion}</option>
+                ))}
+              </Select>
+            )}
+            <Button
+              className="equipo-form-alternar"
+              variante="fantasma"
+              onClick={() => setTemporadaManual((manual) => !manual)}
             >
-              CU-09 · GESTIONAR EQUIPOS
-            </span>
-            <h3 style={{ margin: "4px 0 0", fontSize: 20 }}>
-              {equipoEditar
-                ? `Editar Equipo: ${equipoEditar.nombre}`
-                : "Registrar Nuevo Equipo"}
-            </h3>
+              {temporadaManual ? "Ver temporadas" : "Escribir otra"}
+            </Button>
           </div>
-          <button
-            type="button"
-            onClick={onCerrar}
-            style={{
-              all: "unset",
-              cursor: "pointer",
-              fontSize: 18,
-              color: "var(--text-3)",
-              padding: "4px 8px",
-            }}
-          >
-            ✕
-          </button>
         </div>
 
-        {error && (
-          <div
-            style={{
-              padding: "10px 14px",
-              marginBottom: 16,
-              borderRadius: 6,
-              background: "rgba(224, 112, 92, 0.12)",
-              border: "1px solid var(--risk)",
-              color: "var(--risk)",
-              fontSize: 13,
-              fontWeight: 600,
-            }}
-          >
-            {error}
-          </div>
-        )}
-
-        <form
-          onSubmit={handleSubmit}
-          style={{ display: "flex", flexDirection: "column", gap: 18 }}
-        >
-          {/* Nombre y Temporada */}
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1.4fr 1fr",
-              gap: 14,
-            }}
-          >
-            <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-              <label
-                style={{ fontSize: 12, fontWeight: 700, color: "var(--text-2)" }}
+        <section className="equipo-form-categoria" aria-label="Clasificación del equipo">
+          <header>
+            <h3>Clasificación</h3>
+            <Button
+              className="equipo-form-alternar"
+              variante="fantasma"
+              onClick={() => setCategoriaManual((manual) => !manual)}
+              aria-label={categoriaManual ? "Ver categorías" : "Escribir categoría manual"}
+            >
+              {categoriaManual ? "Ver categorías" : "Escribir categoría"}
+            </Button>
+          </header>
+          {categoriaManual ? (
+            <Input
+              etiqueta="Categoría"
+              placeholder="Ej. Sub-17"
+              maxLength={40}
+              value={categoria}
+              onChange={(evento) => setCategoria(evento.currentTarget.value)}
+            />
+          ) : (
+            <div className="equipo-form-grid">
+              <Select
+                etiqueta="País o federación"
+                value={pais}
+                title={pais}
+                onChange={(evento) => alCambiarPais(evento.currentTarget.value)}
               >
-                Nombre del Equipo / Plantel *
-              </label>
-              <input
-                type="text"
-                required
-                placeholder="Ej. Primera División, Reserva, Sub-19..."
-                value={nombre}
-                onChange={(e) => setNombre(e.target.value)}
-                style={{
-                  padding: "9px 12px",
-                  borderRadius: 6,
-                  border: "1px solid var(--line)",
-                  background: "var(--ground)",
-                  color: "var(--text)",
-                  fontSize: 13.5,
-                }}
-              />
-            </div>
-
-            <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
+                {Object.keys(ESTRUCTURA_FUTBOL).map((opcion) => (
+                  <option key={opcion}>{opcion}</option>
+                ))}
+              </Select>
+              <Select
+                etiqueta="Rama"
+                value={rama}
+                title={rama}
+                onChange={(evento) => {
+                  const siguiente = evento.currentTarget.value;
+                  setRama(siguiente);
+                  setCategoria(ESTRUCTURA_FUTBOL[pais][siguiente][0]);
                 }}
               >
-                <label
-                  style={{
-                    fontSize: 12,
-                    fontWeight: 700,
-                    color: "var(--text-2)",
-                  }}
+                {ramas.map((opcion) => (
+                  <option key={opcion}>{opcion}</option>
+                ))}
+              </Select>
+              <div className="equipo-form-division">
+                <Select
+                  etiqueta="Categoría"
+                  value={categoriaSugerida}
+                  title={categoriaSugerida}
+                  onChange={(evento) => setCategoria(evento.currentTarget.value)}
                 >
-                  Temporada / Ciclo
-                </label>
-                <button
-                  type="button"
-                  onClick={() => setModoTemporadaManual(!modoTemporadaManual)}
-                  style={{
-                    all: "unset",
-                    cursor: "pointer",
-                    fontSize: 11,
-                    color: "var(--pitch)",
-                    fontWeight: 600,
-                  }}
-                >
-                  {modoTemporadaManual ? "Usar lista" : "Escribir otra"}
-                </button>
-              </div>
-
-              {modoTemporadaManual ? (
-                <input
-                  type="text"
-                  placeholder="Ej. 2026 - Torneo Invierno"
-                  value={temporada}
-                  onChange={(e) => setTemporada(e.target.value)}
-                  style={{
-                    padding: "9px 12px",
-                    borderRadius: 6,
-                    border: "1px solid var(--line)",
-                    background: "var(--ground)",
-                    color: "var(--text)",
-                    fontSize: 13.5,
-                  }}
-                />
-              ) : (
-                <select
-                  value={temporada}
-                  onChange={(e) => setTemporada(e.target.value)}
-                  style={{
-                    padding: "9px 12px",
-                    borderRadius: 6,
-                    border: "1px solid var(--line)",
-                    background: "var(--ground)",
-                    color: "var(--text)",
-                    fontSize: 13.5,
-                    cursor: "pointer",
-                  }}
-                >
-                  {TEMPORADAS_SUGERIDAS.map((temp) => (
-                    <option key={temp} value={temp}>
-                      {temp}
-                    </option>
+                  {categorias.map((opcion) => (
+                    <option key={opcion}>{opcion}</option>
                   ))}
-                </select>
-              )}
-            </div>
-          </div>
-
-          {/* Selector Estructurado de Liga y Categoría */}
-          <div
-            style={{
-              padding: 14,
-              borderRadius: 8,
-              background: "var(--ground)",
-              border: "1px solid var(--line)",
-              display: "flex",
-              flexDirection: "column",
-              gap: 12,
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-              }}
-            >
-              <span
-                style={{
-                  fontSize: 12,
-                  fontWeight: 800,
-                  color: "var(--text)",
-                  textTransform: "uppercase",
-                  letterSpacing: "0.04em",
-                }}
-              >
-                Estructura Competitiva (País / Liga / División)
-              </span>
-              <button
-                type="button"
-                onClick={() => setModoCategoriaManual(!modoCategoriaManual)}
-                style={{
-                  all: "unset",
-                  cursor: "pointer",
-                  fontSize: 11.5,
-                  color: "var(--pitch)",
-                  fontWeight: 700,
-                }}
-              >
-                {modoCategoriaManual
-                  ? "Volver al selector de ligas"
-                  : "Escribir categoría manual"}
-              </button>
-            </div>
-
-            {modoCategoriaManual ? (
-              <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-                <label
-                  style={{
-                    fontSize: 11.5,
-                    fontWeight: 600,
-                    color: "var(--text-2)",
-                  }}
-                >
-                  Nombre de Categoría o Competición Personalizada
-                </label>
-                <input
-                  type="text"
-                  placeholder="Ej. Torneo Intercolegial Sub-18, Liga Universitaria..."
-                  value={categoria}
-                  onChange={(e) => setCategoria(e.target.value)}
-                  style={{
-                    padding: "9px 12px",
-                    borderRadius: 6,
-                    border: "1px solid var(--line)",
-                    background: "var(--surface)",
-                    color: "var(--text)",
-                    fontSize: 13.5,
-                  }}
-                />
+                </Select>
               </div>
-            ) : (
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "1fr 1fr 1.2fr",
-                  gap: 10,
-                }}
-              >
-                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                  <label
-                    style={{
-                      fontSize: 11,
-                      fontWeight: 700,
-                      color: "var(--text-3)",
-                    }}
-                  >
-                    1. País / Federación
-                  </label>
-                  <select
-                    value={paisLiga}
-                    onChange={(e) => handlePaisChange(e.target.value)}
-                    style={{
-                      padding: "8px 10px",
-                      borderRadius: 6,
-                      border: "1px solid var(--line)",
-                      background: "var(--surface)",
-                      color: "var(--text)",
-                      fontSize: 12.5,
-                      cursor: "pointer",
-                    }}
-                  >
-                    {Object.keys(ESTRUCTURA_FUTBOL).map((pais) => (
-                      <option key={pais} value={pais}>
-                        {pais}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                  <label
-                    style={{
-                      fontSize: 11,
-                      fontWeight: 700,
-                      color: "var(--text-3)",
-                    }}
-                  >
-                    2. Rama / Nivel
-                  </label>
-                  <select
-                    value={tipoCompeticion}
-                    onChange={(e) => handleBloqueChange(e.target.value)}
-                    style={{
-                      padding: "8px 10px",
-                      borderRadius: 6,
-                      border: "1px solid var(--line)",
-                      background: "var(--surface)",
-                      color: "var(--text)",
-                      fontSize: 12.5,
-                      cursor: "pointer",
-                    }}
-                  >
-                    {bloquesDisponibles.map((bloque) => (
-                      <option key={bloque} value={bloque}>
-                        {bloque}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                  <label
-                    style={{
-                      fontSize: 11,
-                      fontWeight: 700,
-                      color: "var(--text-3)",
-                    }}
-                  >
-                    3. División / Categoría Oficial
-                  </label>
-                  <select
-                    value={categoria}
-                    onChange={(e) => setCategoria(e.target.value)}
-                    style={{
-                      padding: "8px 10px",
-                      borderRadius: 6,
-                      border: "1px solid var(--line)",
-                      background: "var(--surface)",
-                      color: "var(--text)",
-                      fontSize: 12.5,
-                      fontWeight: 600,
-                      cursor: "pointer",
-                    }}
-                  >
-                    {categoriasDisponibles.map((cat) => (
-                      <option key={cat} value={cat}>
-                        {cat}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Estado operativo cuando se edita */}
-          {equipoEditar && (
-            <div
-              style={{
-                padding: "12px 14px",
-                borderRadius: 8,
-                background: "var(--ground)",
-                border: "1px solid var(--line)",
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-              }}
-            >
-              <div>
-                <div
-                  style={{ fontSize: 13, fontWeight: 700, color: "var(--text)" }}
-                >
-                  Estado operativo del equipo
-                </div>
-                <div style={{ fontSize: 12, color: "var(--text-2)" }}>
-                  Los equipos inactivos conservan todo su historial táctico y de partidos.
-                </div>
-              </div>
-              <label
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 8,
-                  cursor: "pointer",
-                  fontSize: 13,
-                  fontWeight: 700,
-                  color: activo ? "var(--pitch)" : "var(--text-3)",
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={activo}
-                  onChange={(e) => setActivo(e.target.checked)}
-                />
-                {activo ? "Activo" : "Inactivo"}
-              </label>
             </div>
           )}
+        </section>
 
-          {/* Nota informativa sobre Indumentaria separada en CU-10 */}
-          <div
-            style={{
-              padding: "10px 14px",
-              borderRadius: 6,
-              background: "rgba(13, 148, 136, 0.08)",
-              border: "1px solid rgba(13, 148, 136, 0.25)",
-              fontSize: 12,
-              color: "var(--text-2)",
-              lineHeight: 1.45,
-            }}
-          >
-            <strong>Nota:</strong> El registro de camisetas (Titular, Alternativa y Arquero) y la validación óptica HSV se gestionan en la pestaña dedicada{" "}
-            <strong style={{ color: "var(--pitch)" }}>
-              Indumentaria de Equipo (CU-10)
-            </strong>
-            .
-          </div>
+        {equipoEditar && (
+          <label className="equipo-form-estado">
+            <input
+              type="checkbox"
+              checked={activo}
+              onChange={(evento) => setActivo(evento.currentTarget.checked)}
+            />
+            Equipo activo
+          </label>
+        )}
+      </fieldset>
 
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "flex-end",
-              gap: 10,
-              borderTop: "1px solid var(--line)",
-              paddingTop: 16,
-              marginTop: 4,
-            }}
-          >
-            <button
-              type="button"
-              onClick={onCerrar}
-              style={{
-                padding: "9px 16px",
-                borderRadius: 6,
-                border: "1px solid var(--line)",
-                background: "transparent",
-                color: "var(--text-2)",
-                fontSize: 13,
-                fontWeight: 600,
-                cursor: "pointer",
-              }}
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={enviando}
-              style={{
-                padding: "9px 20px",
-                borderRadius: 6,
-                border: "none",
-                background: "var(--pitch)",
-                color: "#fff",
-                fontSize: 13,
-                fontWeight: 700,
-                cursor: enviando ? "wait" : "pointer",
-                opacity: enviando ? 0.7 : 1,
-              }}
-            >
-              {enviando
-                ? "Guardando..."
-                : equipoEditar
-                  ? "Guardar Cambios"
-                  : "Crear Equipo"}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+      <footer className="equipo-form-acciones">
+        <Button variante="secundario" onClick={onCerrar} disabled={enviando}>
+          Cancelar
+        </Button>
+        <Button type="submit" disabled={enviando}>
+          {enviando ? "Guardando…" : equipoEditar ? "Guardar cambios" : "Crear equipo"}
+        </Button>
+      </footer>
+      <Button
+        className="equipo-form-cerrar"
+        variante="fantasma"
+        aria-label="Cerrar formulario"
+        onClick={onCerrar}
+        disabled={enviando}
+      >
+        <span aria-hidden="true">×</span>
+      </Button>
+    </form>
   );
 }

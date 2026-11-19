@@ -1,17 +1,26 @@
-/** Seguridad y Administración  —  P1 · CU-01 … CU-08 */
-import { Pendiente } from "@/shared/ui/Pendiente";
+import { Outlet } from "react-router-dom";
 
-const CASOS = [
-  "CU-01 Registrar club",
-  "CU-02 Iniciar sesión",
-  "CU-03 Cerrar sesión",
-  "CU-04 Gestionar usuarios y roles",
-  "CU-05 Administrar perfil propio",
-  "CU-06 Recuperar contraseña",
-  "CU-07 Bitácora de auditoría",
-  "CU-08 Resumen de actividad del club",
-];
+import { Pestanas } from "@/shared/ui/Pestanas";
+
+import { useSesion } from "../session";
 
 export function SeguridadPage() {
-  return <Pendiente paquete="P1" titulo="Seguridad y Administración" casos={CASOS} />;
+  const administrador = useSesion()?.usuario.rol === "ADMIN";
+  return (
+    <main className="area-pagina">
+      <header className="area-titulo">
+        <h1>Administración</h1>
+      </header>
+      <Pestanas
+        titulo="Administración"
+        enlaces={[
+          { ruta: "/seguridad/perfil", titulo: "Mi perfil" },
+          ...(administrador ? [{ ruta: "/seguridad/usuarios", titulo: "Usuarios del club" }] : []),
+        ]}
+      />
+      <div className="area-contenido administracion-contenido">
+        <Outlet />
+      </div>
+    </main>
+  );
 }

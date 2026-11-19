@@ -84,6 +84,7 @@ class ModeloDeteccion:
         self.config = config or ConfigModelo()
         self._modelo: Any | None = None
         self._dispositivo_observado: str | None = None
+        self._cajas_antes_del_tracker: tuple[Any, ...] = ()
 
     def dispositivo_efectivo(self) -> str:
         """Resuelve el dispositivo seguro: si pide cuda pero torch no tiene CUDA, usa cpu."""
@@ -111,17 +112,27 @@ class ModeloDeteccion:
         dispositivo = getattr(predictor, "device", None)
         return str(dispositivo) if dispositivo is not None else None
 
-    def _registrar_dispositivo(self, predictor: Any) -> None:
+    def _guardar_resultado_previo(self, predictor: Any) -> None:
         dispositivo = getattr(predictor, "device", None)
         self._dispositivo_observado = str(dispositivo) if dispositivo is not None else None
+        # Este callback se registra antes del callback de seguimiento de Ultralytics.
+        self._cajas_antes_del_tracker = tuple(r.boxes for r in getattr(predictor, "results", ()))
+
+    def _adjuntar_cajas_originales(self, predictor: Any) -> None:
+        # El tracker puede reemplazar cada Results por un subconjunto de detecciones.
+        for resultado, cajas in zip(predictor.results, self._cajas_antes_del_tracker, strict=True):
+            resultado.cajas_antes_del_tracker = cajas
+        self._cajas_antes_del_tracker = ()
 
     def cargar(self) -> Any:
         from ultralytics import YOLO  # importa torch: solo en la maquina con GPU
 
         modelo = YOLO(self.config.ruta_pesos)
         validar_clases(modelo.names, self.config.clases)
-        modelo.add_callback("on_predict_postprocess_end", self._registrar_dispositivo)
+        modelo.add_callback("on_predict_postprocess_end", self._guardar_resultado_previo)
+        modelo.add_callback("on_predict_batch_end", self._adjuntar_cajas_originales)
         self._dispositivo_observado = None
+        self._cajas_antes_del_tracker = ()
         ruta = Path(self.config.ruta_pesos)
         digest = None
         if ruta.is_file():
