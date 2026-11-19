@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../features/asistencia/push.dart';
 import '../features/seguridad/api.dart' as seguridad;
 import '../shared/ui/marca.dart';
 import 'navegacion.dart';
@@ -21,6 +24,14 @@ class Marco extends StatefulWidget {
 class _MarcoState extends State<Marco> {
   bool _compacto = false;
   bool _cerrando = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // T-096: el marco solo se ve con sesión: es el momento de registrar el celular
+    // para recibir push. No hace nada si el push está apagado.
+    unawaited(servicioPush?.registrar());
+  }
 
   int get _destino => switch (widget.ruta) {
     '/' => 0,

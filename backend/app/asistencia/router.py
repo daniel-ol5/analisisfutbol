@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, Query, Response, status
 
 from app.asistencia import service, valoracion
 from app.asistencia.schemas import (
+    Alerta,
     DispositivoRegistrar,
     FormatoExportacion,
     Informe,
@@ -123,12 +124,19 @@ async def marcar_vista(recomendacion_id: int, usuario: Actual, db: Db) -> Recome
     return await valoracion.marcar_vista(db, usuario, recomendacion_id)
 
 
-@router.get("/partidos/{partido_id}/alertas", response_model=list[Recomendacion],
-            responses=RESPUESTA_501,
-            summary="CU-52 · Alertas de fatiga y riesgo de expulsion")
-async def alertas(partido_id: int, usuario: Actual, db: Db) -> list[Recomendacion]:
-    # Regla: no se genera alerta de fatiga para jugadores que entraron hace menos de 15 minutos.
-    pendiente("CU-52", "Sprint 4", "Araceli")
+@router.get("/partidos/{partido_id}/alertas", response_model=list[Alerta],
+            responses={404: {"description": "Partido inexistente o de otro club"}},
+            summary="CU-52 · Alertas de fatiga y riesgo de expulsion",
+            description=(
+                "HU-46. Por jugador propio en cancha, calculadas al consultar con los "
+                "intervalos cerrados de 5 minutos y los eventos manuales. FATIGA: ritmo del "
+                "ultimo bloque >= 120 % del promedio del equipo, o velocidad maxima del segundo "
+                "tiempo 25 % menor que la del primero; nunca para quien entro hace menos de 15 "
+                "minutos (T-095). RIESGO_EXPULSION: amonestado en cancha con 2 o mas tarjetas "
+                "(de cualquier equipo) en los ultimos 10 minutos. No se guardan ni generan push."
+            ))
+async def alertas(partido_id: int, usuario: Actual, db: Db) -> list[Alerta]:
+    return await service.alertas_partido(db, usuario, partido_id)
 
 
 # ---------------- CU-53 · Notificaciones ----------------

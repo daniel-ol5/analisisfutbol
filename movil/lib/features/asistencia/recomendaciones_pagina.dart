@@ -23,9 +23,13 @@ class RecomendacionesPagina extends StatefulWidget {
     this.api = const RecomendacionesApi(),
     this.crearFuente,
     this.ahora,
+    this.destacarId,
   });
 
   final int partidoId;
+
+  /// T-096: la recomendación que llegó por push; se resalta.
+  final int? destacarId;
   final bool integrada;
   final RecomendacionesApi api;
   final FuenteVivo Function()? crearFuente;
@@ -136,15 +140,35 @@ class _RecomendacionesPaginaState extends State<RecomendacionesPagina> {
         ),
       );
     }
+    // T-096: si se llegó desde una notificación y esa ya no está activa, se avisa.
+    final destacar = widget.destacarId;
+    final yaNoEsta = destacar != null && !e.activas.any((r) => r.id == destacar);
+    final aviso = yaNoEsta
+        ? Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Text(
+              'La recomendación de la notificación ya no está activa: se valoró o '
+              'la reemplazó otra más reciente.',
+              key: const Key('destacada-no-activa'),
+              style: texto.copyWith(fontSize: 16),
+            ),
+          )
+        : null;
     if (e.activas.isEmpty) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
-          child: Text(
-            'Sin recomendaciones activas por ahora.',
-            key: const Key('recomendaciones-vacio'),
-            textAlign: TextAlign.center,
-            style: texto,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ?aviso,
+              Text(
+                'Sin recomendaciones activas por ahora.',
+                key: const Key('recomendaciones-vacio'),
+                textAlign: TextAlign.center,
+                style: texto,
+              ),
+            ],
           ),
         ),
       );
@@ -152,10 +176,20 @@ class _RecomendacionesPaginaState extends State<RecomendacionesPagina> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
       children: [
+        ?aviso,
         for (final r in e.activas)
           Padding(
             padding: const EdgeInsets.only(bottom: 12),
-            child: _Tarjeta(recomendacion: r),
+            child: _Tarjeta(
+              recomendacion: r,
+              destacada: r.id == destacar,
+              // T-095: valorar con un toque.
+              valoracion: e.valoradas[r.id] ?? r.valoracion,
+              enviando: e.valorando == r.id,
+              bloqueado: e.valorando != null,
+              error: e.erroresValoracion[r.id],
+              onValorar: (opcion) => e.valorar(r, opcion),
+            ),
           ),
       ],
     );
@@ -210,9 +244,27 @@ class _AvisoSinConexion extends StatelessWidget {
 }
 
 class _Tarjeta extends StatelessWidget {
-  const _Tarjeta({required this.recomendacion});
+  const _Tarjeta({
+    required this.recomendacion,
+    required this.onValorar,
+    this.valoracion,
+    this.enviando = false,
+    this.bloqueado = false,
+    this.error,
+    this.destacada = false,
+  });
 
   final Recomendacion recomendacion;
+
+  /// T-096: es la que abrió la notificación.
+  final bool destacada;
+
+  /// T-095: valoración elegida (en esta pantalla o ya guardada en el servidor).
+  final OpcionValoracion? valoracion;
+  final bool enviando;
+  final bool bloqueado;
+  final String? error;
+  final ValueChanged<OpcionValoracion> onValorar;
 
   Color _color(ColorScheme esquema) => switch (recomendacion.prioridad) {
     Prioridad.critica => esquema.error,
@@ -236,7 +288,9 @@ class _Tarjeta extends StatelessWidget {
         clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
           color: esquema.surface,
-          border: Border.all(color: esquema.outline, width: 2),
+          border: destacada
+              ? Border.all(color: esquema.primary, width: 5)
+              : Border.all(color: esquema.outline, width: 2),
           borderRadius: BorderRadius.circular(10),
         ),
         child: IntrinsicHeight(
@@ -317,6 +371,15 @@ class _Tarjeta extends StatelessWidget {
                           ),
                         ),
                       ],
+                      const SizedBox(height: 12),
+                      _Valoracion(
+                        recomendacionId: r.id,
+                        valoracion: valoracion,
+                        enviando: enviando,
+                        bloqueado: bloqueado,
+                        error: error,
+                        onValorar: onValorar,
+                      ),
                     ],
                   ),
                 ),
@@ -325,6 +388,112 @@ class _Tarjeta extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// T-095 (CU-51): valorar con un toque. Tres botones grandes (ícono arriba y
+/// texto abajo, para que entren en 360 dp) o, si ya se valoró, lo elegido.
+class _Valoracion extends StatelessWidget {
+  const _Valoracion({
+    required this.recomendacionId,
+    required this.valoracion,
+    required this.enviando,
+    required this.bloqueado,
+    required this.error,
+    required this.onValorar,
+  });
+
+  final int recomendacionId;
+  final OpcionValoracion? valoracion;
+  final bool enviando;
+  final bool bloqueado;
+  final String? error;
+  final ValueChanged<OpcionValoracion> onValorar;
+
+  static const _iconos = {
+    OpcionValoracion.util: Icons.thumb_up_alt_outlined,
+    OpcionValoracion.noUtil: Icons.thumb_down_alt_outlined,
+    OpcionValoracion.aplicada: Icons.check_circle_outline,
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final esquema = Theme.of(context).colorScheme;
+    final elegida = valoracion;
+    if (elegida != null) {
+      return Row(
+        key: Key('valorada-$recomendacionId'),
+        children: [
+          Icon(Icons.check_circle, color: esquema.primary, size: 26),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Marcada como ${elegida.etiqueta}',
+              style: TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w800,
+                color: esquema.onSurface,
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            for (final opcion in OpcionValoracion.values) ...[
+              if (opcion != OpcionValoracion.values.first) const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton(
+                  key: Key('valorar-${opcion.valor}-$recomendacionId'),
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(0, 64),
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+                    side: BorderSide(color: esquema.outline, width: 2),
+                    foregroundColor: esquema.onSurface,
+                  ),
+                  onPressed: bloqueado ? null : () => onValorar(opcion),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(_iconos[opcion], size: 26),
+                      const SizedBox(height: 2),
+                      Text(
+                        opcion.etiqueta,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+        if (enviando)
+          const Padding(
+            padding: EdgeInsets.only(top: 8),
+            child: LinearProgressIndicator(),
+          ),
+        if (error != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(
+              error!,
+              key: Key('error-valoracion-$recomendacionId'),
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: esquema.error,
+              ),
+            ),
+          ),
+      ],
     );
   }
 }

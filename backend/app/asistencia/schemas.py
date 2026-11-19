@@ -131,6 +131,30 @@ class Recomendacion(BaseModel):
     vista_en: datetime | None = None
 
 
+class TipoAlerta(StrEnum):
+    FATIGA = "FATIGA"
+    RIESGO_EXPULSION = "RIESGO_EXPULSION"
+
+
+class Alerta(BaseModel):
+    """CU-52 (HU-46): aviso sobre UN jugador propio que sigue en cancha.
+
+    Se calcula al consultar con las métricas por jugador ya guardadas (intervalos
+    cerrados de 5 minutos) y los eventos manuales: no se guarda, no se valora y no
+    genera push (el push queda para recomendaciones CRITICAS, T-087).
+    """
+    tipo: TipoAlerta
+    jugador_id: int
+    nombre: str | None = None
+    dorsal: int | None = None
+    minuto: int = Field(description="Minuto de partido al que corresponde la alerta")
+    mensaje: str = Field(examples=["Considerar el cambio de #8 Pérez"])
+    justificacion: str = Field(
+        examples=["Recorrió 142 m/min en el último bloque, 128 % del promedio del equipo."])
+    prioridad: Prioridad
+    datos_soporte: list[DatoSoporte]
+
+
 class Valoracion(BaseModel):
     """CU-51. La meta de calidad del proyecto es al menos 70% marcadas como utiles."""
     util: bool | None = Field(default=None, description="null cuando solo se marca como aplicada")

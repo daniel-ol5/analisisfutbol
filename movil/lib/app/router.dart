@@ -4,6 +4,7 @@
 /// las features no se importan entre sí.
 library;
 
+import 'package:flutter/widgets.dart';
 import 'package:go_router/go_router.dart';
 
 import 'inicio.dart';
@@ -18,6 +19,8 @@ import '../features/vision/pagina.dart';
 import '../features/partido/pagina.dart';
 import '../features/analisis/pagina.dart';
 import '../features/analisis/resumen_pagina.dart';
+import '../features/asistencia/alertas_pagina.dart';
+import '../features/asistencia/alertas_widgets.dart';
 import '../features/asistencia/recomendaciones_pagina.dart';
 import '../features/asistencia/pagina.dart';
 
@@ -42,6 +45,8 @@ final router = GoRouter(
       path: '/partidos/:id/recomendaciones',
       builder: (_, estado) => RecomendacionesPagina(
         partidoId: int.parse(estado.pathParameters['id']!),
+        // T-096: la recomendación que llegó por push, para resaltarla.
+        destacarId: int.tryParse(estado.uri.queryParameters['recomendacion'] ?? ''),
       ),
     ),
     GoRoute(
@@ -74,16 +79,29 @@ final router = GoRouter(
         ),
         GoRoute(
           path: '/partidos/:id/eventos',
-          builder: (_, estado) =>
-              PartidoPagina(partidoId: int.parse(estado.pathParameters['id']!)),
+          builder: (_, estado) => PartidoPagina(
+            partidoId: int.parse(estado.pathParameters['id']!),
+            barraSuperior: _barraAlertas,
+          ),
+        ),
+        GoRoute(
+          path: '/partidos/:id/alertas',
+          builder: (_, estado) => AlertasPagina(
+            partidoId: int.parse(estado.pathParameters['id']!),
+          ),
         ),
         GoRoute(path: '/deportivo', builder: (_, _) => const DeportivoPagina()),
         GoRoute(path: '/vision', builder: (_, _) => const VisionPagina()),
-        GoRoute(path: '/partido', builder: (_, _) => const PartidoPagina()),
+        GoRoute(
+          path: '/partido',
+          builder: (_, _) => const PartidoPagina(barraSuperior: _barraAlertas),
+        ),
         GoRoute(
           path: '/partido/:id',
-          builder: (_, estado) =>
-              PartidoPagina(partidoId: int.parse(estado.pathParameters['id']!)),
+          builder: (_, estado) => PartidoPagina(
+            partidoId: int.parse(estado.pathParameters['id']!),
+            barraSuperior: _barraAlertas,
+          ),
         ),
         GoRoute(
           path: '/analisis',
@@ -100,3 +118,8 @@ final router = GoRouter(
     ),
   ],
 );
+
+/// T-095: alertas de Asistencia (CU-52) arriba del cronómetro del partido en vivo.
+/// Una clave por partido: al cambiar de partido se reinicia su consulta.
+Widget _barraAlertas(int partidoId) =>
+    BarraAlertas(key: ValueKey('alertas-$partidoId'), partidoId: partidoId);

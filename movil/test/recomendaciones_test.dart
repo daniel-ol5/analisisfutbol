@@ -49,6 +49,11 @@ class ApiFalsa implements RecomendacionesApi {
 
   @override
   Future<void> marcarVista(int recomendacionId) async => vistas.add(recomendacionId);
+
+  /// T-095: estas pruebas no valoran; las de la valoración están en valoracion_test.dart.
+  @override
+  Future<Recomendacion> valorar(int recomendacionId, OpcionValoracion opcion) =>
+      throw UnimplementedError();
 }
 
 class FuenteFalsa extends ChangeNotifier implements FuenteVivo {

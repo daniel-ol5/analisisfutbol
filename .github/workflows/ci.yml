@@ -166,13 +166,18 @@ jobs:
       DATABASE_URL: postgresql+asyncpg://postgres:e2e${{ github.run_id }}x${{ github.run_attempt }}@localhost:5432/areatecnica_e2e
       DB_NULL_POOL: "true"
       CORS_ORIGINS: http://127.0.0.1:5180
-      VIDEOS_DIR: ${{ runner.temp }}/e2e/videos
-      E2E_DATOS: ${{ runner.temp }}/e2e/datos.json
       E2E_PYTHON: python
       E2E_WEB_URL: http://127.0.0.1:5180
       E2E_API_URL: http://127.0.0.1:8100/api
     steps:
       - uses: actions/checkout@v4
+
+      # `runner.temp` no existe en el `env:` del job (GitHub rechaza el archivo
+      # entero y no corre ningún check): las rutas temporales se definen aquí.
+      - name: Rutas temporales
+        run: |
+          echo "VIDEOS_DIR=$RUNNER_TEMP/e2e/videos" >> "$GITHUB_ENV"
+          echo "E2E_DATOS=$RUNNER_TEMP/e2e/datos.json" >> "$GITHUB_ENV"
 
       - uses: actions/setup-python@v5
         with:
