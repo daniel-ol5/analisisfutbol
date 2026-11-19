@@ -70,3 +70,5 @@ desktop.ini
 # Tokens de sesion copiados a mano para pruebas: nunca al repo (T-105).
 _tok*
 *.token
+.env
+

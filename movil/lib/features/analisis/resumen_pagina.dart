@@ -99,6 +99,14 @@ class _ResumenPaginaState extends State<ResumenPagina> {
                     detalle: 'Datos de las ${_hora(e.ultimaActualizacion)}',
                   ),
             actions: [
+              // T-094: acceso a las recomendaciones en vivo del partido.
+              IconButton(
+                key: const Key('abrir-recomendaciones'),
+                tooltip: 'Recomendaciones',
+                icon: const Icon(Icons.tips_and_updates_rounded),
+                onPressed: () =>
+                    context.push('/partidos/${widget.partidoId}/recomendaciones'),
+              ),
               IconButton(
                 tooltip: 'Actualizar',
                 icon: const Icon(Icons.refresh),

@@ -141,6 +141,106 @@ jobs:
         working-directory: movil
         run: flutter build web --release
 
+  e2e:
+    # T-093 (Alejandra): los tres flujos criticos de punta a punta con Playwright,
+    # contra PostgreSQL, el backend y la web levantados de verdad. Ver web/e2e/README.md.
+    name: E2E · calibracion, partido en vivo y video (Playwright)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Base exclusiva y efimera de esta corrida: no es una credencial real.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: e2e${{ github.run_id }}x${{ github.run_attempt }}
+          POSTGRES_DB: areatecnica_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql+asyncpg://postgres:e2e${{ github.run_id }}x${{ github.run_attempt }}@localhost:5432/areatecnica_e2e
+      DB_NULL_POOL: "true"
+      CORS_ORIGINS: http://127.0.0.1:5180
+      VIDEOS_DIR: ${{ runner.temp }}/e2e/videos
+      E2E_DATOS: ${{ runner.temp }}/e2e/datos.json
+      E2E_PYTHON: python
+      E2E_WEB_URL: http://127.0.0.1:5180
+      E2E_API_URL: http://127.0.0.1:8100/api
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Instalar dependencias del backend
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Instalar dependencias de la web y Chromium
+        working-directory: web
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Migraciones y datos de prueba
+        working-directory: backend
+        env:
+          E2E_SEMBRAR: "1"
+        run: |
+          alembic upgrade head
+          python scripts/sembrar_e2e.py --salida "$E2E_DATOS" --video "${{ runner.temp }}/e2e/clip.mp4"
+
+      - name: Levantar el backend y la web
+        run: |
+          (cd backend && nohup uvicorn app.main:app --host 127.0.0.1 --port 8100 > "${{ runner.temp }}/backend.log" 2>&1 &)
+          (cd web && VITE_API_URL="$E2E_API_URL" nohup npx vite --host 127.0.0.1 --port 5180 --strictPort > "${{ runner.temp }}/web.log" 2>&1 &)
+          for i in $(seq 1 60); do
+            if curl -sf http://127.0.0.1:8100/api/docs > /dev/null && curl -sf "$E2E_WEB_URL" > /dev/null; then
+              echo "Backend y web listos"; exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::El backend o la web no arrancaron"
+          tail -n 50 "${{ runner.temp }}/backend.log" "${{ runner.temp }}/web.log"
+          exit 1
+
+      - name: Tipos de las pruebas E2E
+        working-directory: web
+        run: npm run e2e:tipos
+
+      - name: Flujos E2E
+        working-directory: web
+        env:
+          E2E_SALIDA: ${{ runner.temp }}/e2e/resultados
+        run: npm run e2e
+
+      - name: Registros y trazas si algo falla
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-trazas
+          path: |
+            ${{ runner.temp }}/e2e/resultados
+            ${{ runner.temp }}/backend.log
+            ${{ runner.temp }}/web.log
+          retention-days: 7
+
   diagramas:
     name: Diagramas PlantUML
     runs-on: ubuntu-latest

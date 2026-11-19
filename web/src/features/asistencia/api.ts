@@ -6,6 +6,7 @@
  */
 import { api } from "@/shared/api/client";
 
+import type { OpcionValoracion, Recomendacion, Valoracion } from "./types";
 import type { Partido } from "@/features/deportivo";
 
 import type { Regla, ReglaCrear, ReglaEditar, ResultadoPrueba } from "./types";
@@ -15,6 +16,42 @@ export async function ping() {
   return data as { paquete: string; casos_de_uso: string; estado: string };
 }
 
+/** CU-50: como máximo 3 activas, priorizadas (el servidor ya las ordena). */
+export async function listarRecomendaciones(partidoId: number): Promise<Recomendacion[]> {
+  const { data } = await api.get<Recomendacion[]>(
+    `/asistencia/partidos/${partidoId}/recomendaciones`,
+    { params: { solo_activas: true } },
+  );
+  return data;
+}
+
+/** T-090: el cliente la mostró por primera vez. Idempotente. */
+export async function marcarVista(recomendacionId: number): Promise<Recomendacion> {
+  const { data } = await api.post<Recomendacion>(
+    `/asistencia/recomendaciones/${recomendacionId}/vista`,
+  );
+  return data;
+}
+
+/** Cuerpo de la valoración para cada opción de la tarjeta (T-091). */
+export function cuerpoValoracion(opcion: OpcionValoracion, comentario: string): Valoracion {
+  return {
+    util: opcion === "UTIL" ? true : opcion === "NO_UTIL" ? false : null,
+    aplicada: opcion === "APLICADA",
+    comentario: comentario.trim(),
+  };
+}
+
+/** CU-51: útil, no útil o aplicada, con comentario opcional. */
+export async function valorarRecomendacion(
+  recomendacionId: number,
+  opcion: OpcionValoracion,
+  comentario: string,
+): Promise<Recomendacion> {
+  const { data } = await api.post<Recomendacion>(
+    `/asistencia/recomendaciones/${recomendacionId}/valorar`,
+    cuerpoValoracion(opcion, comentario),
+  );
 // ---------- CU-54 Catálogo de reglas (T-092) ----------
 
 /** Reglas globales y propias del club; `activa` es la activación para el club. */
