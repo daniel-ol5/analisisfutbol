@@ -99,10 +99,26 @@ enviar notificaciones. Los errores de FCM quedan registrados sin interrumpir la
 ingesta. Un token que FCM reporte como no registrado o perteneciente a otro
 proyecto queda inactivo hasta que la app lo actualice.
 
-## Verificacion pendiente
+## Verificacion
 
 Las pruebas automatizadas usan un proveedor simulado y cubren destinatarios,
-aislamiento entre clubes, duplicados, tokens invalidos, errores y payload. La
-entrega real debe comprobarse con un proyecto Firebase y dispositivos fisicos
-cuando T-096 este integrada; esa prueba no requiere subir credenciales al repo.
+aislamiento entre clubes, duplicados, tokens invalidos, errores y payload.
+
+### Entrega real (T-096) — 19/11/2026
+
+Con el proyecto Firebase `areatecnica-ccd12`, el backend de desarrollo y un
+celular Android con el APK compilado con la configuracion de Firebase:
+
+| Paso | Resultado |
+|---|---|
+| Inicio de sesion en la app y permiso de notificaciones | El dispositivo quedo registrado (`POST /asistencia/dispositivos` → 204) |
+| Tarjeta roja propia + ingesta del partido | Recomendacion CRITICA "Reorganizacion tras una expulsion" |
+| Envio por FCM | `envio_push` en `ENVIADO`, con id de mensaje de Firebase |
+| **App cerrada** | La notificacion llego a la pantalla de bloqueo |
+| Tocar la notificacion | Se abrio Recomendaciones con **esa** recomendacion resaltada |
+
+Criterio de T-096 cumplido. Ninguna credencial se subio al repositorio: la
+clave de la cuenta de servicio se monto de solo lectura en el contenedor y los
+valores de la app se pasaron con `--dart-define-from-file` desde fuera del repo.
+Falta repetir la prueba en tres dispositivos y en exterior (T-097, casos F1 a F5).
 
