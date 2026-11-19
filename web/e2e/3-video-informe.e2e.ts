@@ -38,7 +38,9 @@ test("subir un video, procesarlo y verlo como procesado", async ({ page, request
 
   // Lanzar el procesamiento.
   await tarjeta.getByRole("button", { name: "Procesar video" }).click();
-  await expect(tarjeta.getByText("Procesando")).toBeVisible();
+  // Hasta que un worker lo toma, la tarjeta dice "En cola" (T-062); "Procesando"
+  // aparece recién cuando el worker de abajo pide el trabajo.
+  await expect(tarjeta.getByText("En cola")).toBeVisible();
 
   // El worker toma el trabajo, manda un lote y termina (contrato de T-061).
   const trabajo = await request.post(`${API}/vision/trabajos/tomar`, { headers: auth(t) });
