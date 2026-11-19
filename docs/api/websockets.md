@@ -55,6 +55,7 @@ cliente                                  servidor
 | `posesion` | Cada segundo de partido (T-074) | `{"tipo": "posesion", "datos": {…}}`, ver [Métricas en vivo](#métricas-en-vivo-t-074-t-075-t-076) |
 | `metricas_jugadores` | Cada 60 s de partido (T-075) | `{"tipo": "metricas_jugadores", "datos": {…}}` |
 | `intervalo` | Al cerrarse cada intervalo de 5 min, y el último (parcial) al finalizar (T-076) | `{"tipo": "intervalo", "datos": <Intervalo>}` |
+| `recomendacion` | Apenas el motor de reglas crea una recomendación nueva (T-090) | `{"tipo": "recomendacion", "datos": <Recomendacion>}`, ver [Recomendaciones en vivo](#recomendaciones-en-vivo-t-090) |
 
 Los clientes deben ignorar los `tipo` que no conocen: así se pueden agregar
 mensajes nuevos sin romper versiones viejas.
@@ -353,6 +354,45 @@ llegar la primera muestra del siguiente. Al finalizar el partido, el último se
 cierra como parcial: su `minuto_hasta` es el de su última muestra. Si un sprint
 que empezó en un intervalo ya cerrado se confirma después, ese intervalo se
 reenvía corregido: el cliente reemplaza el que tenga el mismo `minuto_desde`.
+
+---
+
+## Recomendaciones en vivo (T-090)
+
+El motor de reglas tácticas (CU-49, `app/asistencia`) se evalúa con las
+posiciones que llegan por `/ingesta`, como máximo una vez cada
+`INTERVALO_REGLAS_S` (5 s) de tiempo de partido. Cada recomendación que esa
+evaluación crea sale por `/vivo` en el acto, de a una, ordenadas por prioridad:
+
+```json
+{
+  "tipo": "recomendacion",
+  "datos": {
+    "id": 81, "partido_id": 42, "regla_id": 12, "t": 1873.4, "minuto": 31,
+    "mensaje": "Reorganiza el bloque tras la expulsión.",
+    "justificacion": "Tenemos 1 expulsado.",
+    "prioridad": "CRITICA",
+    "datos_soporte": [{"metrica": "rojas_propias", "valor": 1.0, "umbral": 1.0}],
+    "estado": "PENDIENTE", "util": null, "comentario": null, "vista_en": null
+  }
+}
+```
+
+`datos` es una `Recomendacion`, igual que cada elemento de
+`GET /asistencia/partidos/{id}/recomendaciones`. Una regla en su `cooldown_s` no
+se vuelve a disparar, así que no llegan repetidas.
+
+Lo que hace el cliente:
+
+- **Muestra como máximo 3**, ordenadas por prioridad (CRITICA, ALTA, MEDIA,
+  BAJA) y, a igual prioridad, la más reciente primero. Si llega una nueva de la
+  misma regla, reemplaza a la anterior. Es la misma regla que aplica el GET con
+  `solo_activas=true`.
+- **Al mostrarla por primera vez** llama a
+  `POST /asistencia/recomendaciones/{id}/vista`.
+- **La valoración** (`POST .../valorar`) no se difunde: cada cliente actualiza
+  la suya con la respuesta. «No útil» y «Aplicada» la sacan de las activas.
+- **Si el canal se cae**, recarga con el GET cada pocos segundos hasta reconectar.
 
 ---
 

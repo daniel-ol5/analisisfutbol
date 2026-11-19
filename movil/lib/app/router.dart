@@ -18,6 +18,7 @@ import '../features/vision/pagina.dart';
 import '../features/partido/pagina.dart';
 import '../features/analisis/pagina.dart';
 import '../features/analisis/resumen_pagina.dart';
+import '../features/asistencia/recomendaciones_pagina.dart';
 import '../features/asistencia/pagina.dart';
 
 /// Pantalla de inicio de sesión (CU-02).
@@ -36,6 +37,13 @@ final router = GoRouter(
     GoRoute(path: '/seguridad', builder: (_, _) => const SeguridadPagina()),
     // T-081: resumen de métricas a pantalla completa (fuera del Marco: sin la
     // barra inferior, para que todo entre sin desplazamiento).
+    // T-094: recomendaciones en vivo, también a pantalla completa.
+    GoRoute(
+      path: '/partidos/:id/recomendaciones',
+      builder: (_, estado) => RecomendacionesPagina(
+        partidoId: int.parse(estado.pathParameters['id']!),
+      ),
+    ),
     GoRoute(
       path: '/partidos/:id/resumen',
       builder: (_, estado) =>
