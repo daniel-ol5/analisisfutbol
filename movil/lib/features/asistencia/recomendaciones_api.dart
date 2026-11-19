@@ -28,4 +28,11 @@ class RecomendacionesApi {
   /// T-090/T-094: se mostró por primera vez. Idempotente en el servidor.
   Future<void> marcarVista(int recomendacionId) =>
       cliente.post('/asistencia/recomendaciones/$recomendacionId/vista');
+
+  /// T-095 (CU-51): útil, no útil o aplicada. 409 si ya estaba valorada.
+  Future<Recomendacion> valorar(int recomendacionId, OpcionValoracion opcion) async =>
+      Recomendacion.fromJson(await cliente.post(
+        '/asistencia/recomendaciones/$recomendacionId/valorar',
+        cuerpo: opcion.cuerpo,
+      ) as Map<String, dynamic>);
 }

@@ -155,7 +155,15 @@ class _RecomendacionesPaginaState extends State<RecomendacionesPagina> {
         for (final r in e.activas)
           Padding(
             padding: const EdgeInsets.only(bottom: 12),
-            child: _Tarjeta(recomendacion: r),
+            child: _Tarjeta(
+              recomendacion: r,
+              // T-095: valorar con un toque.
+              valoracion: e.valoradas[r.id] ?? r.valoracion,
+              enviando: e.valorando == r.id,
+              bloqueado: e.valorando != null,
+              error: e.erroresValoracion[r.id],
+              onValorar: (opcion) => e.valorar(r, opcion),
+            ),
           ),
       ],
     );
@@ -210,9 +218,23 @@ class _AvisoSinConexion extends StatelessWidget {
 }
 
 class _Tarjeta extends StatelessWidget {
-  const _Tarjeta({required this.recomendacion});
+  const _Tarjeta({
+    required this.recomendacion,
+    required this.onValorar,
+    this.valoracion,
+    this.enviando = false,
+    this.bloqueado = false,
+    this.error,
+  });
 
   final Recomendacion recomendacion;
+
+  /// T-095: valoración elegida (en esta pantalla o ya guardada en el servidor).
+  final OpcionValoracion? valoracion;
+  final bool enviando;
+  final bool bloqueado;
+  final String? error;
+  final ValueChanged<OpcionValoracion> onValorar;
 
   Color _color(ColorScheme esquema) => switch (recomendacion.prioridad) {
     Prioridad.critica => esquema.error,
@@ -317,6 +339,15 @@ class _Tarjeta extends StatelessWidget {
                           ),
                         ),
                       ],
+                      const SizedBox(height: 12),
+                      _Valoracion(
+                        recomendacionId: r.id,
+                        valoracion: valoracion,
+                        enviando: enviando,
+                        bloqueado: bloqueado,
+                        error: error,
+                        onValorar: onValorar,
+                      ),
                     ],
                   ),
                 ),
@@ -325,6 +356,112 @@ class _Tarjeta extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// T-095 (CU-51): valorar con un toque. Tres botones grandes (ícono arriba y
+/// texto abajo, para que entren en 360 dp) o, si ya se valoró, lo elegido.
+class _Valoracion extends StatelessWidget {
+  const _Valoracion({
+    required this.recomendacionId,
+    required this.valoracion,
+    required this.enviando,
+    required this.bloqueado,
+    required this.error,
+    required this.onValorar,
+  });
+
+  final int recomendacionId;
+  final OpcionValoracion? valoracion;
+  final bool enviando;
+  final bool bloqueado;
+  final String? error;
+  final ValueChanged<OpcionValoracion> onValorar;
+
+  static const _iconos = {
+    OpcionValoracion.util: Icons.thumb_up_alt_outlined,
+    OpcionValoracion.noUtil: Icons.thumb_down_alt_outlined,
+    OpcionValoracion.aplicada: Icons.check_circle_outline,
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final esquema = Theme.of(context).colorScheme;
+    final elegida = valoracion;
+    if (elegida != null) {
+      return Row(
+        key: Key('valorada-$recomendacionId'),
+        children: [
+          Icon(Icons.check_circle, color: esquema.primary, size: 26),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Marcada como ${elegida.etiqueta}',
+              style: TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w800,
+                color: esquema.onSurface,
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            for (final opcion in OpcionValoracion.values) ...[
+              if (opcion != OpcionValoracion.values.first) const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton(
+                  key: Key('valorar-${opcion.valor}-$recomendacionId'),
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(0, 64),
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+                    side: BorderSide(color: esquema.outline, width: 2),
+                    foregroundColor: esquema.onSurface,
+                  ),
+                  onPressed: bloqueado ? null : () => onValorar(opcion),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(_iconos[opcion], size: 26),
+                      const SizedBox(height: 2),
+                      Text(
+                        opcion.etiqueta,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+        if (enviando)
+          const Padding(
+            padding: EdgeInsets.only(top: 8),
+            child: LinearProgressIndicator(),
+          ),
+        if (error != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(
+              error!,
+              key: Key('error-valoracion-$recomendacionId'),
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: esquema.error,
+              ),
+            ),
+          ),
+      ],
     );
   }
 }

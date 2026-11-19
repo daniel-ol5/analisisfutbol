@@ -62,6 +62,28 @@ class DatoSoporte {
   }
 }
 
+/// T-095 (CU-51): lo que el DT marca con un toque. Una sola vez por recomendación.
+enum OpcionValoracion {
+  util('UTIL', 'Útil'),
+  noUtil('NO_UTIL', 'No útil'),
+  aplicada('APLICADA', 'Aplicada');
+
+  const OpcionValoracion(this.valor, this.etiqueta);
+  final String valor;
+  final String etiqueta;
+
+  /// Cuerpo de POST /asistencia/recomendaciones/{id}/valorar (mismo que la web, T-091).
+  Map<String, Object?> get cuerpo => {
+        'util': switch (this) {
+          OpcionValoracion.util => true,
+          OpcionValoracion.noUtil => false,
+          OpcionValoracion.aplicada => null,
+        },
+        'aplicada': this == OpcionValoracion.aplicada,
+        'comentario': '',
+      };
+}
+
 class Recomendacion {
   const Recomendacion({
     required this.id,
@@ -74,6 +96,7 @@ class Recomendacion {
     required this.prioridad,
     required this.datosSoporte,
     required this.estado,
+    this.util,
   });
 
   final int id;
@@ -89,7 +112,18 @@ class Recomendacion {
   /// PENDIENTE, VISTA, APLICADA o DESCARTADA.
   final String estado;
 
+  /// T-095: null mientras no se valoró (o si solo se marcó como aplicada).
+  final bool? util;
+
   bool get activa => estado == 'PENDIENTE' || estado == 'VISTA';
+
+  /// T-095: la valoración que ya tiene en el servidor, si tiene.
+  OpcionValoracion? get valoracion => switch ((estado, util)) {
+        ('APLICADA', _) => OpcionValoracion.aplicada,
+        (_, true) => OpcionValoracion.util,
+        (_, false) || ('DESCARTADA', _) => OpcionValoracion.noUtil,
+        _ => null,
+      };
 
   /// Si el objeto recibido tiene la forma de una recomendación.
   static bool valida(Object? json) =>
@@ -113,6 +147,7 @@ class Recomendacion {
             .map(DatoSoporte.fromJson)
             .toList(),
         estado: json['estado']?.toString() ?? 'PENDIENTE',
+        util: json['util'] as bool?,
       );
 }
 

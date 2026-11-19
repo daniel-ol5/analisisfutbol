@@ -9,6 +9,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../../shared/api/cliente.dart';
 import '../analisis/modelos.dart';
 import '../analisis/resumen_estado.dart';
 import 'recomendaciones_api.dart';
@@ -35,6 +36,16 @@ class RecomendacionesEstado extends ChangeNotifier {
 
   bool cargando = true;
   String? error;
+
+  /// T-095: valoraciones hechas en esta pantalla (la tarjeta queda a la vista
+  /// con lo elegido aunque "No útil" o "Aplicada" la saquen de las activas).
+  final Map<int, OpcionValoracion> valoradas = {};
+
+  /// T-095: la que se está enviando, para no permitir dos toques.
+  int? valorando;
+
+  /// T-095: por qué no se pudo valorar, por recomendación.
+  final Map<int, String> erroresValoracion = {};
   List<Recomendacion> activas = const [];
   DateTime? ultimaActualizacion;
 
@@ -95,6 +106,36 @@ class RecomendacionesEstado extends ChangeNotifier {
     ultimaActualizacion = _ahora();
     _marcarVistas();
     if (!_cerrado) notifyListeners();
+  }
+
+  /// T-095: un toque. Una sola valoración por recomendación (el servidor responde
+  /// 409 si ya tenía); la tarjeta muestra lo elegido y desactiva los botones.
+  Future<void> valorar(Recomendacion recomendacion, OpcionValoracion opcion) async {
+    if (valorando != null || valoradas.containsKey(recomendacion.id)) return;
+    valorando = recomendacion.id;
+    erroresValoracion.remove(recomendacion.id);
+    notifyListeners();
+    try {
+      final actualizada = await api.valorar(recomendacion.id, opcion);
+      valoradas[recomendacion.id] = actualizada.valoracion ?? opcion;
+      activas = [for (final r in activas) r.id == actualizada.id ? actualizada : r];
+    } on ErrorApi catch (e) {
+      if (e.codigo == 409) {
+        // Ya la valoró alguien (otro dispositivo o la web): se recarga para verla.
+        valoradas[recomendacion.id] = recomendacion.valoracion ?? opcion;
+        unawaited(recargar());
+      } else {
+        erroresValoracion[recomendacion.id] = e.codigo == 403
+            ? 'Tu rol no puede valorar recomendaciones.'
+            : 'No se pudo guardar. Toca de nuevo para reintentar.';
+      }
+    } catch (_) {
+      erroresValoracion[recomendacion.id] =
+          'Sin conexión: no se guardó. Toca de nuevo para reintentar.';
+    } finally {
+      valorando = null;
+      if (!_cerrado) notifyListeners();
+    }
   }
 
   /// Las que se muestran por primera vez quedan VISTA en el servidor.
