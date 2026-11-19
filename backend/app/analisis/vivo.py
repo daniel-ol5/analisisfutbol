@@ -42,7 +42,7 @@ from app.analisis.motor.motor import MotorPartido, Salida, minutos_de, porcentaj
 from app.analisis.motor.muestras import muestra_de_mensaje
 from app.analisis.parametros import PARAMETROS
 from app.asistencia import service as asistencia
-from app.asistencia.contexto import EstadoTactico
+from app.asistencia.contexto import INTERVALO_EVALUACION_S, EstadoTactico
 from app.core.config import settings
 from app.core.realtime import Hub, canal_partido, obtener_hub
 from app.deportivo.models import Partido
@@ -70,7 +70,8 @@ class _Vivo:
 
 class AnalisisEnVivo:
     REVISION_ESTADO_S = 5.0
-    INTERVALO_REGLAS_S = 5.0
+    # Compartido con CU-54 (probar una regla contra un partido ya jugado).
+    INTERVALO_REGLAS_S = INTERVALO_EVALUACION_S
 
     def __init__(self, sesiones: async_sessionmaker[AsyncSession] | None = None,
                  hub: Hub | None = None,

@@ -16,7 +16,7 @@ import { RequiereAutenticacion } from "./RequiereAutenticacion";
 import { RequiereRol } from "./RequiereRol";
 import { RetornoTrasLogin } from "./RetornoTrasLogin";
 import { AnalisisPage } from "@/features/analisis";
-import { AsistenciaPage } from "@/features/asistencia";
+import { AsistenciaPage, ReglasPage } from "@/features/asistencia";
 import { DeportivoPage } from "@/features/deportivo";
 import { PartidoPage } from "@/features/partido";
 import {
@@ -107,6 +107,14 @@ export function Router() {
             element={
               <RequiereRol ruta="/analisis">
                 <AnalisisPage />
+              </RequiereRol>
+            }
+          />
+          <Route
+            path="/asistencia/reglas"
+            element={
+              <RequiereRol ruta="/asistencia">
+                <ReglasPage />
               </RequiereRol>
             }
           />

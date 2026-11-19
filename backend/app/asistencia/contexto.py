@@ -7,6 +7,20 @@ from app.partido.schemas import EquipoDetectado, MensajeWorker
 VENTANA_BLOQUE_S = 15
 VENTANA_JUEGO_S = 30
 VENTANA_RITMO_S = 30
+# Cada cuánto tiempo de partido se evalúan las reglas: en vivo (analisis.vivo)
+# y al probar una regla contra un partido ya jugado (CU-54).
+INTERVALO_EVALUACION_S = 5.0
+
+
+def campo_suficiente(muestra: Muestra) -> bool:
+    """La parte del control de calidad que se puede comprobar sobre una muestra guardada.
+
+    En vivo además se exige lo que informa el worker (calibración válida, sin
+    degradación, poco retraso); de eso no queda registro en la tabla `posicion`.
+    """
+    visibles = [len({j.track_id for j in muestra.jugadores if j.equipo == lado.value})
+                for lado in (EquipoDetectado.LOCAL, EquipoDetectado.VISITANTE)]
+    return sum(visibles) >= 16 and min(visibles) >= 7
 
 
 class EstadoTactico:
@@ -30,6 +44,23 @@ class EstadoTactico:
 
     def observar(self, mensaje: MensajeWorker, analisis: MotorPartido) -> bool:
         muestra = muestra_de_mensaje(mensaje)
+        calidad = mensaje.calidad
+        campo_valido = (
+            calidad.worker_conectado and not calidad.degradado
+            and calidad.calibracion_valida is True
+            and calidad.estado_calibracion not in ("PERDIDA", "SIN_REFERENCIA")
+            and calidad.retraso_s <= 2
+            and calidad.jugadores_detectados >= 16 and campo_suficiente(muestra)
+        )
+        return self.observar_muestra(muestra, analisis, campo_valido, calidad.balon_visible)
+
+    def observar_muestra(self, muestra: Muestra, analisis: MotorPartido,
+                         campo_valido: bool, balon_visible: bool = True) -> bool:
+        """Lo mismo que `observar`, con la calidad ya resuelta.
+
+        Lo usa también CU-54 para reproducir un partido guardado con el mismo
+        criterio que en vivo. False si la muestra no avanza en el tiempo.
+        """
         t = muestra.t
         anterior = self._ultimo_t
         if anterior is not None and t <= anterior:
@@ -40,16 +71,6 @@ class EstadoTactico:
             self.interrumpir()
         self._parte = parte
 
-        calidad = mensaje.calidad
-        lados = (EquipoDetectado.LOCAL, EquipoDetectado.VISITANTE)
-        visibles = [len({j.tid for j in mensaje.jugadores if j.equipo == lado}) for lado in lados]
-        campo_valido = (
-            calidad.worker_conectado and not calidad.degradado
-            and calidad.calibracion_valida is True
-            and calidad.estado_calibracion not in ("PERDIDA", "SIN_REFERENCIA")
-            and calidad.retraso_s <= 2
-            and calidad.jugadores_detectados >= 16 and sum(visibles) >= 16 and min(visibles) >= 7
-        )
         if not campo_valido:
             self.interrumpir()
             return True
@@ -60,7 +81,7 @@ class EstadoTactico:
         if self._motor.arqueros != analisis.arqueros:
             self._motor.actualizar_arqueros(analisis.arqueros)
 
-        if not calidad.balon_visible or muestra.balon is None:
+        if not balon_visible or muestra.balon is None:
             self._desde_balon = None
             muestra = Muestra(muestra.t, muestra.jugadores, None)
         elif self._desde_balon is None:

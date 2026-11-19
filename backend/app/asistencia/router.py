@@ -7,10 +7,11 @@ Responsables segun el Sprint Planning:
     CU-55, CU-56       informes y exportacion       · S4 · Jhon
 """
 
-from fastapi import APIRouter, Query, Response, status
+from fastapi import APIRouter, Depends, Query, Response, status
 
 from app.asistencia import service
 from app.asistencia.schemas import (
+    DispositivoRegistrar,
     FormatoExportacion,
     Informe,
     PruebaRegla,
@@ -21,7 +22,7 @@ from app.asistencia.schemas import (
     ResultadoPrueba,
     Valoracion,
 )
-from app.core.deps import Actual, Db
+from app.core.deps import Actual, Db, requiere_rol
 from app.core.pendiente import RESPUESTA_501, pendiente
 
 router = APIRouter()
@@ -30,30 +31,50 @@ router = APIRouter()
 # ---------------- CU-49, CU-54 · Reglas tacticas ----------------
 
 @router.get("/reglas", response_model=list[Regla],
-            summary="CU-54 · Listar el catalogo de reglas del club mas las globales")
+            summary="CU-54 · Listar el catalogo de reglas del club mas las globales",
+            description="`activa` es la activacion PARA EL CLUB del usuario: una regla global "
+                        "puede estar desactivada solo para su club. `activas` filtra por ese valor.")
 async def listar_reglas(usuario: Actual, db: Db, activas: bool | None = None) -> list[Regla]:
     return await service.listar_reglas(db, usuario, activas)
 
 
+# T-092: actores "Administrador del Club, Director Tecnico".
+_GESTIONAN_REGLAS = [Depends(requiere_rol("ADMIN", "DT"))]
+
+
 @router.post("/reglas", response_model=Regla, status_code=status.HTTP_201_CREATED,
-             responses=RESPUESTA_501,
+             dependencies=_GESTIONAN_REGLAS,
+             responses={403: {"description": "Solo ADMIN o DT"},
+                        422: {"description": "Condicion o plantilla invalida, o metrica desconocida"}},
              summary="CU-54 · Crear una regla propia del club")
 async def crear_regla(datos: ReglaCrear, usuario: Actual, db: Db) -> Regla:
-    pendiente("CU-54", "Sprint 4", "Araceli")
+    return await service.crear_regla(db, usuario, datos)
 
 
 @router.patch("/reglas/{regla_id}", response_model=Regla,
-              responses=RESPUESTA_501,
-              summary="CU-54 · Editar, activar o desactivar una regla")
+              dependencies=_GESTIONAN_REGLAS,
+              responses={403: {"description": "Solo ADMIN o DT; de una regla global solo se "
+                                              "puede cambiar `activa`"},
+                         404: {"description": "Regla inexistente o de otro club"},
+                         422: {"description": "Condicion o plantilla invalida, o metrica desconocida"}},
+              summary="CU-54 · Editar, activar o desactivar una regla",
+              description="T-092: activar o desactivar surte efecto en la siguiente evaluacion "
+                          "del motor, sin desplegar. En una regla global vale solo para el club "
+                          "del usuario.")
 async def editar_regla(regla_id: int, datos: ReglaEditar, usuario: Actual, db: Db) -> Regla:
-    pendiente("CU-54", "Sprint 4", "Araceli")
+    return await service.editar_regla(db, usuario, regla_id, datos)
 
 
 @router.post("/reglas/{regla_id}/probar", response_model=ResultadoPrueba,
-             responses=RESPUESTA_501,
-             summary="CU-54 · Probar una regla contra un partido ya registrado")
+             dependencies=_GESTIONAN_REGLAS,
+             responses={403: {"description": "Solo ADMIN o DT"},
+                        404: {"description": "Regla o partido inexistente, o de otro club"}},
+             summary="CU-54 · Probar una regla contra un partido ya registrado",
+             description="Reproduce las posiciones guardadas del partido con el mismo motor y "
+                         "la misma cadencia que en vivo (una evaluacion cada 5 s), respetando el "
+                         "cooldown. Se puede probar una regla desactivada. No guarda nada.")
 async def probar_regla(regla_id: int, datos: PruebaRegla, usuario: Actual, db: Db) -> ResultadoPrueba:
-    pendiente("CU-54", "Sprint 4", "Araceli")
+    return await service.probar_regla(db, usuario, regla_id, datos)
 
 
 # ---------------- CU-50, CU-51, CU-52 · Recomendaciones ----------------
@@ -86,11 +107,11 @@ async def alertas(partido_id: int, usuario: Actual, db: Db) -> list[Recomendacio
 # ---------------- CU-53 · Notificaciones ----------------
 
 @router.post("/dispositivos", status_code=status.HTTP_204_NO_CONTENT,
-             responses=RESPUESTA_501,
              summary="CU-53 · Registrar el token del dispositivo para recibir push")
-async def registrar_dispositivo(token: str, usuario: Actual, db: Db) -> None:
-    # Regla: solo las recomendaciones de prioridad CRITICA generan notificacion.
-    pendiente("CU-53", "Sprint 4", "Araceli")
+async def registrar_dispositivo(
+    datos: DispositivoRegistrar, usuario: Actual, db: Db
+) -> None:
+    await service.registrar_dispositivo(db, usuario, datos)
 
 
 # ---------------- CU-55, CU-56 · Informes ----------------
