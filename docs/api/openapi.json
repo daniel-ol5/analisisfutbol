@@ -5657,6 +5657,7 @@
           "P6 · Asistencia y Reportes"
         ],
         "summary": "CU-52 · Alertas de fatiga y riesgo de expulsion",
+        "description": "HU-46. Por jugador propio en cancha, calculadas al consultar con los intervalos cerrados de 5 minutos y los eventos manuales. FATIGA: ritmo del ultimo bloque >= 120 % del promedio del equipo, o velocidad maxima del segundo tiempo 25 % menor que la del primero; nunca para quien entro hace menos de 15 minutos (T-095). RIESGO_EXPULSION: amonestado en cancha con 2 o mas tarjetas (de cualquier equipo) en los ultimos 10 minutos. No se guardan ni generan push.",
         "operationId": "alertas_api_asistencia_partidos__partido_id__alertas_get",
         "security": [
           {
@@ -5682,22 +5683,15 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/Recomendacion"
+                    "$ref": "#/components/schemas/Alerta"
                   },
                   "title": "Response Alertas Api Asistencia Partidos  Partido Id  Alertas Get"
                 }
               }
             }
           },
-          "501": {
-            "description": "Declarado en el contrato, pendiente de implementacion",
-            "content": {
-              "application/json": {
-                "example": {
-                  "detail": "CU-09 pendiente · Sprint 2 · responsable: Daniel"
-                }
-              }
-            }
+          "404": {
+            "description": "Partido inexistente o de otro club"
           },
           "422": {
             "description": "Validation Error",
@@ -5984,6 +5978,80 @@
         "type": "object",
         "title": "ActivarModelo",
         "description": "T-064: una version con metricas peores que la activa no se activa, salvo\nque se fuerce a proposito (volver atras, criterio de T-059) y se diga por que."
+      },
+      "Alerta": {
+        "properties": {
+          "tipo": {
+            "$ref": "#/components/schemas/TipoAlerta"
+          },
+          "jugador_id": {
+            "type": "integer",
+            "title": "Jugador Id"
+          },
+          "nombre": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nombre"
+          },
+          "dorsal": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dorsal"
+          },
+          "minuto": {
+            "type": "integer",
+            "title": "Minuto",
+            "description": "Minuto de partido al que corresponde la alerta"
+          },
+          "mensaje": {
+            "type": "string",
+            "title": "Mensaje",
+            "examples": [
+              "Considerar el cambio de #8 Pérez"
+            ]
+          },
+          "justificacion": {
+            "type": "string",
+            "title": "Justificacion",
+            "examples": [
+              "Recorrió 142 m/min en el último bloque, 128 % del promedio del equipo."
+            ]
+          },
+          "prioridad": {
+            "$ref": "#/components/schemas/Prioridad"
+          },
+          "datos_soporte": {
+            "items": {
+              "$ref": "#/components/schemas/DatoSoporte"
+            },
+            "type": "array",
+            "title": "Datos Soporte"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tipo",
+          "jugador_id",
+          "minuto",
+          "mensaje",
+          "justificacion",
+          "prioridad",
+          "datos_soporte"
+        ],
+        "title": "Alerta",
+        "description": "CU-52 (HU-46): aviso sobre UN jugador propio que sigue en cancha.\n\nSe calcula al consultar con las métricas por jugador ya guardadas (intervalos\ncerrados de 5 minutos) y los eventos manuales: no se guarda, no se valora y no\ngenera push (el push queda para recomendaciones CRITICAS, T-087)."
       },
       "Alineacion": {
         "properties": {
@@ -10540,6 +10608,14 @@
           "email"
         ],
         "title": "SolicitudRecuperacion"
+      },
+      "TipoAlerta": {
+        "type": "string",
+        "enum": [
+          "FATIGA",
+          "RIESGO_EXPULSION"
+        ],
+        "title": "TipoAlerta"
       },
       "TipoEventoDerivado": {
         "type": "string",

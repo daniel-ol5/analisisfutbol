@@ -1,7 +1,8 @@
 """Evaluación y consulta de recomendaciones tácticas (CU-49)."""
 
 import logging
-from collections.abc import Mapping
+from collections import defaultdict
+from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 
 from fastapi import HTTPException, status
@@ -11,9 +12,12 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.analisis import persistencia
+from app.analisis.metricas import metricas_jugadores_intervalos
 from app.analisis.motor.motor import MotorPartido
 from app.analisis.parametros import PARAMETROS
 from app.asistencia import models
+from app.asistencia.alertas import Bloque, alertas_expulsion, alertas_fatiga, ordenar
+from app.asistencia.alertas import Jugador as JugadorAlerta
 from app.asistencia.contexto import INTERVALO_EVALUACION_S, EstadoTactico, campo_suficiente
 from app.asistencia.motor import (
     ORDEN_PRIORIDAD,
@@ -24,6 +28,7 @@ from app.asistencia.motor import (
 )
 from app.asistencia.push import MensajePush, ProveedorPush, ResultadoPush, obtener_proveedor_push
 from app.asistencia.schemas import (
+    Alerta,
     DispositivoRegistrar,
     EstadoEnvioPush,
     EstadoRecomendacion,
@@ -37,10 +42,12 @@ from app.asistencia.schemas import (
 )
 from app.core.deps import UsuarioActual
 from app.core.tenancy import verificar_pertenencia
+from app.deportivo.models import Jugador as JugadorFicha
 from app.deportivo.models import Partido
 from app.deportivo.schemas import EstadoPartido
 from app.partido.models import EventoManual, RelojPartido
 from app.partido.schemas import Lado, TipoEventoManual
+from app.partido.service import segundos_transcurridos
 from app.seguridad.models import Usuario
 
 log = logging.getLogger(__name__)
@@ -424,6 +431,79 @@ async def evaluar_en_vivo(
             proveedor_push,
         )
     return True
+
+
+# ---------------- CU-52 · Alertas de fatiga y riesgo de expulsión ----------------
+
+async def _minuto_actual(db: AsyncSession, partido: Partido, bloques: dict[int, list[Bloque]]) -> int:
+    """El del cronómetro si existe; nunca menos que el final del último bloque medido
+    (un video procesado después del partido no tiene cronómetro corriendo)."""
+    reloj = await db.scalar(select(RelojPartido).where(
+        RelojPartido.club_id == partido.club_id, RelojPartido.partido_id == partido.id))
+    minuto = (int(segundos_transcurridos(reloj, datetime.now(UTC))) // 60
+              if reloj is not None else partido.minuto_actual)
+    finales = [b.minuto_hasta for lista in bloques.values() for b in lista]
+    return max([minuto, *finales])
+
+
+def _situacion_propia(
+    eventos: Sequence[tuple[str, str, int | None, int | None, int]],
+) -> tuple[dict[int, int], set[int], dict[int, int]]:
+    """De los eventos propios: amarillas por jugador, quiénes ya no están en cancha
+    (sustituidos, expulsados o con doble amarilla) y en qué minuto entró cada suplente."""
+    amarillas: dict[int, int] = defaultdict(int)
+    fuera: set[int] = set()
+    entro: dict[int, int] = {}
+    for tipo, _, jugador_id, jugador_entra_id, minuto in eventos:
+        if tipo == TipoEventoManual.SUSTITUCION.value and jugador_entra_id is not None:
+            entro[jugador_entra_id] = minuto
+        if jugador_id is None:
+            continue
+        if tipo == TipoEventoManual.AMARILLA.value:
+            amarillas[jugador_id] += 1
+        elif tipo in (TipoEventoManual.ROJA.value, TipoEventoManual.SUSTITUCION.value):
+            fuera.add(jugador_id)
+    fuera.update(j for j, n in amarillas.items() if n >= 2)
+    return amarillas, fuera, entro
+
+
+async def alertas_partido(db: AsyncSession, usuario: UsuarioActual, partido_id: int) -> list[Alerta]:
+    """CU-52: alertas de los jugadores propios, calculadas al consultar (no se guardan)."""
+    partido = verificar_pertenencia(await db.get(Partido, partido_id), usuario)
+    propio = Lado.LOCAL.value if partido.es_local else Lado.VISITANTE.value
+
+    por_jugador = await metricas_jugadores_intervalos(db, usuario, partido.id, propio)
+    bloques = {
+        m.jugador_id: [Bloque(i["minuto_desde"], i["minuto_hasta"], i["distancia_m"],
+                              i["velocidad_max_kmh"], i["minutos_jugados"]) for i in m.intervalos]
+        for m in por_jugador
+    }
+
+    e = EventoManual
+    eventos = (await db.execute(
+        select(e.tipo, e.equipo, e.jugador_id, e.jugador_entra_id, e.minuto).where(
+            e.club_id == partido.club_id, e.partido_id == partido.id, e.anulado_en.is_(None))
+    )).all()
+    tarjetas = (TipoEventoManual.AMARILLA.value, TipoEventoManual.ROJA.value)
+    tarjetas_partido = [(tipo, minuto) for tipo, _, _, _, minuto in eventos if tipo in tarjetas]
+    amarillas, fuera, entro = _situacion_propia([ev for ev in eventos if ev[1] == propio])
+
+    ids = set(bloques) | set(amarillas) | set(entro)
+    fichas = {} if not ids else {j.id: j for j in (await db.scalars(
+        select(JugadorFicha).where(JugadorFicha.club_id == partido.club_id,
+                                   JugadorFicha.id.in_(ids)))).all()}
+    jugadores = {
+        jid: JugadorAlerta(
+            jugador_id=jid,
+            nombre=(fichas[jid].apellido or fichas[jid].nombre) if jid in fichas else None,
+            dorsal=fichas[jid].dorsal if jid in fichas else None,
+            entro_min=entro.get(jid, 0), en_cancha=jid not in fuera, amarillas=amarillas[jid],
+        )
+        for jid in ids
+    }
+    minuto = await _minuto_actual(db, partido, bloques)
+    return ordenar([*alertas_fatiga(bloques, jugadores, minuto),
+                    *alertas_expulsion(jugadores, tarjetas_partido, minuto)])
 
 
 async def listar_recomendaciones(
