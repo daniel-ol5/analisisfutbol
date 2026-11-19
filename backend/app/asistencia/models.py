@@ -37,6 +37,23 @@ class ReglaTactica(Base):
     activa: Mapped[bool] = mapped_column(default=True)
 
 
+class ReglaClub(Base):
+    """CU-54 (T-092): activación de una regla GLOBAL para un club en particular.
+
+    Las reglas globales (`club_id` nulo) las ven todos los clubes: si un club la
+    desactivara editando `regla_tactica.activa`, la apagaría para todos. Esta
+    fila guarda la decisión de cada club; sin fila, vale la `activa` de la regla.
+    """
+
+    __tablename__ = "regla_club"
+    __table_args__ = (UniqueConstraint("club_id", "regla_id", name="uq_regla_club"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    club_id: Mapped[int] = mapped_column(ForeignKey("club.id"), index=True)
+    regla_id: Mapped[int] = mapped_column(ForeignKey("regla_tactica.id", ondelete="CASCADE"))
+    activa: Mapped[bool]
+
+
 class Recomendacion(Base):
     __tablename__ = "recomendacion"
     __table_args__ = (

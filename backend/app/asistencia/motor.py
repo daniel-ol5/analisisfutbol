@@ -118,3 +118,54 @@ def evaluar_regla(regla: Regla, metricas: Mapping[str, float]) -> Disparo | None
 
 
 ORDEN_PRIORIDAD = {prioridad: orden for orden, prioridad in enumerate(Prioridad)}
+
+# CU-54: lo único que una regla puede consultar. Son las métricas que produce
+# `contexto.EstadoTactico.metricas()`, las de disciplina de `service._disciplina`
+# y el minuto. Una regla con un nombre mal escrito nunca se dispararía y nadie
+# se enteraría, así que al crearla o editarla se rechaza.
+METRICAS_DISPONIBLES = frozenset({
+    "minuto",
+    "altura_linea_m", "amplitud_propia_m", "compacidad_propia_m",
+    "posesion_propia_pct", "posesion_rival_pct",
+    "pases_intentados_propios", "pases_completados_rival", "precision_pase_propio_pct",
+    "ritmo_propio_m_min", "caida_ritmo_propio_pct",
+    "amarillas_propias_10min", "rojas_propias",
+})
+
+
+class _Sonda(Mapping[str, float]):
+    """Responde a cualquier métrica y anota cuáles se pidieron."""
+
+    def __init__(self) -> None:
+        self.pedidas: set[str] = set()
+
+    def __contains__(self, clave: object) -> bool:
+        return isinstance(clave, str)
+
+    def __getitem__(self, clave: str) -> float:
+        self.pedidas.add(clave)
+        return 1.0
+
+    def __iter__(self):
+        return iter(self.pedidas)
+
+    def __len__(self) -> int:
+        return len(self.pedidas)
+
+
+def validar_regla(condicion: dict, plantilla_mensaje: str, plantilla_justificacion: str) -> None:
+    """Rechaza (ReglaInvalida) una regla que el motor no podría evaluar nunca.
+
+    Recorre la condición completa (`y`/`o` evalúan todos sus argumentos) y las dos
+    plantillas con una sonda, así reporta todas las métricas desconocidas juntas.
+    """
+    sonda = _Sonda()
+    evaluar_condicion(condicion, sonda)
+    _renderizar(plantilla_mensaje, sonda)
+    _renderizar(plantilla_justificacion, sonda)
+    desconocidas = sorted(sonda.pedidas - METRICAS_DISPONIBLES)
+    if desconocidas:
+        raise ReglaInvalida(
+            f"Métricas desconocidas: {', '.join(desconocidas)}. "
+            f"Disponibles: {', '.join(sorted(METRICAS_DISPONIBLES))}"
+        )
