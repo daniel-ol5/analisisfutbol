@@ -97,3 +97,16 @@ export async function listarPartidos(): Promise<Partido[]> {
   const { data } = await api.get<Partido[]>("/deportivo/partidos");
   return data;
 }
+
+/** CU-53: registra o actualiza el token FCM del navegador actual. */
+export async function registrarDispositivoPush(
+  instalacionId: string,
+  token: string,
+  plataforma: "WEB" | "ANDROID" | "IOS" = "WEB",
+): Promise<void> {
+  await api.post("/asistencia/dispositivos", {
+    instalacion_id: instalacionId,
+    token,
+    plataforma,
+  });
+}

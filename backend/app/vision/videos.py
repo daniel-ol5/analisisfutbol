@@ -297,6 +297,20 @@ async def _cerrar_carga(db: AsyncSession, video: Video, almacen: AlmacenVideos) 
         video.mensaje_error = None
     await db.commit()
     await db.refresh(video)
+    if video.estado == EstadoVideo.SUBIDO.value:
+        from app.asistencia.service import notificar_evento_club
+        await notificar_evento_club(
+            db,
+            video.club_id,
+            "Video cargado",
+            f"«{video.nombre}» está listo para procesar.",
+            {
+                "tipo": "video_subido",
+                "partido_id": str(video.partido_id),
+                "video_id": str(video.id),
+                "ruta": f"/vision/videos?partidoId={video.partido_id}",
+            },
+        )
 
 
 async def eliminar_video(

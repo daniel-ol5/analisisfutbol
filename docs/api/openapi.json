@@ -3394,6 +3394,23 @@
               "type": "integer",
               "title": "Video Id"
             }
+          },
+          {
+            "name": "despues_de",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Despues De"
+            }
           }
         ],
         "responses": {

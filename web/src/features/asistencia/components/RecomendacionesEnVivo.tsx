@@ -15,10 +15,12 @@ import "./recomendaciones.css";
 export function RecomendacionesEnVivo({
   partidoId,
   crearSocket,
+  modoGrabacion = false,
 }: {
   partidoId: number;
   /** Solo para pruebas: reemplaza el WebSocket del navegador. */
   crearSocket?: CrearSocket;
+  modoGrabacion?: boolean;
 }) {
   const { recomendaciones, cargando, error, enVivo, actualizar } = useRecomendaciones(
     partidoId,
@@ -30,8 +32,10 @@ export function RecomendacionesEnVivo({
   return (
     <section className="rec-lista" aria-label="Recomendaciones tácticas" data-testid="recomendaciones">
       <header className="rec-lista-cabecera">
-        <h2>Recomendaciones</h2>
-        <Badge tono={enVivo ? "ok" : "aviso"}>{enVivo ? "En vivo" : "Sin conexión en vivo"}</Badge>
+        <h2>Recomendaciones tácticas</h2>
+        <Badge tono={enVivo ? "ok" : modoGrabacion ? "info" : "aviso"}>
+          {enVivo ? "En vivo" : modoGrabacion ? "Basadas en métricas" : "Sin conexión en vivo"}
+        </Badge>
       </header>
       {error !== null && <Alert tono="error">{mensajeDeError(error)}</Alert>}
       {cargando && <p className="rec-vacio">Cargando…</p>}

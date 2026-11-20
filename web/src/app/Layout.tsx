@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 
 import { BotonAsistente } from "@/features/asistente"; // Asistente de uso con IA
+import { NotificacionesWeb } from "@/features/asistencia";
 import { BotonCerrarSesion, useSesion } from "@/features/seguridad";
 import type { SesionGuardada } from "@/features/seguridad/types";
 import { ETIQUETA_ROL } from "@/features/seguridad/types";
@@ -197,6 +198,7 @@ export function Layout() {
             <span>{modulo?.nombre ?? "Inicio"}</span>
           </div>
           <div className="layout-acciones">
+            <NotificacionesWeb usuarioId={usuario?.id} />
             <BotonTema />
             <BotonCerrarSesion className="ui-btn ui-btn--secundario" />
           </div>
