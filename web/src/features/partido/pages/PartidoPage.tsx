@@ -10,6 +10,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useId, useMemo, useState, type ChangeEvent } from "react";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 
+import { BotonComoSeUsa } from "@/features/asistente"; // Asistente de uso con IA
+
 import "@/features/partido/partido.css";
 import { obtenerRolActual } from "@/shared/api/client";
 import { estadoHttp, mensajeDeError } from "@/shared/lib/errors";
@@ -342,6 +344,8 @@ export function PartidoPage() {
               ? "Asignación de jugadores"
               : "Control del partido en vivo"}
           </h1>
+          {/* Asistente de uso con IA: ayuda sobre esta pantalla. */}
+          <BotonComoSeUsa pantalla="partido_vivo" />
         </div>
 
         <div className="par-selector-caja">

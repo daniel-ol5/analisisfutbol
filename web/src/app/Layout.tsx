@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 
+import { BotonAsistente } from "@/features/asistente"; // Asistente de uso con IA
 import { NotificacionesWeb } from "@/features/asistencia";
 import { BotonCerrarSesion, useSesion } from "@/features/seguridad";
 import type { SesionGuardada } from "@/features/seguridad/types";
@@ -206,6 +207,8 @@ export function Layout() {
           <Outlet />
         </div>
       </div>
+      {/* Asistente de uso con IA: botón flotante y panel, en todas las pantallas con sesión. */}
+      <BotonAsistente />
     </div>
   );
 }

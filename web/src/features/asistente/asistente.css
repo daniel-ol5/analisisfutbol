@@ -1,0 +1,293 @@
+/* Asistente de uso: botón flotante y panel lateral. Solo tokens de index.css. */
+
+.asi-flotante {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 40;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 18px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--pitch);
+  color: var(--on-pitch);
+  font: inherit;
+  font-weight: 600;
+  box-shadow: var(--shadow-lg);
+  cursor: pointer;
+}
+
+.asi-flotante:hover {
+  background: var(--pitch-hover);
+}
+
+.asi-flotante:focus-visible,
+.asi-cerrar:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.asi-flotante span {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--on-pitch);
+  color: var(--pitch);
+  font-weight: 700;
+}
+
+.asi-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  width: min(420px, 100vw);
+  background: var(--surface);
+  color: var(--text);
+  border-left: 1px solid var(--line);
+  box-shadow: var(--shadow-lg);
+}
+
+.asi-cabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.asi-cabecera h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.asi-cerrar {
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.asi-cerrar:hover {
+  background: var(--surface-muted);
+}
+
+.asi-cuerpo {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px;
+  overflow-y: auto;
+}
+
+.asi-progreso h3 {
+  display: flex;
+  justify-content: space-between;
+  margin: 0 0 8px;
+  font-size: 1rem;
+}
+
+.asi-progreso-cuenta {
+  color: var(--text-3);
+  font-weight: 500;
+  font-size: 0.875rem;
+}
+
+.asi-pasos {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.asi-paso {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  font-size: 0.9rem;
+}
+
+.asi-paso-marca {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--line-strong);
+  border-radius: 50%;
+  font-size: 0.75rem;
+}
+
+.asi-paso--hecho .asi-paso-marca {
+  border-color: var(--ok);
+  background: var(--ok);
+  color: var(--on-pitch);
+}
+
+.asi-paso--hecho .asi-paso-titulo {
+  color: var(--text-2);
+}
+
+.asi-paso--no-disponible {
+  color: var(--text-3);
+}
+
+.asi-paso--no-disponible .asi-paso-marca {
+  border-style: dashed;
+}
+
+.asi-paso--siguiente {
+  background: var(--pitch-soft);
+  border: 1px solid var(--pitch-border);
+  font-weight: 600;
+}
+
+.asi-siguiente {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.asi-siguiente p {
+  margin: 0;
+}
+
+.asi-siguiente .ui-btn {
+  justify-self: start;
+  text-decoration: none;
+}
+
+.asi-nota {
+  margin: 0;
+  color: var(--text-3);
+  font-size: 0.875rem;
+}
+
+.asi-chat {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.asi-aviso {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--text-2);
+  font-size: 0.85rem;
+}
+
+.asi-mensajes {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.asi-mensaje {
+  max-width: 92%;
+  padding: 10px 12px;
+  border-radius: 12px;
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.asi-mensaje p {
+  margin: 0;
+  white-space: pre-line;
+}
+
+.asi-mensaje--usuario {
+  align-self: flex-end;
+  background: var(--pitch);
+  color: var(--on-pitch);
+}
+
+.asi-mensaje--asistente {
+  align-self: flex-start;
+  background: var(--surface-muted);
+  border: 1px solid var(--line);
+}
+
+.asi-acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.asi-acciones .ui-btn {
+  text-decoration: none;
+}
+
+.asi-escribiendo {
+  margin: 0;
+  color: var(--text-3);
+  font-style: italic;
+  font-size: 0.875rem;
+}
+
+.asi-formulario {
+  display: grid;
+  gap: 6px;
+}
+
+.asi-campo {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  resize: vertical;
+}
+
+.asi-campo:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
+.asi-formulario-pie {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.asi-contador {
+  color: var(--text-3);
+  font-size: 0.8rem;
+}
+
+@media (max-width: 520px) {
+  .asi-flotante {
+    right: 16px;
+    bottom: 16px;
+  }
+}
+
+/* Contenedor del botón «¿Cómo se usa esto?» encima de una pantalla. */
+.asi-ayuda-pantalla {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 8px;
+}

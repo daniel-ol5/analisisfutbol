@@ -107,6 +107,13 @@ class _ResumenPaginaState extends State<ResumenPagina> {
                 onPressed: () =>
                     context.push('/partidos/${widget.partidoId}/recomendaciones'),
               ),
+              // Asistente de uso con IA.
+              IconButton(
+                key: const Key('abrir-asistente'),
+                tooltip: 'Asistente',
+                icon: const Icon(Icons.support_agent_rounded),
+                onPressed: () => context.push('/asistente?pantalla=resumen_partido'),
+              ),
               IconButton(
                 tooltip: 'Actualizar',
                 icon: const Icon(Icons.refresh),

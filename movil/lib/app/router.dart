@@ -23,6 +23,7 @@ import '../features/asistencia/alertas_pagina.dart';
 import '../features/asistencia/alertas_widgets.dart';
 import '../features/asistencia/recomendaciones_pagina.dart';
 import '../features/asistencia/pagina.dart';
+import '../features/asistente/asistente_pagina.dart'; // Asistente de uso con IA
 
 /// Pantalla de inicio de sesión (CU-02).
 const rutaLogin = '/seguridad';
@@ -48,6 +49,12 @@ final router = GoRouter(
         // T-096: la recomendación que llegó por push, para resaltarla.
         destacarId: int.tryParse(estado.uri.queryParameters['recomendacion'] ?? ''),
       ),
+    ),
+    // Asistente de uso con IA: progreso y chat, a pantalla completa.
+    GoRoute(
+      path: '/asistente',
+      builder: (_, estado) =>
+          AsistentePagina(pantalla: estado.uri.queryParameters['pantalla'] ?? ''),
     ),
     GoRoute(
       path: '/partidos/:id/resumen',

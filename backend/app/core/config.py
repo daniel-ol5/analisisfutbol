@@ -1,6 +1,6 @@
 """Configuración de la aplicación, leída del entorno."""
 
-from pydantic import model_validator
+from pydantic import SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Claves que están escritas en el repositorio (valor por defecto, .env.example,
@@ -61,6 +61,14 @@ class Settings(BaseSettings):
     video_max_bytes: int = 16 * 1024**3       # 16 GiB: un partido en 4K entra holgado
     video_max_trozo_bytes: int = 64 * 1024**2  # tope de cada PUT; el cliente usa 8 MiB
     vision_auto_worker: bool = False  # El worker externo toma la cola; evita competir en CPU.
+
+    # Asistente de uso con IA. La clave vive SOLO en el backend (nunca en la web ni
+    # en el móvil) y SecretStr evita que aparezca en logs o en repr(settings).
+    openai_api_key: SecretStr = SecretStr("")
+    openai_model: str = "gpt-4.1-mini"
+    asistente_max_preguntas_dia: int = 30   # por usuario
+    asistente_activo: bool = True
+    asistente_timeout_s: float = 20.0
 
     @model_validator(mode="after")
     def exigir_clave_propia_en_produccion(self) -> "Settings":

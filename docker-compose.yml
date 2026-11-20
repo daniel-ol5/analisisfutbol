@@ -85,6 +85,11 @@ services:
       CORS_ORIGINS: http://localhost:5173,http://localhost:4010
       FIREBASE_PUSH_HABILITADO: ${FIREBASE_PUSH_HABILITADO:-false}
       FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-}
+      # Asistente de uso con IA: valores tomados del .env de la raiz.
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4.1-mini}
+      ASISTENTE_MAX_PREGUNTAS_DIA: ${ASISTENTE_MAX_PREGUNTAS_DIA:-30}
+      ASISTENTE_ACTIVO: ${ASISTENTE_ACTIVO:-true}
       SEED_DEMO_DATA: "true"
       DEMO_ADMIN_EMAIL: admin@club-demo.example.com
       DEMO_ADMIN_PASSWORD: ${DEMO_ADMIN_PASSWORD:?Define DEMO_ADMIN_PASSWORD en .env}
