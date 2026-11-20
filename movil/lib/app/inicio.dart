@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../features/asistencia/push.dart';
 import '../shared/ui/marca.dart';
 import 'navegacion.dart';
 import 'tema.dart';
@@ -21,6 +22,25 @@ class Inicio extends StatelessWidget {
           ],
         ),
         actions: [
+          if (ConfigPush.disponible)
+            ValueListenableBuilder<bool>(
+              valueListenable: pushActivo,
+              builder: (context, activo, _) => IconButton(
+                tooltip: activo ? 'Notificaciones activas' : 'Activar notificaciones',
+                icon: Icon(
+                  activo
+                      ? Icons.notifications_active_rounded
+                      : Icons.notifications_none_rounded,
+                ),
+                onPressed: () async {
+                  final mensaje = await activarPushAhora();
+                  if (!context.mounted) return;
+                  ScaffoldMessenger.of(context)
+                    ..hideCurrentSnackBar()
+                    ..showSnackBar(SnackBar(content: Text(mensaje)));
+                },
+              ),
+            ),
           // Asistente de uso con IA.
           IconButton(
             key: const Key('abrir-asistente'),
