@@ -6066,6 +6066,110 @@
         }
       }
     },
+    "/api/asistente/progreso": {
+      "get": {
+        "tags": [
+          "Asistente de uso"
+        ],
+        "summary": "Asistente · Pasos del flujo hechos y pendientes del club",
+        "operationId": "progreso_api_asistente_progreso_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "plataforma",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "web",
+                "movil"
+              ],
+              "type": "string",
+              "default": "web",
+              "title": "Plataforma"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Progreso"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/asistente/preguntar": {
+      "post": {
+        "tags": [
+          "Asistente de uso"
+        ],
+        "summary": "Asistente · Responder una duda sobre cómo usar Área Técnica",
+        "operationId": "preguntar_api_asistente_preguntar_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Pregunta"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Respuesta"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Se alcanzó el límite diario de preguntas del usuario"
+          },
+          "503": {
+            "description": "El asistente está apagado o la IA no respondió"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/salud": {
       "get": {
         "tags": [
@@ -6094,6 +6198,24 @@
   },
   "components": {
     "schemas": {
+      "Accion": {
+        "properties": {
+          "texto": {
+            "type": "string",
+            "title": "Texto"
+          },
+          "ruta": {
+            "type": "string",
+            "title": "Ruta"
+          }
+        },
+        "type": "object",
+        "required": [
+          "texto",
+          "ruta"
+        ],
+        "title": "Accion"
+      },
       "ActivarModelo": {
         "properties": {
           "forzar": {
@@ -8857,6 +8979,29 @@
         ],
         "title": "Mensaje"
       },
+      "MensajeHistorial": {
+        "properties": {
+          "rol": {
+            "type": "string",
+            "enum": [
+              "usuario",
+              "asistente"
+            ],
+            "title": "Rol"
+          },
+          "texto": {
+            "type": "string",
+            "maxLength": 2000,
+            "title": "Texto"
+          }
+        },
+        "type": "object",
+        "required": [
+          "rol",
+          "texto"
+        ],
+        "title": "MensajeHistorial"
+      },
       "MensajeWorker": {
         "properties": {
           "partido": {
@@ -9821,6 +9966,73 @@
         "type": "object",
         "title": "PartidoEditar"
       },
+      "PasoProgreso": {
+        "properties": {
+          "clave": {
+            "type": "string",
+            "title": "Clave"
+          },
+          "titulo": {
+            "type": "string",
+            "title": "Titulo"
+          },
+          "estado": {
+            "type": "string",
+            "enum": [
+              "hecho",
+              "pendiente"
+            ],
+            "title": "Estado"
+          },
+          "ruta": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ruta",
+            "description": "Pantalla para hacer el paso en esta plataforma; nula si no existe aquí o si el rol no puede hacerlo."
+          },
+          "solo_web": {
+            "type": "boolean",
+            "title": "Solo Web",
+            "default": false
+          },
+          "disponible": {
+            "type": "boolean",
+            "title": "Disponible",
+            "description": "Falso si la función todavía no existe.",
+            "default": true
+          },
+          "tu_rol_puede": {
+            "type": "boolean",
+            "title": "Tu Rol Puede"
+          },
+          "nota": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nota"
+          }
+        },
+        "type": "object",
+        "required": [
+          "clave",
+          "titulo",
+          "estado",
+          "ruta",
+          "tu_rol_puede"
+        ],
+        "title": "PasoProgreso"
+      },
       "PerfilEditar": {
         "properties": {
           "nombre": {
@@ -9993,6 +10205,44 @@
         ],
         "title": "PosicionDetectada"
       },
+      "Pregunta": {
+        "properties": {
+          "pregunta": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Pregunta"
+          },
+          "pantalla_actual": {
+            "type": "string",
+            "maxLength": 200,
+            "title": "Pantalla Actual",
+            "default": ""
+          },
+          "plataforma": {
+            "type": "string",
+            "enum": [
+              "web",
+              "movil"
+            ],
+            "title": "Plataforma",
+            "default": "web"
+          },
+          "historial": {
+            "items": {
+              "$ref": "#/components/schemas/MensajeHistorial"
+            },
+            "type": "array",
+            "maxItems": 6,
+            "title": "Historial"
+          }
+        },
+        "type": "object",
+        "required": [
+          "pregunta"
+        ],
+        "title": "Pregunta"
+      },
       "Prioridad": {
         "type": "string",
         "enum": [
@@ -10002,6 +10252,61 @@
           "BAJA"
         ],
         "title": "Prioridad"
+      },
+      "Progreso": {
+        "properties": {
+          "plataforma": {
+            "type": "string",
+            "enum": [
+              "web",
+              "movil"
+            ],
+            "title": "Plataforma"
+          },
+          "partido_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Partido Id",
+            "description": "Partido de referencia: el que está en curso, el próximo programado o el último jugado."
+          },
+          "pasos": {
+            "items": {
+              "$ref": "#/components/schemas/PasoProgreso"
+            },
+            "type": "array",
+            "title": "Pasos"
+          },
+          "siguiente": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PasoProgreso"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "asistente_activo": {
+            "type": "boolean",
+            "title": "Asistente Activo",
+            "description": "Si se pueden hacer preguntas a la IA."
+          }
+        },
+        "type": "object",
+        "required": [
+          "plataforma",
+          "partido_id",
+          "pasos",
+          "siguiente",
+          "asistente_activo"
+        ],
+        "title": "Progreso"
       },
       "PruebaRegla": {
         "properties": {
@@ -10619,6 +10924,26 @@
         "type": "object",
         "title": "ReglaEditar",
         "description": "CU-54. Solo se cambia lo que se envía. De una regla global solo se puede\ncambiar `activa`, y el cambio vale únicamente para el club de quien la edita."
+      },
+      "Respuesta": {
+        "properties": {
+          "respuesta": {
+            "type": "string",
+            "title": "Respuesta"
+          },
+          "acciones": {
+            "items": {
+              "$ref": "#/components/schemas/Accion"
+            },
+            "type": "array",
+            "title": "Acciones"
+          }
+        },
+        "type": "object",
+        "required": [
+          "respuesta"
+        ],
+        "title": "Respuesta"
       },
       "RestablecerPassword": {
         "properties": {

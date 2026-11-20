@@ -21,6 +21,13 @@ class Inicio extends StatelessWidget {
           ],
         ),
         actions: [
+          // Asistente de uso con IA.
+          IconButton(
+            key: const Key('abrir-asistente'),
+            tooltip: 'Asistente',
+            icon: const Icon(Icons.support_agent_rounded),
+            onPressed: () => context.push('/asistente?pantalla=inicio'),
+          ),
           IconButton(
             tooltip: 'Mi perfil',
             icon: const Icon(Icons.person_outline),

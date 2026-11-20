@@ -21,6 +21,7 @@ from app.core.database import Base
 from app import (  # noqa: F401
     analisis,
     asistencia,
+    asistente,  # Asistente de uso con IA: tabla consulta_asistente
     deportivo,
     partido,
     seguridad,

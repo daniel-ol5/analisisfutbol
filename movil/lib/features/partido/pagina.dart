@@ -749,6 +749,13 @@ class _PartidoPaginaState extends State<PartidoPagina>
         ),
         actions: [
           if (_usarBotonera && !compacto) sincronizacion,
+          // Asistente de uso con IA.
+          IconButton(
+            key: const Key('abrir-asistente'),
+            tooltip: 'Asistente',
+            icon: const Icon(Icons.support_agent_rounded),
+            onPressed: () => context.push('/asistente?pantalla=partido_en_vivo'),
+          ),
           IconButton(
             tooltip: 'Actualizar estado',
             icon: const Icon(Icons.refresh_rounded),

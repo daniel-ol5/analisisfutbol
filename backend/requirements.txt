@@ -16,6 +16,9 @@ pyjwt>=2.10
 bcrypt>=4.2
 firebase-admin>=6.9,<8
 
+# ===== Asistente de uso con IA (la clave va solo en el entorno del backend) =====
+openai>=1.50
+
 # ===== Visión: corrección de distorsión del lente (T-036) =====
 opencv-python-headless>=4.10   # sin GUI: el servidor no abre ventanas
 numpy>=2.1

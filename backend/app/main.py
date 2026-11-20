@@ -13,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.analisis.router import router as analisis
 from app.asistencia.router import router as asistencia
+from app.asistente.router import router as asistente  # Asistente de uso con IA
 from app.core.config import settings
 from app.deportivo.router import router as deportivo
 from app.partido.router import router as partido
@@ -59,6 +60,7 @@ app.include_router(vision,     prefix="/api/vision",     tags=["P3 · Visión po
 app.include_router(partido,    prefix="/api/partido",    tags=["P4 · Operación del Partido"])
 app.include_router(analisis,   prefix="/api/analisis",   tags=["P5 · Análisis Táctico"])
 app.include_router(asistencia, prefix="/api/asistencia", tags=["P6 · Asistencia y Reportes"])
+app.include_router(asistente,  prefix="/api/asistente",  tags=["Asistente de uso"])  # Asistente de uso con IA
 
 
 @app.get("/api/salud", tags=["Sistema"], summary="Estado de la API")
