@@ -580,6 +580,9 @@
     font-size: 12px;
     white-space: nowrap;
   }
+  .layout-push-estado {
+    display: none;
+  }
   .inicio-destacado-texto {
     max-width: 78%;
   }

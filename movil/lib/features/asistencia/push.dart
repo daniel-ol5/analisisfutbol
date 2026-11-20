@@ -36,6 +36,7 @@ class ConfigPush {
   static const appId = String.fromEnvironment('FIREBASE_APP_ID');
   static const senderId = String.fromEnvironment('FIREBASE_MESSAGING_SENDER_ID');
   static const projectId = String.fromEnvironment('FIREBASE_PROJECT_ID');
+  static const storageBucket = String.fromEnvironment('FIREBASE_STORAGE_BUCKET');
 
   static bool get completa =>
       apiKey.isNotEmpty && appId.isNotEmpty && senderId.isNotEmpty && projectId.isNotEmpty;
@@ -44,6 +45,10 @@ class ConfigPush {
   static bool get disponible =>
       completa && !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
 }
+
+/// Estado legible del registro push en este dispositivo (para diagnóstico y UI).
+final estadoPush = ValueNotifier<String>('Pendiente de activar');
+final pushActivo = ValueNotifier<bool>(false);
 
 // ---------------- Destino al tocar la notificación ----------------
 
@@ -174,6 +179,7 @@ class ServicioPush {
   final Future<String> Function() _instalacion;
   final List<StreamSubscription<Object>> _suscripciones = [];
   bool _escuchandoToken = false;
+  Future<void>? _registroEnCurso;
 
   /// Al arrancar la app: escucha los toques y abre la que despertó a la app cerrada.
   Future<void> iniciar() async {
@@ -185,19 +191,39 @@ class ServicioPush {
   }
 
   /// Con sesión iniciada: permiso, token y registro en el backend.
-  /// Se puede llamar más de una vez (el backend es idempotente).
-  Future<void> registrar() async {
+  /// Se puede llamar más de una vez (el backend es idempotente) y serializa
+  /// llamadas simultáneas para no chocar con el diálogo de permisos de Android.
+  Future<void> registrar() {
+    return _registroEnCurso ??= _registrarInterno().whenComplete(() {
+      _registroEnCurso = null;
+    });
+  }
+
+  Future<void> _registrarInterno() async {
+    estadoPush.value = 'Activando notificaciones…';
     try {
-      if (!await mensajeria.pedirPermiso()) return;
+      if (!await mensajeria.pedirPermiso()) {
+        pushActivo.value = false;
+        estadoPush.value = 'Permiso de notificaciones denegado en Android.';
+        return;
+      }
       final token = await mensajeria.token();
-      if (token == null || token.isEmpty) return;
+      if (token == null || token.isEmpty) {
+        pushActivo.value = false;
+        estadoPush.value = 'Firebase no devolvió token FCM.';
+        return;
+      }
       await _enviar(token);
+      pushActivo.value = true;
+      estadoPush.value = 'Notificaciones activas en este dispositivo.';
       if (!_escuchandoToken) {
         _escuchandoToken = true;
         _suscripciones.add(mensajeria.tokenRenovado.listen((t) => unawaited(_enviar(t))));
       }
     } catch (e) {
       // Sin red o sin sesión: se reintenta la próxima vez que se abra la app.
+      pushActivo.value = false;
+      estadoPush.value = 'No se pudo activar push: $e';
       debugPrint('No se pudo registrar el dispositivo para push: $e');
     }
   }
@@ -225,33 +251,58 @@ class ServicioPush {
 
 /// El servicio de la app, o null si el push está apagado.
 ServicioPush? servicioPush;
+void Function(String ruta)? _ultimoNavegar;
+void Function(String texto, String ruta)? _ultimoAvisar;
 
 /// Desde `main`: inicializa Firebase y el servicio solo si hay configuración.
 Future<void> iniciarPush({
   required void Function(String ruta) navegar,
   required void Function(String texto, String ruta) avisar,
 }) async {
+  _ultimoNavegar = navegar;
+  _ultimoAvisar = avisar;
   if (!ConfigPush.disponible) return;
   try {
-    await Firebase.initializeApp(
-      options: const FirebaseOptions(
-        apiKey: ConfigPush.apiKey,
-        appId: ConfigPush.appId,
-        messagingSenderId: ConfigPush.senderId,
-        projectId: ConfigPush.projectId,
-      ),
-    );
-    final servicio = ServicioPush(
-      mensajeria: MensajeriaFirebase(),
-      navegar: navegar,
-      avisar: avisar,
-    );
-    await servicio.iniciar();
-    servicioPush = servicio;
+    if (Firebase.apps.isEmpty) {
+      await Firebase.initializeApp(
+        options: FirebaseOptions(
+          apiKey: ConfigPush.apiKey,
+          appId: ConfigPush.appId,
+          messagingSenderId: ConfigPush.senderId,
+          projectId: ConfigPush.projectId,
+          storageBucket:
+              ConfigPush.storageBucket.isEmpty ? null : ConfigPush.storageBucket,
+        ),
+      );
+    }
+    final servicio = servicioPush ??
+        ServicioPush(
+          mensajeria: MensajeriaFirebase(),
+          navegar: navegar,
+          avisar: avisar,
+        );
+    if (servicioPush == null) {
+      await servicio.iniciar();
+      servicioPush = servicio;
+    }
     // Si ya había sesión, el marco pudo montarse antes de terminar esto.
     if (await Almacenamiento.haySesion()) unawaited(servicio.registrar());
   } catch (e) {
     // Un problema de Firebase no puede impedir que la app arranque.
+    pushActivo.value = false;
+    estadoPush.value = 'Error Firebase: $e';
     debugPrint('Push desactivado: $e');
   }
+}
+
+/// Permite reintentar manualmente el registro push desde la UI y ver el resultado.
+Future<String> activarPushAhora() async {
+  if (!ConfigPush.disponible) return 'Notificaciones push no configuradas en esta compilación.';
+  if (servicioPush == null && _ultimoNavegar != null && _ultimoAvisar != null) {
+    await iniciarPush(navegar: _ultimoNavegar!, avisar: _ultimoAvisar!);
+  }
+  if (servicioPush != null) {
+    await servicioPush!.registrar();
+  }
+  return estadoPush.value;
 }
