@@ -299,9 +299,17 @@ async def terminar(
     video = await _en_proceso(db, usuario, video_id)
     if fin.ok:
         partido = await db.get(Partido, video.partido_id)
-        if partido is not None and partido.estado != "EN_CURSO":
-            from app.analisis.metricas import recalcular
-            await recalcular(db, usuario, video.partido_id)
+        if partido is not None:
+            if partido.estado != "EN_CURSO":
+                from app.analisis.metricas import recalcular
+                await recalcular(db, usuario, video.partido_id)
+            else:
+                from app.analisis.metricas import motor_desde_tabla
+                from app.asistencia import service as asistencia
+                motor = await motor_desde_tabla(db, partido)
+                motor.cerrar()
+                await asistencia.evaluar_partido_grabado(db, partido, motor)
+                await db.commit()
     await _cerrar(db, video, fin)
     return video
 

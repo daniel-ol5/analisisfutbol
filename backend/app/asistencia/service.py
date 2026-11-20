@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 
 from fastapi import HTTPException, status
 from pydantic import ValidationError
-from sqlalchemy import func, or_, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -431,6 +431,108 @@ async def evaluar_en_vivo(
             proveedor_push,
         )
     return True
+
+
+def _metricas_de_intervalo(
+    acum, lado_propio: str, lado_rival: str, disciplina: Mapping[str, float], minuto: int
+) -> dict[str, float]:
+    """Extrae el diccionario de métricas evaluables de un intervalo del motor."""
+    from app.analisis.motor.motor import porcentajes
+
+    propio = acum.equipos[lado_propio]
+    rival = acum.equipos[lado_rival]
+    datos: dict[str, float] = {**disciplina, "minuto": float(minuto)}
+    observados = propio.posesion_s + rival.posesion_s
+    if observados >= 5.0:
+        local_pct, vis_pct, _ = porcentajes(acum)
+        datos["posesion_propia_pct"], datos["posesion_rival_pct"] = (
+            (local_pct, vis_pct) if lado_propio == "LOCAL" else (vis_pct, local_pct)
+        )
+    if propio.altura_linea_m is not None:
+        datos["altura_linea_m"] = propio.altura_linea_m
+    if propio.amplitud_m is not None:
+        datos["amplitud_propia_m"] = propio.amplitud_m
+    if propio.n_forma > 0:
+        datos["compacidad_propia_m"] = propio.suma_distancia_centro_m / propio.n_forma
+    if propio.pases_intentados > 0:
+        datos["pases_intentados_propios"] = float(propio.pases_intentados)
+        datos["precision_pase_propio_pct"] = 100.0 * propio.pases_completados / propio.pases_intentados
+    if rival.pases_completados > 0:
+        datos["pases_completados_rival"] = float(rival.pases_completados)
+    if propio.tiempo_ritmo_s >= 30.0:
+        datos["ritmo_propio_m_min"] = 60.0 * propio.distancia_ritmo_m / propio.tiempo_ritmo_s
+    return datos
+
+
+async def evaluar_partido_grabado(
+    db: AsyncSession, partido: Partido, motor: MotorPartido
+) -> int:
+    """Evalúa las reglas tácticas activas del club sobre un partido procesado por video.
+
+    Usa las métricas reales calculadas por el `MotorPartido` en cada intervalo para
+    generar recomendaciones futbolísticas para el DT sin duplicar ni borrar valoraciones.
+    """
+    reglas = await _reglas_disponibles(db, partido.club_id, activas=True)
+    if not reglas or not motor.intervalos:
+        return 0
+
+    tarjetas = await _tarjetas_propias(db, partido)
+    lado_propio = motor.contexto.lado_propio
+    lado_rival = "VISITANTE" if lado_propio == "LOCAL" else "LOCAL"
+
+    # Reemplazar solo recomendaciones pendientes previas de este partido (conservar valoradas).
+    r = models.Recomendacion
+    await db.execute(
+        delete(r).where(
+            r.partido_id == partido.id,
+            r.estado == EstadoRecomendacion.PENDIENTE.value,
+            r.util.is_(None),
+        )
+    )
+
+    ultimo_por_regla: dict[int, float] = {}
+    filas_nuevas: list[dict] = []
+    for indice in sorted(motor.intervalos):
+        acum = motor.intervalos[indice]
+        t = float(acum.t_hasta if acum.t_hasta is not None else (indice + 1) * PARAMETROS.intervalo_s)
+        minuto = int(t // 60)
+        # En clips grabados cortos (< 5 min) evaluamos las reglas generales de táctica
+        # usando minuto_eval >= 5 para que las métricas reales observadas generen sugerencias
+        # al DT sin activar reglas de fatiga tardía (>= 25 min / >= 55 min).
+        minuto_eval = max(minuto, 5)
+        metricas = _metricas_de_intervalo(
+            acum, lado_propio, lado_rival, contar_disciplina(tarjetas, minuto), minuto_eval
+        )
+        for registro, activa in reglas:
+            if t - ultimo_por_regla.get(registro.id, float("-inf")) < registro.cooldown_s:
+                continue
+            try:
+                regla = _a_regla(registro, activa)
+                disparo = evaluar_regla(regla, metricas)
+            except (ReglaInvalida, ValidationError) as exc:
+                log.warning("Regla táctica %s inválida: %s", registro.id, exc)
+                continue
+            if disparo is not None:
+                ultimo_por_regla[registro.id] = t
+                filas_nuevas.append({
+                    "partido_id": partido.id,
+                    "regla_id": regla.id,
+                    "t": t,
+                    "minuto": minuto,
+                    "mensaje": disparo.mensaje,
+                    "justificacion": disparo.justificacion,
+                    "datos_soporte": [d.model_dump() for d in disparo.datos_soporte],
+                    "prioridad": regla.prioridad.value,
+                    "estado": EstadoRecomendacion.PENDIENTE.value,
+                })
+
+    if filas_nuevas:
+        await db.execute(
+            pg_insert(r)
+            .values(filas_nuevas)
+            .on_conflict_do_nothing(constraint="ux_recomendacion_regla_instante")
+        )
+    return len(filas_nuevas)
 
 
 # ---------------- CU-52 · Alertas de fatiga y riesgo de expulsión ----------------

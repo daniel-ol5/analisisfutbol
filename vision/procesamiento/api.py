@@ -9,8 +9,10 @@ ante un 401 se vuelve a iniciar sesión y se repite el pedido una vez.
 
 from __future__ import annotations
 
+import http.client
 import json
 import shutil
+import time
 import urllib.error
 import urllib.request
 from collections.abc import Callable
@@ -58,18 +60,24 @@ class ApiBackend:
 
     def _llamar(self, metodo: str, ruta: str, cuerpo: Any = None, autenticar: bool = True,
                 encabezados: dict[str, str] | None = None) -> Any:
-        """Devuelve la respuesta abierta. Reintenta una vez con sesión nueva ante un 401."""
+        """Devuelve la respuesta abierta. Reintenta ante 401 o cortes transitorios de red/SSL."""
         if autenticar and self._token is None:
             self.iniciar_sesion()
-        for intento in (1, 2):
+        renovo = False
+        for intento in range(1, 5):
             try:
                 return self._abrir(self._pedido(metodo, ruta, cuerpo, encabezados),
                                    timeout=self.timeout)
             except urllib.error.HTTPError as e:
-                if e.code == 401 and autenticar and intento == 1:
+                if e.code == 401 and autenticar and not renovo:
+                    renovo = True
                     self.iniciar_sesion()
                     continue
                 raise ErrorApi(e.code, _detalle(e)) from None
+            except (urllib.error.URLError, http.client.HTTPException, TimeoutError, OSError):
+                if intento == 4:
+                    raise
+                time.sleep(min(2.0 * intento, 6.0))
         raise AssertionError("inalcanzable")
 
     def _json(self, metodo: str, ruta: str, cuerpo: Any = None, **kw: Any) -> Any:

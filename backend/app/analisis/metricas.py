@@ -356,6 +356,8 @@ async def recalcular(db: AsyncSession, usuario: UsuarioActual, partido_id: int) 
     await persistencia.borrar_metricas(db, partido.id)
     await persistencia.guardar_intervalos(db, partido.id, motor.intervalos.values())
     await eventos.reemplazar(db, partido, motor.pases)   # CU-47: evento_derivado
+    from app.asistencia import service as asistencia
+    await asistencia.evaluar_partido_grabado(db, partido, motor)
     await db.commit()
     return await metricas_partido(db, usuario, partido_id)
 

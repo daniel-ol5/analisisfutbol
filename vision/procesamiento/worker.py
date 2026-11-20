@@ -156,7 +156,10 @@ def atender_uno(
         log.info("Video %s: el procesamiento se canceló", video_id)
     except Exception as e:  # cualquier falla del pipeline se informa al analista
         log.exception("Video %s falló", video_id)
-        backend.terminar(video_id, ok=False, mensaje_error=f"{type(e).__name__}: {e}"[:400])
+        try:
+            backend.terminar(video_id, ok=False, mensaje_error=f"{type(e).__name__}: {e}"[:400])
+        except Exception:
+            log.exception("No se pudo informar la falla del video %s al backend", video_id)
     finally:
         if "cuadros" in locals():
             if hasattr(cuadros, "close"):
@@ -288,7 +291,11 @@ def main(argv: list[str] | None = None) -> int:
                           tamano_img=args.tamano_img, pesos_locales=args.pesos)
     log.info("Esperando videos en %s", args.api)
     while True:
-        atendio = atender_uno(backend, abrir, carpeta, vid_stride=stride, dispositivo=args.dispositivo)
+        try:
+            atendio = atender_uno(backend, abrir, carpeta, vid_stride=stride, dispositivo=args.dispositivo)
+        except Exception:
+            log.exception("Error de conexión o ciclo en worker; reintentando en %.0f s", args.espera)
+            atendio = False
         if args.una_vez:
             return 0
         if not atendio:
