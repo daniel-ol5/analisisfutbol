@@ -33,4 +33,14 @@ export const env = {
    * Cambiar en .env.local sin tocar el código.
    */
   useMocks: import.meta.env["VITE_USE_MOCKS"] === "true",
+
+  /** Configuración opcional de Firebase Cloud Messaging para Web Push. */
+  firebase: {
+    apiKey: (import.meta.env["VITE_FIREBASE_API_KEY"] as string | undefined) ?? "",
+    appId: (import.meta.env["VITE_FIREBASE_APP_ID"] as string | undefined) ?? "",
+    messagingSenderId:
+      (import.meta.env["VITE_FIREBASE_MESSAGING_SENDER_ID"] as string | undefined) ?? "",
+    projectId: (import.meta.env["VITE_FIREBASE_PROJECT_ID"] as string | undefined) ?? "",
+    vapidKey: (import.meta.env["VITE_FIREBASE_VAPID_KEY"] as string | undefined) ?? "",
+  },
 } as const;

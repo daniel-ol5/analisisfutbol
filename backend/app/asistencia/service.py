@@ -364,6 +364,52 @@ async def notificar_recomendaciones(
     return enviados
 
 
+async def notificar_evento_club(
+    db: AsyncSession,
+    club_id: int,
+    titulo: str,
+    cuerpo: str,
+    datos: dict[str, str] | None = None,
+    proveedor: ProveedorPush | None = None,
+) -> int:
+    """Envía una notificación push FCM a todos los dispositivos activos (Android y Web) del club."""
+    proveedor = proveedor or obtener_proveedor_push()
+    if proveedor is None:
+        return 0
+    try:
+        dispositivos = list((await db.scalars(
+            select(models.DispositivoPush)
+            .join(Usuario, Usuario.id == models.DispositivoPush.usuario_id)
+            .where(
+                models.DispositivoPush.club_id == club_id,
+                models.DispositivoPush.activo.is_(True),
+                Usuario.club_id == club_id,
+                Usuario.activo.is_(True),
+            )
+            .order_by(models.DispositivoPush.id)
+        )).all())
+        if not dispositivos:
+            return 0
+        mensaje = MensajePush(titulo=titulo, cuerpo=cuerpo, datos=datos or {})
+        resultados = await proveedor.enviar([d.token for d in dispositivos], mensaje)
+        enviados = 0
+        invalido = False
+        for dispositivo, res in zip(dispositivos, resultados, strict=False):
+            if res.enviado:
+                enviados += 1
+            elif res.token_invalido:
+                dispositivo.activo = False
+                dispositivo.ultimo_error = res.error or "Token FCM invalido"
+                dispositivo.actualizado_en = datetime.now(UTC)
+                invalido = True
+        if invalido:
+            await db.commit()
+        return enviados
+    except Exception:
+        log.exception("No se pudo enviar push de evento '%s' al club %s", titulo, club_id)
+        return 0
+
+
 async def evaluar_en_vivo(
     db: AsyncSession,
     partido_id: int,
@@ -531,6 +577,19 @@ async def evaluar_partido_grabado(
             pg_insert(r)
             .values(filas_nuevas)
             .on_conflict_do_nothing(constraint="ux_recomendacion_regla_instante")
+        )
+        top = min(filas_nuevas, key=lambda f: ORDEN_PRIORIDAD[Prioridad(f["prioridad"])])
+        await notificar_evento_club(
+            db,
+            partido.club_id,
+            f"Recomendación táctica ({top['prioridad']})",
+            str(top["mensaje"]),
+            {
+                "tipo": "recomendacion_tactica",
+                "partido_id": str(partido.id),
+                "prioridad": str(top["prioridad"]),
+                "ruta": f"/analisis?partido={partido.id}",
+            },
         )
     return len(filas_nuevas)
 

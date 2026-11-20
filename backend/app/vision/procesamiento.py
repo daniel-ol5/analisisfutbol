@@ -311,6 +311,20 @@ async def terminar(
                 await asistencia.evaluar_partido_grabado(db, partido, motor)
                 await db.commit()
     await _cerrar(db, video, fin)
+    if fin.ok:
+        from app.asistencia.service import notificar_evento_club
+        await notificar_evento_club(
+            db,
+            video.club_id,
+            "Análisis de video completado",
+            f"«{video.nombre}» terminó de procesarse. Radar 2D, métricas y recomendaciones listos.",
+            {
+                "tipo": "video_procesado",
+                "partido_id": str(video.partido_id),
+                "video_id": str(video.id),
+                "ruta": f"/analisis?partido={video.partido_id}&video={video.id}",
+            },
+        )
     return video
 
 

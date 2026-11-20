@@ -51,13 +51,22 @@ class ConfigPush {
 /// "recomendacion_id": "42", ...}. Devuelve la ruta de la app, o null si no es
 /// una notificación que se sepa abrir.
 String? rutaDeNotificacion(Map<String, dynamic> datos) {
-  if (datos['tipo'] != 'recomendacion_tactica') return null;
-  final partido = int.tryParse('${datos['partido_id']}');
-  if (partido == null) return null;
-  final recomendacion = int.tryParse('${datos['recomendacion_id']}');
-  return recomendacion == null
-      ? '/partidos/$partido/recomendaciones'
-      : '/partidos/$partido/recomendaciones?recomendacion=$recomendacion';
+  final tipo = datos['tipo'];
+  if (tipo == 'recomendacion_tactica') {
+    final partido = int.tryParse('${datos['partido_id']}');
+    if (partido == null) return null;
+    final recomendacion = int.tryParse('${datos['recomendacion_id']}');
+    return recomendacion == null
+        ? '/partidos/$partido/recomendaciones'
+        : '/partidos/$partido/recomendaciones?recomendacion=$recomendacion';
+  }
+  if (tipo == 'partido_programado') return '/partidos';
+  if (tipo == 'video_subido') return '/analisis';
+  if (tipo == 'video_procesado') {
+    final partido = int.tryParse('${datos['partido_id']}');
+    return partido == null ? '/analisis' : '/partidos/$partido/resumen';
+  }
+  return null;
 }
 
 // ---------------- Lo que se necesita de Firebase ----------------
