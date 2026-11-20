@@ -452,6 +452,14 @@ async def programar_partido(
     db.add(partido)
     await db.commit()
     await db.refresh(partido)
+    from app.asistencia.service import notificar_evento_club
+    await notificar_evento_club(
+        db,
+        usuario.club_id,
+        "Partido agendado",
+        f"vs {partido.rival} · {partido.sede}",
+        {"tipo": "partido_programado", "partido_id": str(partido.id), "ruta": "/deportivo/calendario"},
+    )
     return PartidoOut.model_validate(partido)
 
 

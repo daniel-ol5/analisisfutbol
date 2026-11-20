@@ -59,6 +59,7 @@ class FirebaseProveedorPush:
                 data=mensaje.datos,
                 android=messaging.AndroidConfig(priority="high"),
                 apns=messaging.APNSConfig(headers={"apns-priority": "10"}),
+                webpush=messaging.WebpushConfig(headers={"Urgency": "high"}),
             )
             respuesta = await messaging.send_each_for_multicast_async(lote, app=self._app)
             for envio in respuesta.responses:

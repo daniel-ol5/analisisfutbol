@@ -279,7 +279,7 @@ export function PanelPartidoVivo() {
               </details>
             </section>
           </div>
-          {directo && id !== null && <RecomendacionesEnVivo partidoId={id} />} {/* T-090 (Alejandra): recomendaciones en vivo */}
+          {id !== null && <RecomendacionesEnVivo partidoId={id} modoGrabacion={!directo} />} {/* T-090: recomendaciones tácticas en vivo y diferido */}
           {minutoFiltro !== null && (
             <MetricasDelMinuto
               minuto={minutoFiltro}

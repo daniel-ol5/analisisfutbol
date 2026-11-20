@@ -299,10 +299,32 @@ async def terminar(
     video = await _en_proceso(db, usuario, video_id)
     if fin.ok:
         partido = await db.get(Partido, video.partido_id)
-        if partido is not None and partido.estado != "EN_CURSO":
-            from app.analisis.metricas import recalcular
-            await recalcular(db, usuario, video.partido_id)
+        if partido is not None:
+            if partido.estado != "EN_CURSO":
+                from app.analisis.metricas import recalcular
+                await recalcular(db, usuario, video.partido_id)
+            else:
+                from app.analisis.metricas import motor_desde_tabla
+                from app.asistencia import service as asistencia
+                motor = await motor_desde_tabla(db, partido)
+                motor.cerrar()
+                await asistencia.evaluar_partido_grabado(db, partido, motor)
+                await db.commit()
     await _cerrar(db, video, fin)
+    if fin.ok:
+        from app.asistencia.service import notificar_evento_club
+        await notificar_evento_club(
+            db,
+            video.club_id,
+            "Análisis de video completado",
+            f"«{video.nombre}» terminó de procesarse. Radar 2D, métricas y recomendaciones listos.",
+            {
+                "tipo": "video_procesado",
+                "partido_id": str(video.partido_id),
+                "video_id": str(video.id),
+                "ruta": f"/analisis?partido={video.partido_id}&video={video.id}",
+            },
+        )
     return video
 
 

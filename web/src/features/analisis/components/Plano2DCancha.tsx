@@ -139,9 +139,10 @@ export const Plano2DCancha = memo(function Plano2DCancha({
   const colorCespedClaro = altoContraste ? "#13381e" : "#1e5b2c";
   const colorLineas = altoContraste ? "#ffffff" : "rgba(255, 255, 255, 0.88)";
 
-  // Coordenadas transformadas si está invertido
+  // Coordenadas transformadas: en los datos Y=0 es la banda cercana a la cámara (abajo del video)
+  // y Y=anchoM es la banda lejana (arriba). En SVG Y crece hacia abajo, así que se invierte (ANCHO - y).
   const transformarX = (x: number) => (invertirLados ? LARGO - x / largoM * LARGO : x / largoM * LARGO);
-  const transformarY = (y: number) => (invertirLados ? ANCHO - y / anchoM * ANCHO : y / anchoM * ANCHO);
+  const transformarY = (y: number) => (invertirLados ? y / anchoM * ANCHO : ANCHO - y / anchoM * ANCHO);
 
   return (
     <div className={`plano-cancha-contenedor ${altoContraste ? "plano-alto-contraste" : ""} ${className}`}>
