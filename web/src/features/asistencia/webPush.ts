@@ -5,8 +5,14 @@
  * en el build y el navegador soporta Notification + ServiceWorker. En CI, tests
  * o desarrollo sin Firebase queda desactivado sin afectar la app.
  */
-import { getApp, getApps, initializeApp } from "firebase/app";
-import { getMessaging, getToken, isSupported, onMessage, type Messaging } from "firebase/messaging";
+import { getApp, getApps, initializeApp } from "@firebase/app";
+import {
+  getMessaging,
+  getToken,
+  isSupported,
+  onMessage,
+  type Messaging,
+} from "@firebase/messaging";
 
 import { env } from "@/shared/config/env";
 
